@@ -1,1 +1,1 @@
-// @colony/core — barrel export (placeholder)
+export * from "./config";
