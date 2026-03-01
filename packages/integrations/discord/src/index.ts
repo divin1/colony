@@ -1,1 +1,1 @@
-// @ants/discord — barrel export (placeholder)
+// @colony/discord — barrel export (placeholder)

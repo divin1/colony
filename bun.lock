@@ -10,19 +10,19 @@
       },
     },
     "packages/cli": {
-      "name": "@ants/cli",
+      "name": "@colony/cli",
       "version": "0.1.0",
       "bin": {
-        "ants": "src/index.ts",
+        "colony": "src/index.ts",
       },
       "dependencies": {
-        "@ants/core": "workspace:*",
+        "@colony/core": "workspace:*",
         "@commander-js/extra-typings": "latest",
         "commander": "latest",
       },
     },
     "packages/core": {
-      "name": "@ants/core",
+      "name": "@colony/core",
       "version": "0.1.0",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "latest",
@@ -31,14 +31,14 @@
       },
     },
     "packages/integrations/discord": {
-      "name": "@ants/discord",
+      "name": "@colony/discord",
       "version": "0.1.0",
       "dependencies": {
         "discord.js": "latest",
       },
     },
     "packages/integrations/github": {
-      "name": "@ants/github",
+      "name": "@colony/github",
       "version": "0.1.0",
       "dependencies": {
         "@octokit/rest": "latest",
@@ -48,13 +48,13 @@
   "packages": {
     "@anthropic-ai/claude-agent-sdk": ["@anthropic-ai/claude-agent-sdk@0.2.63", "", { "optionalDependencies": { "@img/sharp-darwin-arm64": "^0.34.2", "@img/sharp-darwin-x64": "^0.34.2", "@img/sharp-linux-arm": "^0.34.2", "@img/sharp-linux-arm64": "^0.34.2", "@img/sharp-linux-x64": "^0.34.2", "@img/sharp-linuxmusl-arm64": "^0.34.2", "@img/sharp-linuxmusl-x64": "^0.34.2", "@img/sharp-win32-arm64": "^0.34.2", "@img/sharp-win32-x64": "^0.34.2" }, "peerDependencies": { "zod": "^4.0.0" } }, "sha512-ZNiaQb/v6xkbrGt3dtq5J0DGY+AaOhoehUyposa3msvlAlkTHWNGR+NhbCcTE0ML1U91xhPqMAAwZIUqrlkKyQ=="],
 
-    "@ants/cli": ["@ants/cli@workspace:packages/cli"],
+    "@colony/cli": ["@colony/cli@workspace:packages/cli"],
 
-    "@ants/core": ["@ants/core@workspace:packages/core"],
+    "@colony/core": ["@colony/core@workspace:packages/core"],
 
-    "@ants/discord": ["@ants/discord@workspace:packages/integrations/discord"],
+    "@colony/discord": ["@colony/discord@workspace:packages/integrations/discord"],
 
-    "@ants/github": ["@ants/github@workspace:packages/integrations/github"],
+    "@colony/github": ["@colony/github@workspace:packages/integrations/github"],
 
     "@commander-js/extra-typings": ["@commander-js/extra-typings@14.0.0", "", { "peerDependencies": { "commander": "~14.0.0" } }, "sha512-hIn0ncNaJRLkZrxBIp5AsW/eXEHNKYQBh0aPdoUqNgD+Io3NIykQqpKFyKcuasZhicGaEZJX/JBSIkZ4e5x8Dg=="],
 

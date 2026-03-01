@@ -1,5 +1,5 @@
 {
-  "name": "@ants/discord",
+  "name": "@colony/discord",
   "version": "0.1.0",
   "private": true,
   "type": "module",

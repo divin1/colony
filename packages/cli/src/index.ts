@@ -1,2 +1,2 @@
 #!/usr/bin/env bun
-// @ants/cli — entry point (placeholder)
+// @colony/cli — entry point (placeholder)

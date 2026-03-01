@@ -1,6 +1,6 @@
-# Ants
+# Colony
 
-Ants is a framework for deploying autonomous LLM-based agents &mdash; your personal **ant army**. Each ant is a [Claude Code](https://claude.ai/code) process configured to do work autonomously while you focus on other things.
+Colony is a framework for deploying autonomous LLM-based agents. Each ant is a [Claude Code](https://claude.ai/code) process configured to do work autonomously while you focus on other things.
 
 Ants can maintain software projects, write blog posts, process data, or do anything Claude Code can do &mdash; guided by a YAML config file and reporting back to you via Discord.
 
@@ -112,7 +112,7 @@ You interact with an ant by:
 
 ## Deployment
 
-Ants is designed to run in Docker. A typical colony layout:
+Colony is designed to run in Docker. A typical colony layout:
 
 ```
 my-colony/
@@ -126,17 +126,17 @@ my-colony/
 
 ## CLI
 
-The `ants` CLI manages colonies from your terminal:
+The `colony` CLI manages colonies from your terminal:
 
 ```
-ants init               # scaffold a new colony directory
-ants validate           # validate colony and ant config files
-ants start              # start the colony runner (all ants)
-ants start alice        # start a single ant
-ants stop               # stop the colony
-ants status             # show running/stopped status of each ant
-ants logs alice         # tail logs for a specific ant
-ants run alice "task"   # send a one-off command to an ant
+colony init               # scaffold a new colony directory
+colony validate           # validate colony and ant config files
+colony start              # start the colony runner (all ants)
+colony start alice        # start a single ant
+colony stop               # stop the colony
+colony status             # show running/stopped status of each ant
+colony logs alice         # tail logs for a specific ant
+colony run alice "task"   # send a one-off command to an ant
 ```
 
 ## Integrations

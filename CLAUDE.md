@@ -1,11 +1,11 @@
-# CLAUDE.md — Ants
+# CLAUDE.md — Colony
 
 ## Project Overview
 
-Ants is a framework for deploying autonomous LLM-based agents. Each "ant" is a **Claude Agent SDK session** managed by a **colony runner** process. The project has three deliverables:
+Colony is a framework for deploying autonomous LLM-based agents. Each "ant" is a **Claude Agent SDK session** managed by a **colony runner** process. The project has three deliverables:
 
 1. **Core framework** — library that handles ant lifecycle, integration bridges, and confirmation flows
-2. **CLI** (`ants`) — command-line tool for scaffolding, validating, and managing colonies
+2. **CLI** (`colony`) — command-line tool for scaffolding, validating, and managing colonies
 3. **Docker runtime** — a container-based deployment that runs a colony 24/7
 
 ## Tech Stack
@@ -207,7 +207,7 @@ ants/
         ant.ts              # ant session wrapper + supervisor loop
         config.ts           # Zod schemas + YAML config loading
         hooks.ts            # Agent SDK hook factories (confirmation, logging)
-    cli/                    # `ants` CLI
+    cli/                    # `colony` CLI
       package.json
       src/
         index.ts            # commander entry point

@@ -1,14 +1,14 @@
 {
-  "name": "@ants/cli",
+  "name": "@colony/cli",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
   "bin": {
-    "ants": "src/index.ts"
+    "colony": "src/index.ts"
   },
   "dependencies": {
-    "@ants/core": "workspace:*",
+    "@colony/core": "workspace:*",
     "commander": "latest",
     "@commander-js/extra-typings": "latest"
   }

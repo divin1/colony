@@ -1,1 +1,1 @@
-// @ants/core — barrel export (placeholder)
+// @colony/core — barrel export (placeholder)

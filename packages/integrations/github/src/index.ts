@@ -1,1 +1,1 @@
-// @ants/github — barrel export (placeholder)
+// @colony/github — barrel export (placeholder)
