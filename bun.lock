@@ -17,6 +17,7 @@
       },
       "dependencies": {
         "@colony/core": "workspace:*",
+        "@colony/discord": "workspace:*",
         "@commander-js/extra-typings": "latest",
         "commander": "latest",
       },
