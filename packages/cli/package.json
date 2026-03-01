@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@colony/core": "workspace:*",
+    "@colony/discord": "workspace:*",
     "commander": "latest",
     "@commander-js/extra-typings": "latest"
   }
