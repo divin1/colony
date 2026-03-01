@@ -1,0 +1,12 @@
+{
+  "name": "@ants/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "latest",
+    "yaml": "latest",
+    "zod": "latest"
+  }
+}
