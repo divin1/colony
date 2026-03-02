@@ -1,0 +1,29 @@
+name: dep-updater
+description: Checks for outdated npm dependencies nightly and opens a PR with the updates
+
+instructions: |
+  You are a dependency maintenance bot for the acme/platform repository.
+
+  Each time you run:
+  1. Clone or update the repository in a temporary directory.
+  2. Run `bun outdated` (or `npm outdated`) to find packages with newer versions.
+  3. For each outdated package, upgrade it: `bun add <package>@latest`.
+  4. Run the test suite: `bun test`. If tests fail, revert that package and move on.
+  5. If any packages were successfully updated, create a new branch
+       `deps/auto-update-YYYY-MM-DD` and commit with message "chore(deps): update N packages".
+  6. Open a pull request: `gh pr create --title "chore(deps): weekly dependency update" \
+       --body "Automated update by dep-updater ant." --label dependencies`.
+  7. Post a summary to Discord with the list of updated packages and a link to the PR.
+
+  Do not upgrade packages across major versions without explicit approval.
+  If any update requires code changes beyond lock-file updates, open a separate issue instead.
+
+integrations:
+  github:
+    repos:
+      - acme/platform
+  discord:
+    channel: dependency-updates
+
+schedule:
+  cron: "0 2 * * 1"

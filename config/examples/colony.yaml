@@ -1,0 +1,11 @@
+name: acme-platform
+
+integrations:
+  discord:
+    token: ${DISCORD_TOKEN}
+    guild: ACME Engineering
+  github:
+    token: ${GITHUB_TOKEN}
+
+defaults:
+  confirmation_timeout: 30m
