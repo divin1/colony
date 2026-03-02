@@ -1,0 +1,11 @@
+services:
+  colony:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    env_file: ../.env
+    volumes:
+      - ../:/colony
+    working_dir: /colony
+    command: ["run", "."]
