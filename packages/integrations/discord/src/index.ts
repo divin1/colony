@@ -19,6 +19,12 @@ export interface DiscordConfig {
   guild: string;
 }
 
+export interface DiscordCommandPayload {
+  channelId: string;
+  content: string;
+  author: string;
+}
+
 export interface MessagingIntegration {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
@@ -62,7 +68,18 @@ export class DiscordIntegration implements MessagingIntegration {
 
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.client.once("ready", () => resolve());
+      this.client.once("ready", () => {
+        this.client.on("messageCreate", (message) => {
+          if (message.author.bot) return;
+          const payload: DiscordCommandPayload = {
+            channelId: message.channelId,
+            content: message.content,
+            author: message.author.username,
+          };
+          this.emit("discord_command", payload);
+        });
+        resolve();
+      });
       this.client.once("error", reject);
       this.client.login(this.token).catch(reject);
     });
@@ -79,7 +96,7 @@ export class DiscordIntegration implements MessagingIntegration {
     this.eventHandlers.set(event, handlers);
   }
 
-  private emit(event: string, payload: unknown): void {
+  emit(event: string, payload: unknown): void {
     const handlers = this.eventHandlers.get(event);
     if (handlers) {
       for (const h of handlers) h(payload);
