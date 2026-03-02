@@ -1,6 +1,7 @@
 import { Command } from "@commander-js/extra-typings";
 import { loadConfig, runColony } from "@colony/core";
 import { DiscordIntegration } from "@colony/discord";
+import { GitHubIntegration } from "@colony/github";
 
 export const runCommand = new Command("run")
   .description("Connect to Discord and launch all configured ants")
@@ -30,8 +31,11 @@ export const runCommand = new Command("run")
       process.exit(1);
     }
 
-    // --- Wire up integration ---
+    // --- Wire up integrations ---
     const discord = new DiscordIntegration(discordConfig);
+
+    const githubConfig = config.colony.integrations?.github;
+    const github = githubConfig ? new GitHubIntegration(githubConfig) : undefined;
 
     // Graceful shutdown on Ctrl+C or SIGTERM.
     const shutdown = (signal: string) => {
@@ -47,7 +51,7 @@ export const runCommand = new Command("run")
     );
 
     try {
-      await runColony(config, discord);
+      await runColony(config, discord, github);
     } catch (err) {
       console.error(`Fatal: ${(err as Error).message}`);
       await discord.disconnect().catch(() => {});
