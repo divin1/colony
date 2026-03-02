@@ -1,39 +1,39 @@
 # Colony
 
-Colony is a framework for deploying autonomous LLM-based agents. Each ant is a [Claude Code](https://claude.ai/code) process configured to do work autonomously while you focus on other things.
+Colony is a framework for deploying autonomous LLM-based agents. Each ant is a [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk) session configured to do work autonomously while you focus on other things.
 
-Ants can maintain software projects, write blog posts, process data, or do anything Claude Code can do &mdash; guided by a YAML config file and reporting back to you via Discord.
+Ants can maintain software projects, write blog posts, process data, or do anything Claude can do &mdash; guided by a YAML config file and reporting back to you via Discord.
 
 ## Core Concepts
 
 ### Ant
-An **ant** is a managed Claude Code process with a defined purpose. Each ant:
+An **ant** is an Agent SDK session running in-process with a defined purpose. Each ant:
 - Is declared in a YAML config file (name, instructions, integrations, schedule)
 - Runs autonomously: on a schedule, in response to events, on human command, or from its own backlog
-- Reports its activity and asks for confirmation via Discord or Slack
+- Reports its activity and asks for confirmation via Discord
 - Has access to only the tools and repos it needs
 
 ### Colony
 A **colony** is a group of ants deployed together under a shared configuration. A colony can contain multiple specialized ants (one per project) or a single generalist ant.
 
 ### Colony Runner
-The **colony runner** is the host process that spawns, monitors, and manages the ants in a colony. It reads the colony config, starts each ant as a Claude Code subprocess, bridges messages between ants and external integrations, and restarts ants that fail.
+The **colony runner** is the host process that manages the Agent SDK sessions for all ants in a colony. It reads the colony config, starts each ant as an in-process Agent SDK session, bridges messages between ants and external integrations, and restarts ants that fail.
 
 ## How It Works
 
 ```
-Human (Discord / Slack)
-         ↕
-  Colony Runner
-         ↕
-  Ant (Claude Code subprocess)
-         ↕
-  External services (GitHub, etc.)
+Human (Discord)
+       ↕
+Colony Runner
+       ↕
+Ant (Agent SDK session running in-process)
+       ↕
+External services (GitHub, etc.)
 ```
 
 1. You define your ants in YAML config files inside a colony directory
 2. You deploy the colony via Docker (or run it locally with the CLI)
-3. The colony runner spawns each ant as a Claude Code subprocess with its instructions
+3. The colony runner starts each ant as an Agent SDK session with its instructions
 4. Each ant enters its work loop: polling for tasks, reacting to events, or waiting for human commands
 5. When an ant needs human input before a dangerous action, it posts a confirmation request to Discord with ✅/❌ reactions and pauses until you respond
 6. Ants report progress, results, and errors to their designated Discord channel
@@ -120,8 +120,20 @@ my-colony/
   ants/
     alice.yaml            # ant config
     bob.yaml              # ant config
-  docker-compose.yml      # one service per ant, or a single colony-runner service
   .env                    # secrets (DISCORD_TOKEN, GITHUB_TOKEN, etc.)
+```
+
+To build and run with Docker:
+
+```bash
+docker build -f docker/Dockerfile -t colony .
+docker run --env-file .env -v $(pwd):/colony -w /colony colony run .
+```
+
+Or with docker-compose from inside the `docker/` directory:
+
+```bash
+docker compose up
 ```
 
 ## CLI
@@ -129,43 +141,32 @@ my-colony/
 The `colony` CLI manages colonies from your terminal:
 
 ```
-colony init               # scaffold a new colony directory
-colony validate           # validate colony and ant config files
-colony start              # start the colony runner (all ants)
-colony start alice        # start a single ant
-colony stop               # stop the colony
-colony status             # show running/stopped status of each ant
-colony logs alice         # tail logs for a specific ant
-colony run alice "task"   # send a one-off command to an ant
+colony init [dir]         # scaffold a new colony directory (default: ./my-colony)
+colony validate [dir]     # validate colony and ant config files
+colony run [dir]          # start the colony runner (all ants)
 ```
 
 ## Integrations
 
-| Integration | Status   | Purpose                                          |
-|-------------|----------|--------------------------------------------------|
-| GitHub      | Planned  | Read issues/PRs, create PRs, receive webhooks    |
-| Discord     | Planned  | Human ↔ ant messaging and confirmations          |
-| Slack       | Planned  | Alternative to Discord                           |
-| Jira        | Planned  | Read tickets as ant backlog                      |
-| Linear      | Planned  | Read issues as ant backlog                       |
-
-## LLM Providers
-
-| Provider    | Status  | Notes                                |
-|-------------|---------|--------------------------------------|
-| Claude Code | Planned | Each ant is a Claude Code subprocess |
-| Gemini      | Planned |                                      |
+| Integration | Status              | Purpose                                          |
+|-------------|---------------------|--------------------------------------------------|
+| Discord     | ✅ Available        | Human ↔ ant messaging and confirmations          |
+| GitHub      | 🔄 Partial          | Read issues, post comments; issue triggers       |
+| Slack       | Planned             | Alternative to Discord                           |
+| Jira        | Planned             | Read tickets as ant backlog                      |
+| Linear      | Planned             | Read issues as ant backlog                       |
 
 ## Roadmap
 
-- [ ] Colony runner: ant lifecycle management (spawn, monitor, restart)
-- [ ] Claude Code subprocess integration
-- [ ] Discord integration: message send/receive, confirmation reactions
-- [ ] GitHub integration: issue reading, PR creation, webhook triggers
-- [ ] CLI: `init`, `validate`, `start`, `stop`, `status`, `logs`, `run`
-- [ ] Docker / docker-compose deployment support
+- [x] Colony runner: ant lifecycle management (spawn, monitor, restart)
+- [x] Agent SDK session integration
+- [x] Discord integration: message send/receive, confirmation reactions, command triggers
+- [x] GitHub integration: issue reading, comment creation, issue polling triggers
+- [x] Cron scheduling for ants
+- [x] CLI: `init`, `validate`, `run`
+- [x] Docker / docker-compose deployment support
 - [ ] Backlog management: auto-discover tasks from GitHub Issues
+- [ ] GitHub webhook triggers (replace polling)
 - [ ] Slack integration
 - [ ] Jira integration
 - [ ] Linear integration
-- [ ] Gemini LLM provider
