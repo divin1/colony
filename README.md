@@ -110,6 +110,13 @@ You interact with an ant by:
 5. On ✅: ant proceeds; on ❌: ant skips the action and continues
 6. On timeout (configurable): action is treated as denied
 
+## Documentation
+
+- [Getting started](./docs/getting-started.md) — install, scaffold, configure, and run your first colony
+- [Configuration reference](./docs/configuration.md) — all `colony.yaml` and `ants/*.yaml` options with examples
+- [CLI reference](./docs/cli.md) — `colony init`, `validate`, `run`
+- [Docker deployment](./docs/docker.md) — docker compose and docker run, persistent state, multi-colony setups
+
 ## Deployment
 
 Colony is designed to run in Docker. A typical colony layout:
@@ -145,6 +152,8 @@ colony init [dir]         # scaffold a new colony directory (default: ./my-colon
 colony validate [dir]     # validate colony and ant config files
 colony run [dir]          # start the colony runner (all ants)
 ```
+
+See [docs/cli.md](./docs/cli.md) for installation instructions and full command reference.
 
 ## Integrations
 
