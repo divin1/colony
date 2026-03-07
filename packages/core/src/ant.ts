@@ -29,7 +29,8 @@ export async function runAnt(
   const confirmHook = createConfirmationHook(
     opts.channel,
     opts.channelId,
-    opts.confirmationTimeoutMs
+    opts.confirmationTimeoutMs,
+    opts.config.confirmation ?? undefined
   );
   const logHook = createLoggingHook(opts.channel, opts.channelId);
 
