@@ -5,6 +5,13 @@ import type {
   PostToolUseHookInput,
 } from "@anthropic-ai/claude-agent-sdk";
 
+// --- Per-ant confirmation configuration ---
+
+export interface AntConfirmationConfig {
+  always_confirm_tools?: string[];
+  dangerous_patterns?: string[];
+}
+
 // --- Dangerous tool detection ---
 
 // Tools that always require human confirmation regardless of input.
@@ -20,7 +27,13 @@ const DANGEROUS_BASH_PATTERNS: RegExp[] = [
   /\btruncate\s+table\b/i,
 ];
 
-export function isDangerous(input: PreToolUseHookInput): boolean {
+export function isDangerous(
+  input: PreToolUseHookInput,
+  config?: AntConfirmationConfig
+): boolean {
+  // Per-ant: always confirm specific tools.
+  if (config?.always_confirm_tools?.includes(input.tool_name)) return true;
+
   if (ALWAYS_DANGEROUS.has(input.tool_name)) return true;
 
   if (input.tool_name === "Bash") {
@@ -28,7 +41,13 @@ export function isDangerous(input: PreToolUseHookInput): boolean {
     if (typeof raw !== "object" || raw === null) return false;
     const command = (raw as Record<string, unknown>).command;
     if (typeof command !== "string") return false;
-    return DANGEROUS_BASH_PATTERNS.some((p) => p.test(command));
+
+    if (DANGEROUS_BASH_PATTERNS.some((p) => p.test(command))) return true;
+
+    // Per-ant: additional bash patterns.
+    if (config?.dangerous_patterns) {
+      return config.dangerous_patterns.some((p) => new RegExp(p).test(command));
+    }
   }
 
   return false;
@@ -57,14 +76,15 @@ export interface ConfirmationChannel {
 export function createConfirmationHook(
   channel: ConfirmationChannel,
   channelId: string,
-  timeoutMs: number
+  timeoutMs: number,
+  antConfig?: AntConfirmationConfig
 ): HookCallback {
   return async (input): Promise<HookJSONOutput> => {
     // This hook is registered under PreToolUse, but guard defensively.
     if (input.hook_event_name !== "PreToolUse") return { decision: "approve" };
 
     const preInput = input as PreToolUseHookInput;
-    if (!isDangerous(preInput)) return { decision: "approve" };
+    if (!isDangerous(preInput, antConfig)) return { decision: "approve" };
 
     const description = formatToolDescription(preInput.tool_name, preInput.tool_input);
     const timeoutSec = Math.round(timeoutMs / 1000);

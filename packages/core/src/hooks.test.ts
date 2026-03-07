@@ -85,6 +85,30 @@ describe("isDangerous", () => {
     expect(isDangerous(makePreToolUseInput("Bash", null))).toBe(false);
     expect(isDangerous(makePreToolUseInput("Bash", { command: 42 }))).toBe(false);
   });
+
+  it("returns true for a tool in always_confirm_tools", () => {
+    const config = { always_confirm_tools: ["Write", "Edit"] };
+    expect(isDangerous(makePreToolUseInput("Write"), config)).toBe(true);
+    expect(isDangerous(makePreToolUseInput("Edit"), config)).toBe(true);
+    expect(isDangerous(makePreToolUseInput("Read"), config)).toBe(false);
+  });
+
+  it("returns true for a Bash command matching a custom dangerous_pattern", () => {
+    const config = { dangerous_patterns: ["\\bmy-deploy\\.sh\\b"] };
+    expect(
+      isDangerous(makePreToolUseInput("Bash", { command: "bash my-deploy.sh" }), config)
+    ).toBe(true);
+    expect(
+      isDangerous(makePreToolUseInput("Bash", { command: "echo hello" }), config)
+    ).toBe(false);
+  });
+
+  it("per-ant config does not override global patterns — both apply", () => {
+    const config = { always_confirm_tools: ["Glob"] };
+    // Global rule still fires independently of the per-ant config.
+    expect(isDangerous(makePreToolUseInput("computer_use"), config)).toBe(true);
+    expect(isDangerous(makePreToolUseInput("Bash", { command: "sudo apt install curl" }), config)).toBe(true);
+  });
 });
 
 // --- createConfirmationHook ---
