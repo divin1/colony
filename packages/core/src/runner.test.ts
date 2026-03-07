@@ -1,5 +1,29 @@
-import { describe, it, expect } from "bun:test";
-import { parseTimeoutMs, PromiseQueue } from "./runner";
+import { describe, it, expect, mock } from "bun:test";
+import { parseTimeoutMs, PromiseQueue, runColony } from "./runner";
+import type { RunnerDiscord } from "./runner";
+import type { LoadedConfig } from "./config";
+
+// --- Helpers ---
+
+function makeDiscord(overrides: Partial<RunnerDiscord> = {}): RunnerDiscord {
+  return {
+    connect: mock(async () => {}),
+    disconnect: mock(async () => {}),
+    send: mock(async () => ({ id: "msg-1" })),
+    addReaction: mock(async () => {}),
+    waitForReaction: mock(async () => null),
+    resolveChannelId: mock(async () => "ch-1"),
+    on: mock(() => {}),
+    ...overrides,
+  };
+}
+
+function makeConfig(ants: LoadedConfig["ants"] = []): LoadedConfig {
+  return {
+    colony: { name: "test-colony" },
+    ants,
+  };
+}
 
 describe("parseTimeoutMs", () => {
   it("parses seconds", () => {
@@ -28,6 +52,25 @@ describe("parseTimeoutMs", () => {
     expect(() => parseTimeoutMs("5 m")).toThrow("Invalid duration");
   });
 });
+
+// --- runColony (integration) ---
+
+describe("runColony", () => {
+  it("connects and disconnects Discord even with zero ants", async () => {
+    const discord = makeDiscord();
+    await runColony(makeConfig([]), discord);
+    expect(discord.connect).toHaveBeenCalledTimes(1);
+    expect(discord.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves without calling resolveChannelId when there are no ants", async () => {
+    const discord = makeDiscord();
+    await runColony(makeConfig([]), discord);
+    expect(discord.resolveChannelId).not.toHaveBeenCalled();
+  });
+});
+
+// --- PromiseQueue ---
 
 describe("PromiseQueue", () => {
   it("resolves next() immediately when item is already queued", async () => {

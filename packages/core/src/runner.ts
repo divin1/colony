@@ -2,6 +2,7 @@ import { Cron } from "croner";
 import { runAnt } from "./ant";
 import type { ConfirmationChannel } from "./hooks";
 import type { LoadedConfig, AntConfig, ColonyConfig } from "./config";
+import { createState } from "./state";
 
 // Extended interface the runner needs beyond ConfirmationChannel.
 // DiscordIntegration satisfies this structurally — core does not depend on @colony/discord.
@@ -92,6 +93,14 @@ async function runAntWithSupervision(
     colony.defaults?.confirmation_timeout ?? "30m"
   );
 
+  const pollIntervalRaw = ant.poll_interval ?? colony.defaults?.poll_interval;
+  const pollIntervalMs = pollIntervalRaw ? parseTimeoutMs(pollIntervalRaw) : 0;
+
+  const antState = createState(
+    ant.state?.backend ?? "memory",
+    ant.state?.path
+  );
+
   await discord.send(channelId, `🐜 Ant **${ant.name}** is starting.`);
 
   const defaultPrompt = `You are ${ant.name}. ${ant.description}. Begin your work session now.`;
@@ -126,7 +135,6 @@ async function runAntWithSupervision(
     const labels =
       githubTrigger?.type === "github_issue" ? githubTrigger.labels : [];
     const repos = ant.integrations?.github?.repos ?? [];
-    const seenIssueIds = new Set<number>();
 
     const pollGitHub = async () => {
       for (const repoSlug of repos) {
@@ -137,8 +145,8 @@ async function runAntWithSupervision(
             labels: labels.length > 0 ? labels : undefined,
           });
           for (const issue of issues) {
-            if (seenIssueIds.has(issue.number)) continue;
-            seenIssueIds.add(issue.number);
+            if (antState.hasSeenIssue(ant.name, issue.number)) continue;
+            antState.markIssueSeen(ant.name, issue.number);
             queue.push(
               `You are ${ant.name}. A new GitHub issue has been opened in ${repoSlug}:\n` +
                 `Issue #${issue.number}: ${issue.title}\n${issue.body ?? ""}`
@@ -187,8 +195,11 @@ async function runAntWithSupervision(
       await Bun.sleep(RESTART_DELAY_MS);
     }
 
-    // If no triggers: immediately re-queue so the ant keeps running.
+    // If no triggers: sleep (if configured) then re-queue so the ant keeps running.
     if (!hasAnyTrigger) {
+      if (pollIntervalMs > 0) {
+        await Bun.sleep(pollIntervalMs);
+      }
       queue.push(defaultPrompt);
     }
   }
