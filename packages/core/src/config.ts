@@ -46,6 +46,8 @@ export const ColonyConfigSchema = z.object({
   defaults: z
     .object({
       confirmation_timeout: z.string().default("30m"),
+      // Sleep between runs for ants with no triggers/schedule. Default: run immediately.
+      poll_interval: z.string().optional(),
     })
     .optional(),
 });
@@ -86,6 +88,24 @@ export const AntConfigSchema = z.object({
     })
     .optional(),
   triggers: z.array(TriggerSchema).optional(),
+  confirmation: z
+    .object({
+      // Tool names that always require human confirmation for this ant.
+      always_confirm_tools: z.array(z.string()).default([]),
+      // Additional bash command regex patterns that trigger confirmation.
+      dangerous_patterns: z.array(z.string()).default([]),
+    })
+    .optional(),
+  state: z
+    .object({
+      // "memory" resets on restart; "sqlite" persists across restarts.
+      backend: z.enum(["memory", "sqlite"]).default("memory"),
+      path: z.string().default("./colony-state.db"),
+    })
+    .optional(),
+  // How long to sleep between runs for ants with no triggers/schedule.
+  // Overrides colony-level defaults.poll_interval if set.
+  poll_interval: z.string().optional(),
 });
 
 export type AntConfig = z.infer<typeof AntConfigSchema>;

@@ -48,6 +48,17 @@ describe("ColonyConfigSchema", () => {
       expect(result.data.defaults?.confirmation_timeout).toBe("30m");
     }
   });
+
+  it("parses colony-level poll_interval", () => {
+    const result = ColonyConfigSchema.safeParse({
+      name: "test",
+      defaults: { poll_interval: "10m" },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.defaults?.poll_interval).toBe("10m");
+    }
+  });
 });
 
 describe("AntConfigSchema", () => {
@@ -97,6 +108,88 @@ describe("AntConfigSchema", () => {
       triggers: [{ type: "slack_message" }],
     });
     expect(result.success).toBe(false);
+  });
+
+  it("parses confirmation block with defaults", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      confirmation: {},
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.confirmation?.always_confirm_tools).toEqual([]);
+      expect(result.data.confirmation?.dangerous_patterns).toEqual([]);
+    }
+  });
+
+  it("parses confirmation block with explicit values", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      confirmation: {
+        always_confirm_tools: ["Write", "Edit"],
+        dangerous_patterns: ["\\bmy-deploy\\.sh\\b"],
+      },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.confirmation?.always_confirm_tools).toEqual(["Write", "Edit"]);
+      expect(result.data.confirmation?.dangerous_patterns).toEqual(["\\bmy-deploy\\.sh\\b"]);
+    }
+  });
+
+  it("parses state block with defaults", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      state: {},
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.state?.backend).toBe("memory");
+      expect(result.data.state?.path).toBe("./colony-state.db");
+    }
+  });
+
+  it("parses state block with sqlite backend", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      state: { backend: "sqlite", path: "/data/colony.db" },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.state?.backend).toBe("sqlite");
+      expect(result.data.state?.path).toBe("/data/colony.db");
+    }
+  });
+
+  it("rejects an invalid state backend", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      state: { backend: "redis" },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("parses poll_interval", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      poll_interval: "5m",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.poll_interval).toBe("5m");
+    }
   });
 });
 
