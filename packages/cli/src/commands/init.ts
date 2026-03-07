@@ -67,6 +67,6 @@ export const initCommand = new Command("init")
     console.log(`  1. cd ${dir}`);
     console.log("  2. cp .env.example .env  # fill in your tokens");
     console.log("  3. Edit colony.yaml and ants/worker.yaml to match your setup");
-    console.log("  4. bun packages/cli/src/index.ts validate .");
-    console.log("  5. bun packages/cli/src/index.ts run .");
+    console.log("  4. colony validate .");
+    console.log("  5. colony run .");
   });
