@@ -68,13 +68,16 @@ Ants run as concurrent Agent SDK sessions within the colony runner process. They
    - Check schedule / poll triggers / read pending Discord commands
    - Discover work from backlog source (GitHub Issues, Jira, etc.)
    - Execute work using Claude Code tools (file edits, shell commands, API calls)
-   - For dangerous/irreversible actions: pause and send a Discord confirmation request via the integration bridge
-   - Resume after human reacts ✅ (proceed) or ❌ (skip), or after timeout (treat as ❌)
+   - For dangerous/irreversible actions: apply the ant's `autonomy` policy — ask Discord (`human`), auto-approve (`full`), or auto-deny (`strict`)
+   - If `human`: resume after operator reacts ✅ (proceed) or ❌ (skip), or after timeout (treat as ❌)
    - Report results and status to Discord
 4. Colony runner wraps each SDK session in a supervisor loop; restarts it on unexpected error
 
 ### Confirmation Flow (Detail)
 
+The flow depends on the ant's `autonomy` setting:
+
+**`autonomy: human` (default)**
 ```
 Ant tool use hook fires for a dangerous action
             ↓
@@ -87,13 +90,17 @@ Ant SDK session suspends (awaiting Promise resolution)
             ↓
 Discord client fires messageReactionAdd event
             ↓
-Promise resolves: proceed (✅) or throw/skip (❌)
-Or: timeout elapses → treat as ❌
+Promise resolves: proceed (✅) or block (❌)
+Or: timeout elapses → block
             ↓
 Ant resumes or skips the action
 ```
 
-- Timeout is configurable per colony (`confirmation_timeout` in `colony.yaml`); default behaviour on timeout is deny
+**`autonomy: full`** — PreToolUse hook is not registered; every action proceeds immediately.
+
+**`autonomy: strict`** — Hook fires, detects danger, returns `{ decision: "block" }` immediately without contacting Discord.
+
+- Timeout is configurable per colony (`confirmation_timeout` in `colony.yaml`); applies to `human` autonomy only
 - Confirmations are logged with the Discord username of the reactor
 
 ## Config Schema
@@ -125,6 +132,15 @@ engine: claude                # "claude" (default) or "gemini"
 
 gemini:                       # only used when engine: gemini
   model: gemini-2.5-pro       # default; any Gemini model name accepted by the CLI
+
+autonomy: human               # "human" (default) | "full" | "strict"
+                              # human:  forward dangerous actions to Discord for approval
+                              # full:   auto-approve everything, no Discord prompts
+                              # strict: auto-deny everything flagged, no Discord prompts
+
+confirmation:                 # which actions are flagged as dangerous (orthogonal to autonomy)
+  always_confirm_tools: [string]   # tool names that are always flagged
+  dangerous_patterns:  [string]    # extra regex patterns matched against bash commands
 
 integrations:
   github:
@@ -253,5 +269,4 @@ ants/
 
 - **One container per ant vs. one container per colony**: single container is simpler to deploy; per-ant containers give stronger isolation but multiply resource overhead
 - **Ant state persistence**: does an ant remember context (past messages, completed tasks) across restarts, and if so — in-memory, SQLite, or external store?
-- **Dangerous action detection**: how does `isDangerous(tool)` decide which tool uses require confirmation — a static allowlist, heuristics, per-ant config, or always-ask?
 - **Ant sleep/wake**: how does a scheduled ant "sleep" between runs — exit and restart, or stay alive and use `setTimeout`?

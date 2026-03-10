@@ -1,16 +1,16 @@
 # Colony
 
-Colony is a framework for deploying autonomous LLM-based agents. Each ant is a [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk) session configured to do work autonomously while you focus on other things.
+Colony is a framework for deploying autonomous LLM-based agents. Each ant is an agent session — powered by [Claude](https://github.com/anthropics/claude-agent-sdk) or [Gemini](https://github.com/google-gemini/gemini-cli) — configured to do work autonomously while you focus on other things.
 
-Ants can maintain software projects, write blog posts, process data, or do anything Claude can do &mdash; guided by a YAML config file and reporting back to you via Discord.
+Ants can maintain software projects, write blog posts, process data, or do anything an LLM agent can do &mdash; guided by a YAML config file and reporting back to you via Discord.
 
 ## Core Concepts
 
 ### Ant
-An **ant** is an Agent SDK session running in-process with a defined purpose. Each ant:
+An **ant** is an agent session (Claude or Gemini) running in-process with a defined purpose. Each ant:
 - Is declared in a YAML config file (name, instructions, integrations, schedule)
 - Runs autonomously: on a schedule, in response to events, on human command, or from its own backlog
-- Reports its activity and asks for confirmation via Discord
+- Reports its activity to Discord; optionally asks for human approval before dangerous actions
 - Has access to only the tools and repos it needs
 
 ### Colony
@@ -26,7 +26,7 @@ Human (Discord)
        ↕
 Colony Runner
        ↕
-Ant (Agent SDK session running in-process)
+Ant (Claude or Gemini agent session, running in-process)
        ↕
 External services (GitHub, etc.)
 ```
@@ -35,7 +35,7 @@ External services (GitHub, etc.)
 2. You deploy the colony via Docker (or run it locally with the CLI)
 3. The colony runner starts each ant as an Agent SDK session with its instructions
 4. Each ant enters its work loop: polling for tasks, reacting to events, or waiting for human commands
-5. When an ant needs human input before a dangerous action, it posts a confirmation request to Discord with ✅/❌ reactions and pauses until you respond
+5. When a dangerous action is detected, Colony applies the ant's autonomy policy: ask Discord (`human`), auto-approve (`full`), or auto-deny (`strict`)
 6. Ants report progress, results, and errors to their designated Discord channel
 
 ## Ant Configuration
@@ -51,6 +51,12 @@ instructions: |
   Review open GitHub issues labelled 'ant-ready', implement fixes, and open PRs.
   Always run the test suite before opening a PR. Never force-push to main.
 
+engine: claude       # "claude" (default) or "gemini"
+autonomy: human      # "human" (default) | "full" | "strict"
+                     # human:  dangerous actions forwarded to Discord for approval
+                     # full:   fully autonomous, no confirmation prompts
+                     # strict: dangerous actions auto-denied, no Discord contact
+
 integrations:
   github:
     repos:
@@ -65,11 +71,6 @@ triggers:
   - type: github_issue        # also wake up when a matching issue is opened
     labels: [ant-ready]
   - type: discord_command     # also respond to messages in alice's Discord channel
-
-backlog:
-  source: github_issues
-  filter:
-    labels: [ant-ready]
 ```
 
 ### Colony-Level Config
@@ -94,21 +95,24 @@ defaults:
 
 Each ant has a dedicated Discord channel. The ant uses it to:
 - Post status updates as it works
-- Ask for confirmation before destructive or irreversible actions (with ✅/❌ reactions)
 - Report completed tasks, errors, and summaries
+- Request human approval before dangerous actions (when `autonomy: human`)
 
 You interact with an ant by:
 - Sending a message in the ant's channel (treated as a direct command)
 - Reacting ✅ or ❌ to a confirmation request
 
-### Confirmation Flow
+### Autonomy and Confirmation
 
-1. Ant identifies an action that requires human approval (e.g. deleting a branch, merging a PR)
-2. Ant posts a message describing the action and its consequences
-3. Two reactions are added automatically: ✅ approve and ❌ deny
-4. Ant suspends and waits for a reaction
-5. On ✅: ant proceeds; on ❌: ant skips the action and continues
-6. On timeout (configurable): action is treated as denied
+Each ant's `autonomy` setting controls what happens when a dangerous action is detected (`git push`, `rm -rf`, `sudo`, pipe-to-shell, SQL drops, etc.):
+
+| `autonomy` | Behaviour |
+|---|---|
+| `human` | Pauses and posts a Discord message with ✅/❌ reactions. Timeout = deny. |
+| `full` | Auto-approves everything. No Discord prompts. |
+| `strict` | Auto-denies everything flagged. No Discord prompts. |
+
+Additional rules — specific tools or bash patterns that should always be flagged — are configured separately in the `confirmation` block.
 
 ## Documentation
 
@@ -168,7 +172,9 @@ See [docs/cli.md](./docs/cli.md) for installation instructions and full command 
 ## Roadmap
 
 - [x] Colony runner: ant lifecycle management (spawn, monitor, restart)
-- [x] Agent SDK session integration
+- [x] Claude Agent SDK session integration
+- [x] Gemini CLI engine support (`engine: gemini`)
+- [x] Autonomy levels: `human`, `full`, `strict`
 - [x] Discord integration: message send/receive, confirmation reactions, command triggers
 - [x] GitHub integration: issue reading, comment creation, issue polling triggers
 - [x] Cron scheduling for ants
