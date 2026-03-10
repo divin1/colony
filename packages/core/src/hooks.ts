@@ -69,15 +69,20 @@ export interface ConfirmationChannel {
 // --- Hook factories ---
 
 /**
- * Creates a PreToolUse hook that pauses dangerous actions and waits for a
- * Discord ✅/❌ reaction before allowing the ant to proceed.
- * Timeout with no reaction is treated as denial.
+ * Creates a PreToolUse hook whose behaviour depends on the ant's autonomy setting:
+ *
+ *   "human"  — posts a Discord confirmation message and waits for ✅/❌ reaction.
+ *              Timeout with no reaction is treated as denial (current default).
+ *   "strict" — auto-denies any flagged action without contacting Discord.
+ *
+ * For autonomy "full", do not register this hook at all (see ant.ts).
  */
 export function createConfirmationHook(
   channel: ConfirmationChannel,
   channelId: string,
   timeoutMs: number,
-  antConfig?: AntConfirmationConfig
+  antConfig?: AntConfirmationConfig,
+  autonomy: "human" | "strict" = "human"
 ): HookCallback {
   return async (input): Promise<HookJSONOutput> => {
     // This hook is registered under PreToolUse, but guard defensively.
@@ -86,6 +91,16 @@ export function createConfirmationHook(
     const preInput = input as PreToolUseHookInput;
     if (!isDangerous(preInput, antConfig)) return { decision: "approve" };
 
+    // strict: auto-deny without bothering Discord.
+    if (autonomy === "strict") {
+      const description = formatToolDescription(preInput.tool_name, preInput.tool_input);
+      return {
+        decision: "block",
+        reason: `Auto-denied (autonomy: strict): ${description}`,
+      };
+    }
+
+    // human: forward to Discord and wait for a reaction.
     const description = formatToolDescription(preInput.tool_name, preInput.tool_input);
     const timeoutSec = Math.round(timeoutMs / 1000);
 
@@ -111,6 +126,40 @@ export function createConfirmationHook(
 
     return { decision: "block", reason };
   };
+}
+
+/**
+ * Returns a system-prompt appendix that instructs a Gemini ant how to behave
+ * given its autonomy level. Best-effort only — Gemini has no hook interception.
+ */
+export function buildGeminiAutonomyInstructions(
+  autonomy: "human" | "full" | "strict"
+): string {
+  if (autonomy === "full") return "";
+
+  if (autonomy === "strict") {
+    return [
+      "",
+      "--- AUTONOMY CONSTRAINTS ---",
+      'Your autonomy level is "strict". You must NOT perform any irreversible or',
+      "high-impact actions, including: git push, deleting files recursively, sudo,",
+      "piping to a shell, DROP TABLE / TRUNCATE TABLE, or using computer_use.",
+      "If such an action is required to complete a task, explain why and stop.",
+      "--- END CONSTRAINTS ---",
+    ].join("\n");
+  }
+
+  // "human" — instruct the model to pause and describe before acting.
+  return [
+    "",
+    "--- AUTONOMY CONSTRAINTS ---",
+    'Your autonomy level is "human". Before performing any irreversible or',
+    "high-impact action (git push, deleting files, sudo, pipe-to-shell,",
+    "DROP TABLE / TRUNCATE TABLE, computer_use), you must describe the action",
+    "you are about to take and explicitly state that you are pausing for human",
+    "approval. Do not proceed with the action in the same response.",
+    "--- END CONSTRAINTS ---",
+  ].join("\n");
 }
 
 /**

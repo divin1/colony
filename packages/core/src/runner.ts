@@ -93,6 +93,14 @@ async function runAntWithSupervision(
     colony.defaults?.confirmation_timeout ?? "30m"
   );
 
+  if (ant.engine === "gemini" && ant.autonomy !== "full") {
+    console.warn(
+      `[colony] Warning: ant "${ant.name}" uses engine "gemini". ` +
+        `Autonomy level "${ant.autonomy}" will be injected as prompt instructions only — ` +
+        `individual tool calls cannot be intercepted.`
+    );
+  }
+
   const pollIntervalRaw = ant.poll_interval ?? colony.defaults?.poll_interval;
   const pollIntervalMs = pollIntervalRaw ? parseTimeoutMs(pollIntervalRaw) : 0;
 

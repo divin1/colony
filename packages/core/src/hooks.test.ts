@@ -3,6 +3,7 @@ import {
   isDangerous,
   createConfirmationHook,
   createLoggingHook,
+  buildGeminiAutonomyInstructions,
   type ConfirmationChannel,
 } from "./hooks";
 import type { PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
@@ -185,6 +186,79 @@ describe("createConfirmationHook", () => {
       "msg-1",
       expect.objectContaining({ timeout: 5_000, allowedEmojis: ["✅", "❌"] })
     );
+  });
+});
+
+// --- createConfirmationHook — autonomy: strict ---
+
+describe("createConfirmationHook (autonomy: strict)", () => {
+  it("auto-denies dangerous actions without contacting Discord", async () => {
+    const channel = makeChannel();
+    const hook = createConfirmationHook(channel, "ch-1", 30_000, undefined, "strict");
+
+    const result = await hook(
+      makePreToolUseInput("Bash", { command: "git push" }),
+      undefined,
+      hookOptions
+    ) as { decision: string; reason: string };
+
+    expect(result.decision).toBe("block");
+    expect(result.reason).toMatch(/auto-denied/i);
+    expect(channel.send).not.toHaveBeenCalled();
+    expect(channel.waitForReaction).not.toHaveBeenCalled();
+  });
+
+  it("still approves safe tools under strict autonomy", async () => {
+    const channel = makeChannel();
+    const hook = createConfirmationHook(channel, "ch-1", 30_000, undefined, "strict");
+
+    const result = await hook(makePreToolUseInput("Read"), undefined, hookOptions);
+
+    expect(result).toEqual({ decision: "approve" });
+    expect(channel.send).not.toHaveBeenCalled();
+  });
+
+  it("includes the action description in the denial reason", async () => {
+    const channel = makeChannel();
+    const hook = createConfirmationHook(channel, "ch-1", 30_000, undefined, "strict");
+
+    const result = await hook(
+      makePreToolUseInput("Bash", { command: "sudo rm -rf /" }),
+      undefined,
+      hookOptions
+    ) as { decision: string; reason: string };
+
+    expect(result.reason).toContain("sudo rm -rf /");
+  });
+});
+
+// --- buildGeminiAutonomyInstructions ---
+
+describe("buildGeminiAutonomyInstructions", () => {
+  it("returns empty string for full autonomy", () => {
+    expect(buildGeminiAutonomyInstructions("full")).toBe("");
+  });
+
+  it("returns non-empty instructions for human autonomy", () => {
+    const result = buildGeminiAutonomyInstructions("human");
+    expect(result.length).toBeGreaterThan(0);
+    expect(result).toContain("human");
+  });
+
+  it("returns non-empty instructions for strict autonomy", () => {
+    const result = buildGeminiAutonomyInstructions("strict");
+    expect(result.length).toBeGreaterThan(0);
+    expect(result).toContain("strict");
+  });
+
+  it("strict instructions forbid irreversible actions", () => {
+    const result = buildGeminiAutonomyInstructions("strict");
+    expect(result).toContain("NOT");
+  });
+
+  it("human instructions require pausing before acting", () => {
+    const result = buildGeminiAutonomyInstructions("human");
+    expect(result.toLowerCase()).toMatch(/pause|approval/);
   });
 });
 

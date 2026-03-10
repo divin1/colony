@@ -254,6 +254,54 @@ describe("AntConfigSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("defaults autonomy to human", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.autonomy).toBe("human");
+    }
+  });
+
+  it("parses autonomy: full", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      autonomy: "full",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.autonomy).toBe("full");
+    }
+  });
+
+  it("parses autonomy: strict", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      autonomy: "strict",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.autonomy).toBe("strict");
+    }
+  });
+
+  it("rejects an unknown autonomy value", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      autonomy: "yolo",
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("loadConfig", () => {

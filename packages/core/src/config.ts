@@ -106,6 +106,11 @@ export const AntConfigSchema = z.object({
   // How long to sleep between runs for ants with no triggers/schedule.
   // Overrides colony-level defaults.poll_interval if set.
   poll_interval: z.string().optional(),
+  // Controls what Colony does when a dangerous action is detected.
+  //   "human"  — forward to Discord for approval (default)
+  //   "full"   — auto-approve everything, never contact Discord
+  //   "strict" — auto-deny everything flagged, never contact Discord
+  autonomy: z.enum(["human", "full", "strict"]).default("human"),
   // Which agent engine to use for this ant. Defaults to "claude".
   engine: z.enum(["claude", "gemini"]).default("claude"),
   // Gemini-specific options. Only used when engine is "gemini".

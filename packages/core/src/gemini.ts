@@ -1,7 +1,7 @@
 import { spawn as nodeSpawn } from "child_process";
 import type { SpawnOptionsWithoutStdio, ChildProcess } from "child_process";
 import type { AntConfig } from "./config";
-import type { ConfirmationChannel } from "./hooks";
+import { buildGeminiAutonomyInstructions, type ConfirmationChannel } from "./hooks";
 import { chunkText } from "./ant";
 
 type SpawnFn = (
@@ -27,7 +27,10 @@ export async function runAntWithGemini(
   opts: GeminiRunOptions
 ): Promise<void> {
   const model = opts.config.gemini?.model ?? "gemini-2.5-pro";
-  const systemPrompt = opts.config.instructions;
+  const autonomyInstructions = buildGeminiAutonomyInstructions(
+    opts.config.autonomy
+  );
+  const systemPrompt = opts.config.instructions + autonomyInstructions;
   const spawnFn: SpawnFn = opts._spawn ?? nodeSpawn;
 
   const args = ["--model", model, "--prompt", prompt];

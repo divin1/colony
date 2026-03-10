@@ -36,13 +36,29 @@ export async function runAnt(
     });
   }
 
-  const confirmHook = createConfirmationHook(
-    opts.channel,
-    opts.channelId,
-    opts.confirmationTimeoutMs,
-    opts.config.confirmation ?? undefined
-  );
+  const autonomy = opts.config.autonomy;
   const logHook = createLoggingHook(opts.channel, opts.channelId);
+
+  // For full autonomy, skip the PreToolUse hook entirely — zero overhead,
+  // no dangerous-action checks, Discord is never contacted for approvals.
+  const preToolUseHooks =
+    autonomy === "full"
+      ? {}
+      : {
+          PreToolUse: [
+            {
+              hooks: [
+                createConfirmationHook(
+                  opts.channel,
+                  opts.channelId,
+                  opts.confirmationTimeoutMs,
+                  opts.config.confirmation ?? undefined,
+                  autonomy
+                ),
+              ],
+            },
+          ],
+        };
 
   for await (const msg of query({
     prompt,
@@ -55,7 +71,7 @@ export async function runAnt(
       cwd: opts.cwd,
       persistSession: false,
       hooks: {
-        PreToolUse: [{ hooks: [confirmHook] }],
+        ...preToolUseHooks,
         PostToolUse: [{ hooks: [logHook] }],
       },
     },
