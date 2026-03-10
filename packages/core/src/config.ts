@@ -106,6 +106,14 @@ export const AntConfigSchema = z.object({
   // How long to sleep between runs for ants with no triggers/schedule.
   // Overrides colony-level defaults.poll_interval if set.
   poll_interval: z.string().optional(),
+  // Which agent engine to use for this ant. Defaults to "claude".
+  engine: z.enum(["claude", "gemini"]).default("claude"),
+  // Gemini-specific options. Only used when engine is "gemini".
+  gemini: z
+    .object({
+      model: z.string().default("gemini-2.5-pro"),
+    })
+    .optional(),
 });
 
 export type AntConfig = z.infer<typeof AntConfigSchema>;

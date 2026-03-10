@@ -191,6 +191,69 @@ describe("AntConfigSchema", () => {
       expect(result.data.poll_interval).toBe("5m");
     }
   });
+
+  it("defaults engine to claude", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.engine).toBe("claude");
+    }
+  });
+
+  it("parses engine: gemini", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      engine: "gemini",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.engine).toBe("gemini");
+    }
+  });
+
+  it("parses gemini block with model override", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      engine: "gemini",
+      gemini: { model: "gemini-2.0-flash" },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.gemini?.model).toBe("gemini-2.0-flash");
+    }
+  });
+
+  it("defaults gemini model to gemini-2.5-pro", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      engine: "gemini",
+      gemini: {},
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.gemini?.model).toBe("gemini-2.5-pro");
+    }
+  });
+
+  it("rejects an unknown engine value", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      engine: "openai",
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("loadConfig", () => {

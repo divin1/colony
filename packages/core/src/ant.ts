@@ -10,6 +10,7 @@ import {
   createLoggingHook,
   type ConfirmationChannel,
 } from "./hooks";
+import { runAntWithGemini } from "./gemini";
 
 export interface AntRunOptions {
   config: AntConfig;
@@ -18,7 +19,7 @@ export interface AntRunOptions {
   /** Pre-resolved Discord channel ID for this ant. */
   channelId: string;
   confirmationTimeoutMs: number;
-  /** Working directory for the Claude Code session. Defaults to process.cwd(). */
+  /** Working directory for the agent session. Defaults to process.cwd(). */
   cwd?: string;
 }
 
@@ -26,6 +27,15 @@ export async function runAnt(
   prompt: string,
   opts: AntRunOptions
 ): Promise<void> {
+  if (opts.config.engine === "gemini") {
+    return runAntWithGemini(prompt, {
+      config: opts.config,
+      channel: opts.channel,
+      channelId: opts.channelId,
+      cwd: opts.cwd,
+    });
+  }
+
   const confirmHook = createConfirmationHook(
     opts.channel,
     opts.channelId,
