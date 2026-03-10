@@ -117,6 +117,9 @@ integrations:
     token: string             # env var reference, e.g. ${GITHUB_TOKEN}
 defaults:
   confirmation_timeout: string  # duration string, e.g. "30m"; timeout action is deny
+  git:
+    user_name: string           # optional; project owner's git name, injected into all ant prompts
+    user_email: string          # optional; project owner's git email
 ```
 
 ### `ants/<name>.yaml`
@@ -262,6 +265,8 @@ ants/
 - **Resilient runner**: an ant session crashing must not crash the colony runner; wrap in try/catch + supervisor
 - **Async everywhere**: all I/O is `async/await`; no blocking calls
 - **Secrets in env only**: tokens and credentials live in `.env` / environment variables; never in YAML files; never logged
+- **PLAN.md convention**: every ant maintains a `PLAN.md` at the root of its working directory to track current goals, active tasks, and completed work; committed after each update
+- **Git identity**: ants always commit as the project owner (from `defaults.git` in `colony.yaml`); never as a bot user such as `claude` or `github-actions[bot]`
 - **Integration isolation**: each integration is its own workspace package; `discord/` does not import from `github/`
 - **Tests**: `bun test`; test files live alongside source as `*.test.ts`
 
