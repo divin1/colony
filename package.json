@@ -9,7 +9,10 @@
     "packages/integrations/github"
   ],
   "scripts": {
-    "test": "bun test --recursive"
+    "test": "bun test --recursive",
+    "docs:dev": "bun run --cwd docs dev",
+    "docs:build": "bun run --cwd docs build",
+    "docs:preview": "bun run --cwd docs preview"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

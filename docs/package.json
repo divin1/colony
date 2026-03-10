@@ -1,0 +1,13 @@
+{
+  "name": "@colony/docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node ./node_modules/.bin/vitepress dev",
+    "build": "node ./node_modules/.bin/vitepress build",
+    "preview": "node ./node_modules/.bin/vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  }
+}
