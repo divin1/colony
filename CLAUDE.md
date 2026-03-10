@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Colony is a framework for deploying autonomous LLM-based agents. Each "ant" is a **Claude Agent SDK session** managed by a **colony runner** process. The project has three deliverables:
+Colony is a framework for deploying autonomous LLM-based agents. Each "ant" is an **agent session** (Claude Agent SDK or Gemini CLI) managed by a **colony runner** process. The project has three deliverables:
 
 1. **Core framework** — library that handles ant lifecycle, integration bridges, and confirmation flows
 2. **CLI** (`colony`) — command-line tool for scaffolding, validating, and managing colonies
@@ -15,7 +15,8 @@ Colony is a framework for deploying autonomous LLM-based agents. Each "ant" is a
 | Language | TypeScript (strict) | No JS fallback; all packages are TS |
 | Runtime | Bun | No build step; runs `.ts` directly |
 | Monorepo | Bun workspaces | `package.json` at root with `workspaces` field |
-| Agent engine | `@anthropic-ai/claude-agent-sdk` | Drives each ant's agentic loop |
+| Agent engine | `@anthropic-ai/claude-agent-sdk` | Default engine; drives each ant's agentic loop |
+| Alt engine | Gemini CLI (`gemini`) | Optional; spawned as a subprocess for `engine: gemini` ants |
 | Discord | `discord.js` | Most complete Discord bot library |
 | GitHub | `@octokit/rest` | GitHub REST API client |
 | YAML parsing | `yaml` | Config file parsing |
@@ -29,7 +30,7 @@ Colony is a framework for deploying autonomous LLM-based agents. Each "ant" is a
 
 | Term | Definition |
 |---|---|
-| **Ant** | An Agent SDK session configured via YAML to do autonomous work |
+| **Ant** | An autonomous agent session (Claude Agent SDK or Gemini CLI) configured via YAML |
 | **Colony** | A set of ants deployed together with shared configuration |
 | **Colony runner** | The process that manages ant sessions, restarts them on failure, and bridges integrations |
 | **Integration** | A connector to an external service (Discord, GitHub, Jira, etc.) |
@@ -117,8 +118,13 @@ defaults:
 name: string                  # ant identifier; used in Discord messages and logs
 description: string           # human-readable purpose
 
-instructions: |               # injected as Agent SDK system prompt
+instructions: |               # injected as the agent's system prompt
   ...
+
+engine: claude                # "claude" (default) or "gemini"
+
+gemini:                       # only used when engine: gemini
+  model: gemini-2.5-pro       # default; any Gemini model name accepted by the CLI
 
 integrations:
   github:

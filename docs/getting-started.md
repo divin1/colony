@@ -6,7 +6,9 @@ Colony deploys autonomous LLM agents ("ants") that work continuously, react to e
 
 - **[Bun](https://bun.sh) 1.x** — Colony's runtime. Install with `curl -fsSL https://bun.sh/install | bash`.
 - **A Discord bot** — ants communicate through Discord. You need a bot token and a server where the bot has been invited with message + reaction permissions.
-- **An Anthropic API key** — ants run on Claude via the Agent SDK. Set `ANTHROPIC_API_KEY` in your environment.
+- **An agent engine** — at least one of:
+  - **Anthropic API key** (`ANTHROPIC_API_KEY`) — for Claude-powered ants (the default). Sign up at [console.anthropic.com](https://console.anthropic.com).
+  - **Gemini CLI** (`gemini`) + **Gemini API key** (`GEMINI_API_KEY`) — for Gemini-powered ants. Install with `npm install -g @google/gemini-cli`.
 - **A GitHub token** *(optional)* — needed only if you want ants that read issues or interact with GitHub repos.
 
 ### Setting up a Discord bot
@@ -80,7 +82,8 @@ Open `.env` and fill in your tokens:
 ```env
 DISCORD_TOKEN=your-discord-bot-token
 GITHUB_TOKEN=your-github-personal-access-token   # optional
-ANTHROPIC_API_KEY=your-anthropic-api-key
+ANTHROPIC_API_KEY=your-anthropic-api-key         # required for Claude ants (default)
+GEMINI_API_KEY=your-gemini-api-key               # required for Gemini ants
 ```
 
 > **Secrets stay in `.env` only.** YAML files never contain tokens — they reference environment variables with `${VAR_NAME}` syntax.
@@ -153,6 +156,7 @@ triggers:
 | `name` | Identifier used in Discord messages. Must be unique within the colony. |
 | `description` | One-line purpose, included in the agent's opening prompt. |
 | `instructions` | The agent's primary directive. Write it as if briefing a new engineer. Be specific. |
+| `engine` | `claude` (default) or `gemini`. Selects the agent engine for this ant. |
 | `integrations.discord.channel` | Discord channel name where the ant posts and listens. **Required.** |
 | `integrations.github.repos` | Repos the ant may access. Format: `owner/repo`. |
 | `schedule.cron` | Standard cron expression. Omit for event-only ants. |
@@ -179,7 +183,7 @@ Ants can have multiple triggers. An ant with no triggers and no schedule runs co
 
 ### Writing good instructions
 
-Instructions are injected as additional context into Claude's system prompt. A few principles:
+Instructions are injected as additional context into the agent's system prompt. A few principles:
 
 - **Be concrete.** Name the exact commands the ant should run (`gh issue list --label ant-ready`, not "look at GitHub issues").
 - **Define constraints.** Tell the ant what it must never do. "Never force-push" and "never merge your own PRs" prevent expensive accidents.

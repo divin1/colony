@@ -143,7 +143,8 @@ All three commands read environment variables for secret resolution. Set them in
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Yes | Authenticates Agent SDK calls (powers the ants) |
+| `ANTHROPIC_API_KEY` | For Claude ants (default) | Authenticates Claude Agent SDK calls |
+| `GEMINI_API_KEY` | For Gemini ants | Authenticates the `gemini` CLI subprocess |
 | `DISCORD_TOKEN` | Yes (for `run`) | Discord bot token |
 | `GITHUB_TOKEN` | When using GitHub | GitHub personal access token or app token |
 

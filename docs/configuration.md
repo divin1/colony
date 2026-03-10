@@ -72,8 +72,34 @@ One file per ant. All `.yaml` and `.yml` files inside the `ants/` directory are 
 ```yaml
 name: string          # Unique identifier within the colony. Used in Discord messages and logs.
 description: string   # One-line summary. Included in the agent's opening prompt.
-instructions: |       # The agent's primary directive. Appended to Claude's system prompt.
+instructions: |       # The agent's primary directive. Appended to the agent's system prompt.
   ...
+```
+
+### Engine
+
+```yaml
+engine: claude   # "claude" (default) or "gemini"
+```
+
+Controls which agent engine drives this ant.
+
+| Value | Engine | Requirement |
+|---|---|---|
+| `claude` | Claude Agent SDK (Claude Code) | `ANTHROPIC_API_KEY` |
+| `gemini` | Gemini CLI subprocess | `gemini` CLI installed, `GEMINI_API_KEY` |
+
+When `engine: gemini`, the runner spawns the `gemini` CLI as a subprocess, passes your `instructions` as the system prompt and the work prompt as the user turn, then captures stdout and posts it to the ant's Discord channel.
+
+> **Gemini ants do not support the confirmation flow.** Pre-tool-use hooks are a Claude Agent SDK feature; the Gemini CLI runs autonomously to completion without pausing for human approval.
+
+### Gemini options
+
+Only used when `engine: gemini`.
+
+```yaml
+gemini:
+  model: gemini-2.5-pro   # Default. Any Gemini model name accepted by the CLI.
 ```
 
 ### Integrations
@@ -159,6 +185,34 @@ poll_interval: 5m   # Overrides colony-level defaults.poll_interval for this ant
 ```
 
 Duration format: `30s`, `5m`, `1h`. Ants with at least one trigger or a cron schedule ignore this setting.
+
+---
+
+## Complete ant example — Gemini-powered researcher
+
+An ant that uses Gemini instead of Claude:
+
+```yaml
+name: researcher
+description: Answers research questions posted in Discord using Gemini
+
+engine: gemini
+gemini:
+  model: gemini-2.5-pro   # optional; this is the default
+
+instructions: |
+  You are a research assistant. When given a question, search for current information,
+  synthesise the key findings, and reply with a concise, well-sourced summary.
+
+integrations:
+  discord:
+    channel: research
+
+triggers:
+  - type: discord_command   # wake when someone posts a question in #research
+```
+
+> Because Gemini ants do not support confirmation hooks, avoid giving them access to irreversible tools (file writes, `git push`, deploys) unless you are comfortable with fully autonomous operation.
 
 ---
 
