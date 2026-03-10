@@ -34,6 +34,9 @@ defaults:
                                  # How long to wait for a Discord reaction before denying an action.
   poll_interval: string          # Duration: 30s | 5m | 1h. No default (run immediately).
                                  # Sleep between runs for ants with no triggers or schedule.
+  git:
+    user_name: string            # Project owner's git name. Injected into every ant's instructions.
+    user_email: string           # Project owner's git email.
 ```
 
 ### Minimal example
@@ -59,6 +62,52 @@ integrations:
 defaults:
   confirmation_timeout: 30m
   poll_interval: 10m
+  git:
+    user_name: Jane Smith
+    user_email: jane@acme.example.com
+```
+
+---
+
+## Colony-wide conventions
+
+Two conventions are automatically injected into every ant's system prompt, regardless of which project management tool (if any) is configured.
+
+### PLAN.md tracking
+
+Every ant maintains a `PLAN.md` file at the root of its working directory. The ant is instructed to:
+
+- Read `PLAN.md` at the start of each session to resume from the previous state.
+- Create it on the first session if it does not exist.
+- Update it throughout the session as tasks are completed or new ones are discovered.
+- Commit `PLAN.md` changes after each update: `git add PLAN.md && git commit -m "chore: update PLAN.md"`
+
+`PLAN.md` uses this structure:
+
+```markdown
+## Current Goal
+[What the ant is working on right now]
+
+## Active Tasks
+- [ ] Task 1
+- [ ] Task 2
+
+## Completed
+- [x] Previously completed task
+```
+
+This ensures progress is always recoverable across restarts without requiring an external project management integration.
+
+### Git identity
+
+Ants are instructed never to commit as a bot user (e.g. `claude`, `github-actions[bot]`). If `defaults.git` is set in `colony.yaml`, the ant runs `git config user.name / user.email` at the start of each session. If not set, the ant uses whatever git identity is already configured in the repository.
+
+```yaml
+# colony.yaml
+defaults:
+  git:
+    user_name: Jane Smith          # project owner's name
+    user_email: jane@example.com   # project owner's email
 ```
 
 ---
