@@ -1,0 +1,70 @@
+name: Deploy docs to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs.yml"
+  # Allow manual trigger from the Actions tab.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deployment runs at a time. If a new push arrives while a deploy is
+# in progress, the in-progress job is NOT cancelled — it finishes first.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history required for VitePress lastUpdated timestamps.
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        working-directory: docs
+        run: bun install --frozen-lockfile
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build
+        working-directory: docs
+        # VitePress/Vite requires Node.js; Bun is used only for package installation.
+        run: node ./node_modules/.bin/vitepress build
+        env:
+          # Override base if deploying to a custom domain (leave empty for /colony/).
+          VITEPRESS_BASE: ""
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/.vitepress/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
