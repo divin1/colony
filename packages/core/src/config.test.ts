@@ -59,6 +59,30 @@ describe("ColonyConfigSchema", () => {
       expect(result.data.defaults?.poll_interval).toBe("10m");
     }
   });
+
+  it("parses git identity config", () => {
+    const result = ColonyConfigSchema.safeParse({
+      name: "test",
+      defaults: { git: { user_name: "Jane Smith", user_email: "jane@example.com" } },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.defaults?.git?.user_name).toBe("Jane Smith");
+      expect(result.data.defaults?.git?.user_email).toBe("jane@example.com");
+    }
+  });
+
+  it("parses git identity with only user_name", () => {
+    const result = ColonyConfigSchema.safeParse({
+      name: "test",
+      defaults: { git: { user_name: "Jane Smith" } },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.defaults?.git?.user_name).toBe("Jane Smith");
+      expect(result.data.defaults?.git?.user_email).toBeUndefined();
+    }
+  });
 });
 
 describe("AntConfigSchema", () => {

@@ -26,6 +26,74 @@ export interface RunnerGitHub {
 const RESTART_DELAY_MS = 10_000;
 const GITHUB_POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
+/**
+ * Builds the colony-level instructions appended to every ant's system prompt.
+ * Covers two conventions that apply regardless of which project management tool
+ * (if any) is in use:
+ *
+ *   1. PLAN.md — ants track goals and tasks in a committed markdown file.
+ *   2. Git identity — ants always commit as the project owner, never as a bot.
+ */
+export function buildCommonInstructions(colony: ColonyConfig): string {
+  const parts: string[] = [];
+
+  // --- PLAN.md convention ---
+  parts.push(`\
+## Project tracking (PLAN.md)
+
+You maintain a PLAN.md file at the root of your working directory to track your work.
+
+At the start of each session:
+- If PLAN.md exists, read it to resume from where you left off.
+- If PLAN.md does not exist, create it with your plan for this session.
+
+Keep PLAN.md up to date throughout your session:
+- Mark tasks complete as you finish them.
+- Add newly discovered tasks or blockers.
+- Commit PLAN.md after each update: git add PLAN.md && git commit -m "chore: update PLAN.md"
+
+Structure PLAN.md as follows:
+\`\`\`
+## Current Goal
+[What you are working on right now]
+
+## Active Tasks
+- [ ] Task 1
+- [ ] Task 2
+
+## Completed
+- [x] Previously completed task
+\`\`\``);
+
+  // --- Git identity convention ---
+  const gitName = colony.defaults?.git?.user_name;
+  const gitEmail = colony.defaults?.git?.user_email;
+
+  if (gitName || gitEmail) {
+    const configLines: string[] = [];
+    if (gitName) configLines.push(`git config user.name "${gitName}"`);
+    if (gitEmail) configLines.push(`git config user.email "${gitEmail}"`);
+    parts.push(`\
+## Git identity
+
+When making git commits, always use the project owner's identity. Run these at the
+start of any session where you will commit:
+
+${configLines.map((l) => `    ${l}`).join("\n")}
+
+Never commit as a bot user (e.g. "claude", "github-actions[bot]", or any automated identity).`);
+  } else {
+    parts.push(`\
+## Git identity
+
+When making git commits, use the git user identity already configured in the repository
+(verify with \`git config user.name\` and \`git config user.email\`).
+Never override it with a bot name such as "claude", "github-actions[bot]", or any automated identity.`);
+  }
+
+  return parts.join("\n\n");
+}
+
 // Parse a human-friendly duration string (e.g. "30m", "1h", "60s") to milliseconds.
 export function parseTimeoutMs(duration: string): number {
   const match = /^(\d+)(s|m|h)$/.exec(duration.trim());
@@ -188,6 +256,7 @@ async function runAntWithSupervision(
         channel: discord,
         channelId,
         confirmationTimeoutMs: timeoutMs,
+        commonInstructions: buildCommonInstructions(colony),
       });
       await discord
         .send(channelId, `✅ **${ant.name}** completed its work session.`)

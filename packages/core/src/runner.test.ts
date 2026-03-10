@@ -1,5 +1,5 @@
 import { describe, it, expect, mock } from "bun:test";
-import { parseTimeoutMs, PromiseQueue, runColony } from "./runner";
+import { parseTimeoutMs, PromiseQueue, runColony, buildCommonInstructions } from "./runner";
 import type { RunnerDiscord } from "./runner";
 import type { LoadedConfig } from "./config";
 
@@ -50,6 +50,48 @@ describe("parseTimeoutMs", () => {
     expect(() => parseTimeoutMs("30d")).toThrow("Invalid duration");
     expect(() => parseTimeoutMs("")).toThrow("Invalid duration");
     expect(() => parseTimeoutMs("5 m")).toThrow("Invalid duration");
+  });
+});
+
+// --- buildCommonInstructions ---
+
+describe("buildCommonInstructions", () => {
+  it("always includes PLAN.md instructions", () => {
+    const result = buildCommonInstructions({ name: "test" });
+    expect(result).toContain("PLAN.md");
+    expect(result).toContain("Current Goal");
+    expect(result).toContain("Active Tasks");
+    expect(result).toContain("Completed");
+  });
+
+  it("includes git identity instructions even without explicit config", () => {
+    const result = buildCommonInstructions({ name: "test" });
+    expect(result.toLowerCase()).toContain("git");
+    expect(result).toContain("bot");
+  });
+
+  it("injects git config commands when user_name and user_email are set", () => {
+    const result = buildCommonInstructions({
+      name: "test",
+      defaults: { confirmation_timeout: "30m", git: { user_name: "Jane Smith", user_email: "jane@example.com" } },
+    });
+    expect(result).toContain('git config user.name "Jane Smith"');
+    expect(result).toContain('git config user.email "jane@example.com"');
+  });
+
+  it("injects only user_name when user_email is absent", () => {
+    const result = buildCommonInstructions({
+      name: "test",
+      defaults: { confirmation_timeout: "30m", git: { user_name: "Jane Smith" } },
+    });
+    expect(result).toContain('git config user.name "Jane Smith"');
+    expect(result).not.toContain("user.email");
+  });
+
+  it("falls back to generic git identity instructions when no git config provided", () => {
+    const result = buildCommonInstructions({ name: "test" });
+    expect(result).toContain("git config user.name");
+    expect(result).not.toContain('git config user.name "');
   });
 });
 

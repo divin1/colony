@@ -48,6 +48,14 @@ export const ColonyConfigSchema = z.object({
       confirmation_timeout: z.string().default("30m"),
       // Sleep between runs for ants with no triggers/schedule. Default: run immediately.
       poll_interval: z.string().optional(),
+      // Git identity used for all commits made by ants in this colony.
+      // Ants are instructed to run `git config user.name/email` at session start.
+      git: z
+        .object({
+          user_name: z.string().optional(),
+          user_email: z.string().optional(),
+        })
+        .optional(),
     })
     .optional(),
 });

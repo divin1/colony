@@ -21,6 +21,8 @@ export interface AntRunOptions {
   confirmationTimeoutMs: number;
   /** Working directory for the agent session. Defaults to process.cwd(). */
   cwd?: string;
+  /** Colony-level conventions (PLAN.md tracking, git identity) appended to the system prompt. */
+  commonInstructions?: string;
 }
 
 export async function runAnt(
@@ -33,6 +35,7 @@ export async function runAnt(
       channel: opts.channel,
       channelId: opts.channelId,
       cwd: opts.cwd,
+      commonInstructions: opts.commonInstructions,
     });
   }
 
@@ -66,7 +69,9 @@ export async function runAnt(
       systemPrompt: {
         type: "preset",
         preset: "claude_code",
-        append: opts.config.instructions,
+        append: [opts.config.instructions, opts.commonInstructions]
+          .filter(Boolean)
+          .join("\n\n"),
       },
       cwd: opts.cwd,
       persistSession: false,

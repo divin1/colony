@@ -16,6 +16,8 @@ export interface GeminiRunOptions {
   channelId: string;
   /** Working directory for the gemini CLI process. Defaults to process.cwd(). */
   cwd?: string;
+  /** Colony-level conventions (PLAN.md tracking, git identity) appended to the system prompt. */
+  commonInstructions?: string;
   /** Override spawn for testing. */
   _spawn?: SpawnFn;
 }
@@ -30,7 +32,13 @@ export async function runAntWithGemini(
   const autonomyInstructions = buildGeminiAutonomyInstructions(
     opts.config.autonomy
   );
-  const systemPrompt = opts.config.instructions + autonomyInstructions;
+  const systemPrompt = [
+    opts.config.instructions,
+    opts.commonInstructions,
+    autonomyInstructions,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
   const spawnFn: SpawnFn = opts._spawn ?? nodeSpawn;
 
   const args = ["--model", model, "--prompt", prompt];
