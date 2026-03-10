@@ -91,7 +91,7 @@ Controls which agent engine drives this ant.
 
 When `engine: gemini`, the runner spawns the `gemini` CLI as a subprocess, passes your `instructions` as the system prompt and the work prompt as the user turn, then captures stdout and posts it to the ant's Discord channel.
 
-> **Gemini ants do not support the confirmation flow.** Pre-tool-use hooks are a Claude Agent SDK feature; the Gemini CLI runs autonomously to completion without pausing for human approval.
+> **Gemini ants enforce autonomy via prompt instructions only.** Pre-tool-use hooks are a Claude Agent SDK feature. For Gemini ants, Colony injects the autonomy constraints into the system prompt — the model is instructed to pause and describe dangerous actions before proceeding, but individual tool calls cannot be intercepted. A startup warning is logged when a Gemini ant uses `autonomy: human` or `autonomy: strict`.
 
 ### Gemini options
 
@@ -139,21 +139,39 @@ An ant can have any number of triggers. Triggers and `schedule` can coexist — 
 
 Ants with no triggers and no schedule run continuously, sleeping for `poll_interval` (or immediately if not set) between sessions.
 
+### Autonomy
+
+Controls what Colony does when a dangerous action is detected.
+
+```yaml
+autonomy: human    # default — forward to Discord, wait for ✅/❌ reaction
+autonomy: full     # auto-approve everything, Discord is never contacted
+autonomy: strict   # auto-deny everything flagged, Discord is never contacted
+```
+
+| Value | Behaviour |
+|---|---|
+| `human` | Dangerous actions pause and post a Discord confirmation request. The ant resumes after ✅, or is blocked after ❌ or timeout. This is the default. |
+| `full` | The confirmation hook is not registered at all. Every action proceeds immediately. Use for read-only ants or ants operating in safe sandboxed environments. |
+| `strict` | Dangerous actions are automatically denied without any Discord message. The ant receives a block response and can react accordingly (e.g. explain why it stopped). |
+
+For **Gemini ants**, `autonomy` is enforced via prompt instructions injected into the system prompt — individual tool calls cannot be intercepted. A warning is logged at startup for non-`full` Gemini ants.
+
 ### Confirmation
 
-Control which actions require human approval for this ant. These rules are additive — they extend the global defaults, not replace them.
+Controls *which* actions are considered dangerous. When an action matches, Colony applies the `autonomy` policy above. This block is orthogonal to `autonomy` — it defines the detection rules, not what happens when they fire.
 
 ```yaml
 confirmation:
-  always_confirm_tools:        # Tool names that always require approval.
+  always_confirm_tools:        # Tool names that are always flagged.
     - Write
     - Edit
-  dangerous_patterns:          # Additional bash regex patterns that require approval.
+  dangerous_patterns:          # Additional bash regex patterns that are flagged.
     - "\\bdeploy\\.sh\\b"
     - "\\bkubectl\\s+delete\\b"
 ```
 
-**Global rules that always apply** (regardless of ant config):
+**Built-in rules that always apply** (regardless of ant config):
 
 | Pattern | Matched commands |
 |---|---|
@@ -163,6 +181,8 @@ confirmation:
 | pipe to shell | `curl … \| bash`, `wget … \| sh` |
 | `DROP TABLE` / `TRUNCATE TABLE` | SQL destructive statements |
 | `computer_use` tool | any use of the computer_use tool |
+
+`confirmation` has no effect when `autonomy: full` (nothing is ever flagged).
 
 ### State persistence
 
@@ -212,7 +232,7 @@ triggers:
   - type: discord_command   # wake when someone posts a question in #research
 ```
 
-> Because Gemini ants do not support confirmation hooks, avoid giving them access to irreversible tools (file writes, `git push`, deploys) unless you are comfortable with fully autonomous operation.
+> Gemini ants enforce autonomy via prompt instructions only. For truly autonomous Gemini ants set `autonomy: full`; for human oversight set `autonomy: human` and the model will be instructed to pause before dangerous actions.
 
 ---
 
@@ -288,8 +308,9 @@ integrations:
 schedule:
   cron: "0 2 * * 1"    # every Monday at 2 am
 
+autonomy: human        # forward git push and other dangerous actions to Discord for approval
+
 confirmation:
-  always_confirm_tools: []          # no extra tool confirmations
   dangerous_patterns:
     - "\\bgit\\s+push\\b"          # redundant with global rule, shown for illustration
 ```

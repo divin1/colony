@@ -157,6 +157,7 @@ triggers:
 | `description` | One-line purpose, included in the agent's opening prompt. |
 | `instructions` | The agent's primary directive. Write it as if briefing a new engineer. Be specific. |
 | `engine` | `claude` (default) or `gemini`. Selects the agent engine for this ant. |
+| `autonomy` | `human` (default), `full`, or `strict`. Controls what happens when a dangerous action is detected. |
 | `integrations.discord.channel` | Discord channel name where the ant posts and listens. **Required.** |
 | `integrations.github.repos` | Repos the ant may access. Format: `owner/repo`. |
 | `schedule.cron` | Standard cron expression. Omit for event-only ants. |
@@ -245,7 +246,15 @@ If `discord_command` is in the ant's triggers, send a message in `#worker-logs` 
 
 ## How confirmations work
 
-When an ant is about to run a command that matches the built-in dangerous patterns — `git push`, `rm -rf`, `sudo`, pipe-to-shell, or SQL drops — it pauses and posts:
+Colony detects dangerous actions — `git push`, `rm -rf`, `sudo`, pipe-to-shell, SQL drops, `computer_use` — using built-in rules plus any extra patterns you configure in the `confirmation` block. What happens when one is detected depends on the ant's `autonomy` setting:
+
+| `autonomy` | What happens |
+|---|---|
+| `human` (default) | The ant pauses and posts a Discord message. React ✅ to allow, ❌ to skip. Timeout defaults to deny. |
+| `full` | Nothing — dangerous-action checks are skipped entirely. The ant runs without interruption. |
+| `strict` | The action is automatically denied. No Discord message is sent; the ant receives a block response. |
+
+Example confirmation message (`autonomy: human`):
 
 ```
 ⚙️ [Confirmation required]
@@ -253,9 +262,7 @@ git push origin feature/my-fix
 React ✅ to proceed or ❌ to skip (timeout: 1800s).
 ```
 
-Two reactions are automatically added to the message. React ✅ to allow the action, ❌ to skip it. If you don't respond within `confirmation_timeout`, the action is denied.
-
-You can extend the confirmation rules per ant — see [configuration.md](./configuration.md#per-ant-confirmation).
+See [configuration.md](./configuration.md#autonomy) for the full reference.
 
 ---
 
