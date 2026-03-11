@@ -4,32 +4,56 @@ The `colony` CLI is the primary tool for scaffolding, validating, and running co
 
 ## Installation
 
-Colony is not published to a package registry. Clone the repo and install:
+### One-line install (macOS and Linux)
 
 ```bash
-git clone https://github.com/your-org/colony.git
-cd colony
-bun install
+curl -fsSL https://raw.githubusercontent.com/ndv/colony/main/install.sh | sh
 ```
 
-The binary is linked at `node_modules/.bin/colony`. Make it available globally for your session:
+This downloads the correct pre-built binary for your OS and architecture to `~/.local/bin/colony`. No dependencies required — not even Bun.
+
+**Options:**
 
 ```bash
-export PATH="$PATH:$(pwd)/node_modules/.bin"
+# Install a specific version
+COLONY_VERSION=v0.2.0 curl -fsSL https://raw.githubusercontent.com/ndv/colony/main/install.sh | sh
+
+# Install to a custom directory
+COLONY_INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/ndv/colony/main/install.sh | sh
 ```
 
-Or invoke it directly from the repo root without PATH changes:
+After install, add `~/.local/bin` to your PATH if it isn't already:
 
 ```bash
-./node_modules/.bin/colony <command>
-# or
-bunx colony <command>
+echo 'export PATH="$PATH:$HOME/.local/bin"' >> ~/.bashrc   # or ~/.zshrc
+source ~/.bashrc
 ```
 
-Verify:
+### Manual download
+
+Download a pre-built binary directly from [GitHub Releases](https://github.com/ndv/colony/releases/latest):
+
+| Platform | Binary |
+|---|---|
+| Linux x64 | `colony-linux-x64` |
+| Linux arm64 | `colony-linux-arm64` |
+| macOS Apple Silicon | `colony-darwin-arm64` |
+| macOS Intel | `colony-darwin-x64` |
+| Windows x64 | `colony-windows-x64.exe` |
 
 ```bash
-colony --version   # 0.1.0
+# Example: Linux x64
+curl -fsSL https://github.com/ndv/colony/releases/latest/download/colony-linux-x64 \
+  -o /usr/local/bin/colony
+chmod +x /usr/local/bin/colony
+```
+
+SHA256 checksums are provided in `checksums.txt` on each release.
+
+### Verify
+
+```bash
+colony --version
 colony --help
 ```
 

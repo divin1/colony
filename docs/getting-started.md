@@ -4,7 +4,6 @@ Colony deploys autonomous LLM agents ("ants") that work continuously, react to e
 
 ## Prerequisites
 
-- **[Bun](https://bun.sh) 1.x** — Colony's runtime. Install with `curl -fsSL https://bun.sh/install | bash`.
 - **A Discord bot** — ants communicate through Discord. You need a bot token and a server where the bot has been invited with message + reaction permissions.
 - **An agent engine** — at least one of:
   - **Anthropic API key** (`ANTHROPIC_API_KEY`) — for Claude-powered ants (the default). Sign up at [console.anthropic.com](https://console.anthropic.com).
@@ -23,32 +22,26 @@ Colony deploys autonomous LLM agents ("ants") that work continuously, react to e
 
 ## Step 1 — Install Colony
 
-Colony is not yet published to a package registry. Clone the repository and install dependencies:
-
 ```bash
-git clone https://github.com/your-org/colony.git
-cd colony
-bun install
+curl -fsSL https://raw.githubusercontent.com/ndv/colony/main/install.sh | sh
 ```
 
-This installs all workspace packages and links the `colony` CLI binary into `node_modules/.bin/`. To use it from anywhere in your shell, add it to your PATH once:
+This downloads a standalone binary to `~/.local/bin/colony`. No runtime dependencies required.
+
+If `~/.local/bin` is not on your PATH yet:
 
 ```bash
-export PATH="$PATH:$(pwd)/node_modules/.bin"
+echo 'export PATH="$PATH:$HOME/.local/bin"' >> ~/.zshrc  # or ~/.bashrc
+source ~/.zshrc
 ```
 
-Or prefix every command with `bunx`:
-
-```bash
-bunx colony --help
-```
-
-Verify the install:
+Verify:
 
 ```bash
 colony --version
-# 0.1.0
 ```
+
+> **Windows:** Download `colony-windows-x64.exe` from the [latest release](https://github.com/ndv/colony/releases/latest) and add it to a directory on your PATH.
 
 ---
 
