@@ -4,6 +4,18 @@ Colony is a framework for deploying autonomous LLM-based agents. Each ant is an 
 
 Ants can maintain software projects, write blog posts, process data, or do anything an LLM agent can do &mdash; guided by a YAML config file and reporting back to you via Discord.
 
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ndv/colony/main/install.sh | sh
+```
+
+Downloads a standalone binary to `~/.local/bin/colony`. No dependencies required.
+
+See [docs/cli.md](docs/cli.md) for manual download, Windows instructions, and other options.
+
+---
+
 ## Core Concepts
 
 ### Ant
@@ -144,7 +156,9 @@ Additional rules — specific tools or bash patterns that should always be flagg
 
 ## Deployment
 
-Colony is designed to run in Docker. A typical colony layout:
+Colony is designed to run in Docker. Install the CLI first (`curl … | sh`), scaffold a colony directory, then containerize it. You do not need to clone or build the repository.
+
+A typical colony layout:
 
 ```
 my-colony/
