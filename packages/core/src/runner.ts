@@ -188,20 +188,63 @@ async function runAntWithSupervision(
   const hasGithubTrigger = triggers.some((t) => t.type === "github_issue");
   const hasAnyTrigger = hasCron || hasDiscordTrigger || hasGithubTrigger;
 
+  // --- Pause / resume state ---
+  let paused = false;
+  let resumeResolve: (() => void) | null = null;
+  const waitForResume = (): Promise<void> =>
+    new Promise((resolve) => {
+      resumeResolve = resolve;
+    });
+
+  // --- Discord command listener (always-on) ---
+  // Every ant listens to its channel regardless of trigger config.
+  // Messages are classified into three types:
+  //   "pause" / "stop"    → pause after the current session
+  //   "resume" / "start"  → resume a paused ant
+  //   anything else       → forward as a work instruction (also auto-resumes if paused)
+  discord.on<DiscordCommandPayload>("discord_command", (payload) => {
+    if (payload.channelId !== channelId) return;
+
+    const text = payload.content.trim();
+    const cmd = text.toLowerCase();
+
+    if (cmd === "pause" || cmd === "stop") {
+      if (!paused) {
+        paused = true;
+        discord
+          .send(
+            channelId,
+            `⏸️ **${ant.name}** will pause after the current session.`
+          )
+          .catch(() => {});
+      }
+    } else if (cmd === "resume" || cmd === "start") {
+      if (paused) {
+        paused = false;
+        resumeResolve?.();
+        resumeResolve = null;
+        discord
+          .send(channelId, `▶️ **${ant.name}** resuming.`)
+          .catch(() => {});
+      }
+    } else {
+      // Forward as work instruction. Auto-resumes if the ant is currently paused
+      // so the message is acted on immediately rather than queued indefinitely.
+      queue.push(
+        `You are ${ant.name}. A human operator (${payload.author}) sent you this message: "${text}"`
+      );
+      if (paused) {
+        paused = false;
+        resumeResolve?.();
+        resumeResolve = null;
+      }
+    }
+  });
+
   // --- Cron trigger ---
   if (hasCron) {
     new Cron(ant.schedule!.cron, () => {
       queue.push(defaultPrompt);
-    });
-  }
-
-  // --- Discord command trigger ---
-  if (hasDiscordTrigger) {
-    discord.on<DiscordCommandPayload>("discord_command", (payload) => {
-      if (payload.channelId !== channelId) return;
-      queue.push(
-        `You are ${ant.name}. A Discord user (${payload.author}) sent you this command: "${payload.content}"`
-      );
     });
   }
 
@@ -249,6 +292,9 @@ async function runAntWithSupervision(
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
+    if (paused) {
+      await waitForResume();
+    }
     const prompt = await queue.next();
     try {
       await runAnt(prompt, {
