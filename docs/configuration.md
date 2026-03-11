@@ -181,12 +181,36 @@ triggers:
   - type: github_issue        # Wake when a new issue is opened in any of the ant's repos.
     labels: [ant-ready, bug]  # Optional. Only trigger if the issue has ALL of these labels.
                               # Omit labels to trigger on any new issue.
-  - type: discord_command     # Wake when you send a message in the ant's Discord channel.
+  - type: discord_command     # Make the ant event-only: only run when a human messages it.
 ```
 
 An ant can have any number of triggers. Triggers and `schedule` can coexist — the ant runs whenever any of them fires.
 
 Ants with no triggers and no schedule run continuously, sleeping for `poll_interval` (or immediately if not set) between sessions.
+
+> **Human commands always work.** Regardless of trigger configuration, every ant listens to its Discord channel for human messages. The `discord_command` trigger only controls whether the ant runs *autonomously* between messages — it does not affect the ability to send work instructions or pause/resume the ant. See [Communicating with ants](#communicating-with-ants).
+
+### Communicating with ants
+
+Every ant listens to its Discord channel at all times. You can write there to control or direct the ant without any configuration changes.
+
+**Control commands** (case-insensitive, exact match):
+
+| Message | Effect |
+|---|---|
+| `pause` or `stop` | Ant finishes its current session, then suspends. Posts `⏸️ will pause after current session.` |
+| `resume` or `start` | Resumes a paused ant. Posts `▶️ resuming.` |
+
+**Work instructions** — any other message is forwarded to the ant verbatim as a prompt for its next session. If the ant is currently paused, it auto-resumes to handle the message.
+
+```
+# In #worker-logs:
+you:    Refactor the auth module to use the new token format
+worker: ▶️ **worker** resuming.
+worker: Starting on the auth module refactor…
+```
+
+The ant's text output (what it says as it works) and confirmation requests all appear in the same channel.
 
 ### Autonomy
 

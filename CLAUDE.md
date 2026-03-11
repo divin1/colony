@@ -71,6 +71,7 @@ Ants run as concurrent Agent SDK sessions within the colony runner process. They
    - For dangerous/irreversible actions: apply the ant's `autonomy` policy — ask Discord (`human`), auto-approve (`full`), or auto-deny (`strict`)
    - If `human`: resume after operator reacts ✅ (proceed) or ❌ (skip), or after timeout (treat as ❌)
    - Report results and status to Discord
+   - Respond to human control commands from Discord (pause/stop, resume/start, work instructions)
 4. Colony runner wraps each SDK session in a supervisor loop; restarts it on unexpected error
 
 ### Confirmation Flow (Detail)
@@ -102,6 +103,27 @@ Ant resumes or skips the action
 
 - Timeout is configurable per colony (`confirmation_timeout` in `colony.yaml`); applies to `human` autonomy only
 - Confirmations are logged with the Discord username of the reactor
+
+### Human → Ant Communication (Detail)
+
+Every ant listens to its Discord channel at all times — regardless of `triggers` config. Messages from non-bot users are classified by the colony runner before being forwarded:
+
+```
+Human writes in the ant's Discord channel
+            ↓
+Colony runner classifies the message:
+  "pause" / "stop"    → set paused=true; ack with ⏸️; ant finishes current session then suspends
+  "resume" / "start"  → set paused=false; ack with ▶️; ant dequeues next work item
+  anything else       → push to ant's work queue as a prompt; if paused, auto-resume
+```
+
+The `discord_command` trigger in the ant's YAML config controls whether the ant runs **autonomously** (event-only when configured), not whether it can receive messages. All ants always accept Discord commands from humans.
+
+Ant → Human communication (outbound) covers:
+- Session lifecycle: `🐜 starting`, `✅ completed`, `❌ crashed`
+- Pause/resume acks: `⏸️ will pause`, `▶️ resuming`
+- Dangerous action confirmations (requires reaction ✅/❌)
+- The ant's own text output as it narrates its work
 
 ## Config Schema
 
@@ -157,7 +179,8 @@ schedule:
 triggers:                     # events that wake a dormant ant
   - type: github_issue
     labels: [string]
-  - type: discord_command
+  - type: discord_command     # make ant event-only: only run when human messages it
+                              # (all ants accept human commands regardless of this)
 
 backlog:                      # automatic work discovery (planned)
   source: github_issues | jira | linear

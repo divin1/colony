@@ -68,9 +68,10 @@ schedule:
   cron: "0 9 * * 1-5"        # start working at 9 am on weekdays
 
 triggers:
-  - type: github_issue        # also wake up when a matching issue is opened
+  - type: github_issue        # wake up when a matching issue is opened
     labels: [ant-ready]
-  - type: discord_command     # also respond to messages in alice's Discord channel
+  # discord_command trigger makes the ant event-only (no autonomous loop).
+  # All ants accept human messages/commands regardless of this setting.
 ```
 
 ### Colony-Level Config
@@ -93,14 +94,34 @@ defaults:
 
 ## Human ↔ Ant Communication
 
-Each ant has a dedicated Discord channel. The ant uses it to:
-- Post status updates as it works
-- Report completed tasks, errors, and summaries
-- Request human approval before dangerous actions (when `autonomy: human`)
+Each ant has a dedicated Discord channel.
 
-You interact with an ant by:
-- Sending a message in the ant's channel (treated as a direct command)
-- Reacting ✅ or ❌ to a confirmation request
+### Ant → Human
+
+The ant posts to the channel as it works:
+- Status: `🐜 starting`, `✅ session complete`, `❌ crashed: … Restarting in 10s…`
+- Narration: the ant's own text output describing what it's doing
+- Confirmation requests when a dangerous action is detected (requires ✅/❌ reaction)
+- Pause/resume acks: `⏸️ will pause after current session`, `▶️ resuming`
+
+### Human → Ant
+
+Write in the ant's channel at any time — no special configuration needed:
+
+| Message | Effect |
+|---|---|
+| `pause` or `stop` | Ant finishes its current session, then suspends |
+| `resume` or `start` | Resumes a paused ant |
+| Anything else | Forwarded as a work instruction; auto-resumes a paused ant |
+
+Example:
+```
+you:   Fix the failing auth tests
+ant:   ▶️ **alice** resuming.
+ant:   Starting on the failing auth tests…
+```
+
+React ✅ or ❌ to approve or deny a confirmation request.
 
 ### Autonomy and Confirmation
 
@@ -175,7 +196,7 @@ See [docs/cli.md](./docs/cli.md) for installation instructions and full command 
 - [x] Claude Agent SDK session integration
 - [x] Gemini CLI engine support (`engine: gemini`)
 - [x] Autonomy levels: `human`, `full`, `strict`
-- [x] Discord integration: message send/receive, confirmation reactions, command triggers
+- [x] Discord integration: message send/receive, confirmation reactions, human commands (pause/resume/instruct)
 - [x] GitHub integration: issue reading, comment creation, issue polling triggers
 - [x] Cron scheduling for ants
 - [x] CLI: `init`, `validate`, `run`

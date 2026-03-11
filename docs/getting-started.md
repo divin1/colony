@@ -173,7 +173,7 @@ triggers:
     labels: [bug, needs-fix]
 ```
 
-**`discord_command`** — wakes the ant when you send any message in its Discord channel.
+**`discord_command`** — makes the ant event-only: it only runs when you send a message in its Discord channel (rather than running autonomously on a loop). The `pause`, `stop`, `resume`, and `start` control words are handled at the runner level and are never forwarded as work instructions.
 
 ```yaml
 triggers:
@@ -181,6 +181,8 @@ triggers:
 ```
 
 Ants can have multiple triggers. An ant with no triggers and no schedule runs continuously (sleeping for `poll_interval` between sessions).
+
+> **Note:** You can send messages and control commands to *any* ant through its Discord channel — the `discord_command` trigger only affects whether the ant runs autonomously between messages, not whether it listens.
 
 ### Writing good instructions
 
@@ -232,15 +234,29 @@ Stop with Ctrl+C — the runner disconnects from Discord gracefully.
 ### Watching your ant work
 
 Open `#worker-logs` in Discord. As the ant works you will see:
-- Tool use summaries: `` 🔧 `gh issue list --label ant-ready` completed ``
 - Text responses from Claude as it narrates its work
 - Confirmation requests (see below) for dangerous actions
 - `✅ **worker** completed its work session.` when the run finishes
 - `❌ **worker** crashed: <reason>` if something goes wrong (it will restart automatically)
 
-### Sending commands
+### Sending commands to an ant
 
-If `discord_command` is in the ant's triggers, send a message in `#worker-logs` and the ant will wake and treat your message as a direct prompt.
+Every ant listens to its Discord channel for human messages. You can write there at any time:
+
+| Message | Effect |
+|---|---|
+| `pause` or `stop` | Ant finishes its current session, then pauses. Sends `⏸️ will pause after current session.` |
+| `resume` or `start` | Resumes a paused ant. Sends `▶️ resuming.` |
+| Anything else | Forwarded to the ant as a direct work instruction. If the ant is paused, it auto-resumes. |
+
+Example:
+```
+you:    Fix the failing tests in packages/core
+worker: ▶️ **worker** resuming.
+worker: Starting on the failing tests…
+```
+
+This works for all ants regardless of their `triggers` configuration. No special setup is required beyond the ant having a Discord channel.
 
 ---
 
