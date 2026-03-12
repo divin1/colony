@@ -166,7 +166,7 @@ triggers:
     labels: [bug, needs-fix]
 ```
 
-**`discord_command`** — makes the ant event-only: it only runs when you send a message in its Discord channel (rather than running autonomously on a loop). The `pause`, `stop`, `resume`, and `start` control words are handled at the runner level and are never forwarded as work instructions.
+**`discord_command`** — makes the ant event-only: it only runs when you send a message in its Discord channel (rather than running autonomously on a loop). Slash commands (`/pause`, `/stop`, `/resume`, `/start`, etc.) and the plain-text equivalents (`pause`, `stop`, `resume`, `start`) are handled at the runner level and are never forwarded as work instructions.
 
 ```yaml
 triggers:
@@ -234,15 +234,21 @@ Open `#worker-logs` in Discord. As the ant works you will see:
 
 ### Sending commands to an ant
 
-Every ant listens to its Discord channel for human messages. You can write there at any time:
+Every ant listens to its Discord channel for human messages. You can write there at any time.
 
-| Message | Effect |
+**Slash commands** are intercepted by the colony runner and answered immediately — no LLM round-trip, no tokens consumed:
+
+| Command | Effect |
 |---|---|
-| `pause` or `stop` | Ant finishes its current session, then pauses. Sends `⏸️ will pause after current session.` |
-| `resume` or `start` | Resumes a paused ant. Sends `▶️ resuming.` |
-| Anything else | Forwarded to the ant as a direct work instruction. If the ant is paused, it auto-resumes. |
+| `/help` | List available commands |
+| `/status` | Current state (running / paused) and queue depth |
+| `/stats` or `/usage` | Uptime and session statistics |
+| `/pause` or `/stop` | Pause after the current session |
+| `/resume` or `/start` | Resume a paused ant |
+| `/clear` | Discard all queued work items |
 
-Example:
+**Any other message** is forwarded to the ant as a direct work instruction. If the ant is paused, it auto-resumes.
+
 ```
 you:    Fix the failing tests in packages/core
 worker: ▶️ **worker** resuming.

@@ -194,14 +194,20 @@ Ants with no triggers and no schedule run continuously, sleeping for `poll_inter
 
 Every ant listens to its Discord channel at all times. You can write there to control or direct the ant without any configuration changes.
 
-**Control commands** (case-insensitive, exact match):
+**Slash commands** are intercepted by the colony runner and answered immediately — no LLM round-trip, no tokens consumed:
 
-| Message | Effect |
+| Command | Effect |
 |---|---|
-| `pause` or `stop` | Ant finishes its current session, then suspends. Posts `⏸️ will pause after current session.` |
-| `resume` or `start` | Resumes a paused ant. Posts `▶️ resuming.` |
+| `/help` | List available commands |
+| `/status` | Current state (running / paused) and queue depth |
+| `/stats` or `/usage` | Uptime and session statistics |
+| `/pause` or `/stop` | Pause after the current session |
+| `/resume` or `/start` | Resume a paused ant |
+| `/clear` | Discard all queued work items |
 
-**Work instructions** — any other message is forwarded to the ant verbatim as a prompt for its next session. If the ant is currently paused, it auto-resumes to handle the message.
+Unknown slash commands (`/foo`) are rejected with a hint to run `/help` instead of being forwarded to the ant.
+
+**Work instructions** — any other message (not starting with `/`) is forwarded to the ant verbatim as a prompt for its next session. If the ant is currently paused, it auto-resumes to handle the message.
 
 ```
 # In #worker-logs:
@@ -256,6 +262,25 @@ confirmation:
 | `computer_use` tool | any use of the computer_use tool |
 
 `confirmation` has no effect when `autonomy: full` (nothing is ever flagged).
+
+### Logging
+
+Controls which tool-call results are forwarded to Discord after each tool use.
+
+```yaml
+logging:
+  tool_calls: impactful   # "off" | "impactful" (default) | "all"
+```
+
+| Value | Behaviour |
+|---|---|
+| `impactful` | Log everything except known read-only tools (`Read`, `Grep`, `Glob`, `LS`, `WebSearch`, `WebFetch`, `TodoRead`). Unknown and MCP tools are always logged. **This is the default.** |
+| `off` | No PostToolUse logging. The Discord channel receives only the ant's text output and confirmation requests. |
+| `all` | Log every tool call — original behaviour. Useful for debugging a misbehaving ant. |
+
+The `impactful` default keeps the Discord channel focused on what the ant **did** (wrote files, ran commands, made commits) while silencing what it **looked at** (reading files, searching code).
+
+> **Gemini ants:** this setting has no effect. PostToolUse hooks are a Claude Agent SDK feature; Gemini ants run as subprocesses with no per-tool interception. Tool-level visibility for Gemini ants comes from the model's own narration in its text output.
 
 ### State persistence
 
