@@ -4,6 +4,8 @@ Colony is a framework for deploying autonomous LLM-based agents. Each ant is an 
 
 Ants can maintain software projects, write blog posts, process data, or do anything an LLM agent can do &mdash; guided by a YAML config file and reporting back to you via Discord.
 
+**[Documentation](https://ndv.github.io/colony/)** · [Getting started](https://ndv.github.io/colony/getting-started) · [Configuration reference](https://ndv.github.io/colony/configuration) · [Docker](https://ndv.github.io/colony/docker)
+
 ## Install
 
 ```bash
@@ -118,13 +120,20 @@ The ant posts to the channel as it works:
 
 ### Human → Ant
 
-Write in the ant's channel at any time — no special configuration needed:
+Write in the ant's channel at any time — no special configuration needed.
 
-| Message | Effect |
+**Slash commands** are intercepted by the colony runner and answered immediately (no tokens consumed):
+
+| Command | Effect |
 |---|---|
-| `pause` or `stop` | Ant finishes its current session, then suspends |
-| `resume` or `start` | Resumes a paused ant |
-| Anything else | Forwarded as a work instruction; auto-resumes a paused ant |
+| `/help` | List available commands |
+| `/status` | Current state (running / paused) and queue depth |
+| `/stats` or `/usage` | Uptime and session statistics |
+| `/pause` or `/stop` | Pause after the current session |
+| `/resume` or `/start` | Resume a paused ant |
+| `/clear` | Discard all queued work items |
+
+**Any other message** is forwarded to the ant as a work instruction. If the ant is paused, it auto-resumes.
 
 Example:
 ```
@@ -211,10 +220,12 @@ See [docs/cli.md](./docs/cli.md) for installation instructions and full command 
 - [x] Gemini CLI engine support (`engine: gemini`)
 - [x] Autonomy levels: `human`, `full`, `strict`
 - [x] Discord integration: message send/receive, confirmation reactions, human commands (pause/resume/instruct)
+- [x] Discord slash commands: `/help`, `/status`, `/stats`, `/pause`, `/resume`, `/clear`
 - [x] GitHub integration: issue reading, comment creation, issue polling triggers
 - [x] Cron scheduling for ants
 - [x] CLI: `init`, `validate`, `run`
 - [x] Docker / docker-compose deployment support
+- [x] Configurable PostToolUse logging (`"off"` / `"impactful"` / `"all"`)
 - [ ] Backlog management: auto-discover tasks from GitHub Issues
 - [ ] GitHub webhook triggers (replace polling)
 - [ ] Slack integration
