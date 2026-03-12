@@ -1,5 +1,5 @@
 import { describe, it, expect, mock } from "bun:test";
-import { parseTimeoutMs, PromiseQueue, runColony, buildCommonInstructions } from "./runner";
+import { parseTimeoutMs, PromiseQueue, formatUptime, runColony, buildCommonInstructions } from "./runner";
 import type { RunnerDiscord } from "./runner";
 import type { LoadedConfig } from "./config";
 
@@ -112,6 +112,30 @@ describe("runColony", () => {
   });
 });
 
+// --- formatUptime ---
+
+describe("formatUptime", () => {
+  it("formats seconds only", () => {
+    expect(formatUptime(45_000)).toBe("45s");
+  });
+
+  it("formats minutes and seconds", () => {
+    expect(formatUptime(2 * 60_000 + 30_000)).toBe("2m 30s");
+  });
+
+  it("formats hours and minutes", () => {
+    expect(formatUptime(3 * 3_600_000 + 15 * 60_000)).toBe("3h 15m");
+  });
+
+  it("formats days, hours, and minutes", () => {
+    expect(formatUptime(2 * 86_400_000 + 5 * 3_600_000 + 10 * 60_000)).toBe("2d 5h 10m");
+  });
+
+  it("returns 0s for zero duration", () => {
+    expect(formatUptime(0)).toBe("0s");
+  });
+});
+
 // --- PromiseQueue ---
 
 describe("PromiseQueue", () => {
@@ -157,5 +181,42 @@ describe("PromiseQueue", () => {
     q.push("second");
     expect(await p).toBe("first");
     expect(await p2).toBe("second");
+  });
+
+  it("size reflects the number of queued items", () => {
+    const q = new PromiseQueue<number>();
+    expect(q.size).toBe(0);
+    q.push(1);
+    q.push(2);
+    expect(q.size).toBe(2);
+  });
+
+  it("size decrements after next()", async () => {
+    const q = new PromiseQueue<number>();
+    q.push(1);
+    q.push(2);
+    await q.next();
+    expect(q.size).toBe(1);
+  });
+
+  it("size is 0 when items are consumed by waiting next() calls", () => {
+    const q = new PromiseQueue<number>();
+    q.next(); // waiter registered, not queued
+    q.next();
+    expect(q.size).toBe(0);
+  });
+
+  it("clear() removes all queued items and returns the count", () => {
+    const q = new PromiseQueue<string>();
+    q.push("a");
+    q.push("b");
+    q.push("c");
+    expect(q.clear()).toBe(3);
+    expect(q.size).toBe(0);
+  });
+
+  it("clear() on empty queue returns 0", () => {
+    const q = new PromiseQueue<string>();
+    expect(q.clear()).toBe(0);
   });
 });

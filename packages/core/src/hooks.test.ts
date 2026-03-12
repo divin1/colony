@@ -5,6 +5,7 @@ import {
   createLoggingHook,
   buildGeminiAutonomyInstructions,
   type ConfirmationChannel,
+  type ToolLoggingMode,
 } from "./hooks";
 import type { PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
 
@@ -282,15 +283,15 @@ describe("createLoggingHook", () => {
     };
   }
 
-  it("sends a summary message to the channel", async () => {
+  it("sends a summary message to the channel for impactful tools", async () => {
     const channel = makeChannel();
     const hook = createLoggingHook(channel, "ch-1");
 
-    await hook(makePostToolUseInput("Read"), undefined, hookOptions);
+    await hook(makePostToolUseInput("Write"), undefined, hookOptions);
 
     expect(channel.send).toHaveBeenCalledTimes(1);
     const [, content] = (channel.send as ReturnType<typeof mock>).mock.calls[0] as [string, string];
-    expect(content).toContain("Read");
+    expect(content).toContain("Write");
   });
 
   it("includes the bash command in the summary", async () => {
@@ -312,7 +313,7 @@ describe("createLoggingHook", () => {
     const hook = createLoggingHook(channel, "ch-1");
     const longOutput = "x".repeat(500);
 
-    await hook(makePostToolUseInput("Read", {}, longOutput), undefined, hookOptions);
+    await hook(makePostToolUseInput("Write", {}, longOutput), undefined, hookOptions);
 
     const [, content] = (channel.send as ReturnType<typeof mock>).mock.calls[0] as [string, string];
     expect(content.length).toBeLessThan(400);
@@ -326,7 +327,83 @@ describe("createLoggingHook", () => {
     const hook = createLoggingHook(channel, "ch-1");
 
     // Should resolve (not reject) even when Discord is unavailable.
-    const result = await hook(makePostToolUseInput("Read"), undefined, hookOptions);
+    const result = await hook(makePostToolUseInput("Write"), undefined, hookOptions);
     expect(result).toEqual({});
+  });
+
+  // --- mode: "impactful" (default) ---
+
+  describe('mode: "impactful" (default)', () => {
+    const READ_ONLY = ["Read", "Grep", "Glob", "LS", "WebSearch", "WebFetch", "TodoRead"];
+    const IMPACTFUL = ["Write", "Edit", "MultiEdit", "Bash", "NotebookEdit", "UnknownMcpTool"];
+
+    for (const tool of READ_ONLY) {
+      it(`skips ${tool}`, async () => {
+        const channel = makeChannel();
+        const hook = createLoggingHook(channel, "ch-1", "impactful");
+
+        await hook(makePostToolUseInput(tool), undefined, hookOptions);
+
+        expect(channel.send).not.toHaveBeenCalled();
+      });
+    }
+
+    for (const tool of IMPACTFUL) {
+      it(`logs ${tool}`, async () => {
+        const channel = makeChannel();
+        const hook = createLoggingHook(channel, "ch-1", "impactful");
+
+        await hook(makePostToolUseInput(tool), undefined, hookOptions);
+
+        expect(channel.send).toHaveBeenCalledTimes(1);
+      });
+    }
+  });
+
+  // --- mode: "all" ---
+
+  describe('mode: "all"', () => {
+    it("logs read-only tools that impactful would skip", async () => {
+      const channel = makeChannel();
+      const hook = createLoggingHook(channel, "ch-1", "all");
+
+      await hook(makePostToolUseInput("Read"), undefined, hookOptions);
+
+      expect(channel.send).toHaveBeenCalledTimes(1);
+    });
+
+    it("logs every tool regardless of name", async () => {
+      const channel = makeChannel();
+      const hook = createLoggingHook(channel, "ch-1", "all");
+
+      for (const tool of ["Read", "Grep", "Glob", "Write", "Bash", "Edit"]) {
+        await hook(makePostToolUseInput(tool), undefined, hookOptions);
+      }
+
+      expect(channel.send).toHaveBeenCalledTimes(6);
+    });
+  });
+
+  // --- mode: "off" ---
+
+  describe('mode: "off"', () => {
+    it("never sends regardless of tool name", async () => {
+      const channel = makeChannel();
+      const hook = createLoggingHook(channel, "ch-1", "off");
+
+      for (const tool of ["Read", "Write", "Bash", "Edit"]) {
+        await hook(makePostToolUseInput(tool), undefined, hookOptions);
+      }
+
+      expect(channel.send).not.toHaveBeenCalled();
+    });
+
+    it("returns empty object", async () => {
+      const channel = makeChannel();
+      const hook = createLoggingHook(channel, "ch-1", "off");
+
+      const result = await hook(makePostToolUseInput("Write"), undefined, hookOptions);
+      expect(result).toEqual({});
+    });
   });
 });

@@ -162,18 +162,44 @@ export function buildGeminiAutonomyInstructions(
   ].join("\n");
 }
 
+export type ToolLoggingMode = "off" | "impactful" | "all";
+
+// Tools that only read state and have no side effects.
+// Skipped in "impactful" mode to reduce Discord noise.
+// Unknown tools (MCP, future SDK additions) are NOT in this set and are always logged.
+const READ_ONLY_TOOLS = new Set([
+  "Read",
+  "Grep",
+  "Glob",
+  "LS",
+  "WebSearch",
+  "WebFetch",
+  "TodoRead",
+]);
+
 /**
  * Creates a PostToolUse hook that sends a compact result summary to Discord.
+ *
+ * mode:
+ *   "off"       — hook is a no-op; caller should skip registration entirely.
+ *   "impactful" — skips known read-only tools (Read, Grep, Glob, …); logs everything else.
+ *   "all"       — logs every tool call (original behaviour; useful for debugging).
+ *
  * Logging failures are swallowed so they never interrupt the ant's work loop.
  */
 export function createLoggingHook(
   channel: ConfirmationChannel,
-  channelId: string
+  channelId: string,
+  mode: ToolLoggingMode = "impactful"
 ): HookCallback {
   return async (input): Promise<HookJSONOutput> => {
     if (input.hook_event_name !== "PostToolUse") return {};
+    if (mode === "off") return {};
 
     const postInput = input as PostToolUseHookInput;
+
+    if (mode === "impactful" && READ_ONLY_TOOLS.has(postInput.tool_name)) return {};
+
     const summary = formatToolSummary(
       postInput.tool_name,
       postInput.tool_input,

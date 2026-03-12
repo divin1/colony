@@ -134,6 +134,33 @@ export class PromiseQueue<T> {
       this.waiters.push(resolve);
     });
   }
+
+  get size(): number {
+    return this.queue.length;
+  }
+
+  // Discards all queued items and returns the count removed.
+  clear(): number {
+    const count = this.queue.length;
+    this.queue = [];
+    return count;
+  }
+}
+
+// Formats a millisecond duration as a human-readable string, e.g. "2d 3h 15m" or "45s".
+export function formatUptime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const seconds = totalSeconds % 60;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const minutes = totalMinutes % 60;
+  const totalHours = Math.floor(totalMinutes / 60);
+  const hours = totalHours % 24;
+  const days = Math.floor(totalHours / 24);
+
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
 }
 
 interface DiscordCommandPayload {
@@ -196,16 +223,129 @@ async function runAntWithSupervision(
       resumeResolve = resolve;
     });
 
+  // --- Session statistics ---
+  const startedAt = Date.now();
+  let sessionsCompleted = 0;
+  let sessionsCrashed = 0;
+
+  // --- Slash command handler ---
+  // Slash commands starting with "/" are intercepted here and never forwarded to the ant LLM.
+  // Returns true if the command was handled, false if unrecognised.
+  function handleSlashCommand(text: string): boolean {
+    const lower = text.toLowerCase().trim();
+    switch (lower) {
+      case "/help":
+        discord
+          .send(
+            channelId,
+            [
+              `**${ant.name}** — available commands:`,
+              `\`/help\` — show this message`,
+              `\`/status\` — current state (running / paused) and queue depth`,
+              `\`/stats\` (or \`/usage\`) — uptime and session statistics`,
+              `\`/pause\` (or \`/stop\`) — pause after the current session`,
+              `\`/resume\` (or \`/start\`) — resume a paused ant`,
+              `\`/clear\` — discard all queued work items`,
+              `_Any other message is forwarded to the ant as a work instruction._`,
+            ].join("\n")
+          )
+          .catch(() => {});
+        return true;
+
+      case "/status": {
+        const state = paused ? "⏸️ paused" : "▶️ running";
+        discord
+          .send(
+            channelId,
+            `**${ant.name}** is ${state}. Queue: ${queue.size} item(s).`
+          )
+          .catch(() => {});
+        return true;
+      }
+
+      case "/stats":
+      case "/usage": {
+        const uptime = formatUptime(Date.now() - startedAt);
+        discord
+          .send(
+            channelId,
+            [
+              `**${ant.name}** statistics:`,
+              `Uptime: ${uptime}`,
+              `Sessions completed: ${sessionsCompleted}`,
+              `Sessions crashed: ${sessionsCrashed}`,
+            ].join("\n")
+          )
+          .catch(() => {});
+        return true;
+      }
+
+      case "/pause":
+      case "/stop":
+        if (!paused) {
+          paused = true;
+          discord
+            .send(
+              channelId,
+              `⏸️ **${ant.name}** will pause after the current session.`
+            )
+            .catch(() => {});
+        }
+        return true;
+
+      case "/resume":
+      case "/start":
+        if (paused) {
+          paused = false;
+          resumeResolve?.();
+          resumeResolve = null;
+          discord
+            .send(channelId, `▶️ **${ant.name}** resuming.`)
+            .catch(() => {});
+        }
+        return true;
+
+      case "/clear": {
+        const cleared = queue.clear();
+        discord
+          .send(
+            channelId,
+            `🗑️ **${ant.name}** work queue cleared (${cleared} item(s) discarded).`
+          )
+          .catch(() => {});
+        return true;
+      }
+
+      default:
+        return false;
+    }
+  }
+
   // --- Discord command listener (always-on) ---
   // Every ant listens to its channel regardless of trigger config.
-  // Messages are classified into three types:
-  //   "pause" / "stop"    → pause after the current session
-  //   "resume" / "start"  → resume a paused ant
+  // Slash commands (starting with "/") are intercepted by the runner first.
+  // Plain-text messages are classified:
+  //   "pause" / "stop"    → pause after the current session  (kept for backward compat)
+  //   "resume" / "start"  → resume a paused ant              (kept for backward compat)
   //   anything else       → forward as a work instruction (also auto-resumes if paused)
   discord.on<DiscordCommandPayload>("discord_command", (payload) => {
     if (payload.channelId !== channelId) return;
 
     const text = payload.content.trim();
+
+    // Slash commands: handled by the runner, never forwarded to the ant LLM.
+    if (text.startsWith("/")) {
+      if (!handleSlashCommand(text)) {
+        discord
+          .send(
+            channelId,
+            `Unknown command: \`${text}\`. Type \`/help\` to see available commands.`
+          )
+          .catch(() => {});
+      }
+      return;
+    }
+
     const cmd = text.toLowerCase();
 
     if (cmd === "pause" || cmd === "stop") {
@@ -304,10 +444,12 @@ async function runAntWithSupervision(
         confirmationTimeoutMs: timeoutMs,
         commonInstructions: buildCommonInstructions(colony),
       });
+      sessionsCompleted++;
       await discord
         .send(channelId, `✅ **${ant.name}** completed its work session.`)
         .catch(() => {});
     } catch (err) {
+      sessionsCrashed++;
       const message = err instanceof Error ? err.message : String(err);
       await discord
         .send(

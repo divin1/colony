@@ -40,7 +40,7 @@ export async function runAnt(
   }
 
   const autonomy = opts.config.autonomy;
-  const logHook = createLoggingHook(opts.channel, opts.channelId);
+  const loggingMode = opts.config.logging?.tool_calls ?? "impactful";
 
   // For full autonomy, skip the PreToolUse hook entirely — zero overhead,
   // no dangerous-action checks, Discord is never contacted for approvals.
@@ -63,6 +63,20 @@ export async function runAnt(
           ],
         };
 
+  // For "off" logging, skip PostToolUse registration entirely.
+  const postToolUseHooks =
+    loggingMode === "off"
+      ? {}
+      : {
+          PostToolUse: [
+            {
+              hooks: [
+                createLoggingHook(opts.channel, opts.channelId, loggingMode),
+              ],
+            },
+          ],
+        };
+
   for await (const msg of query({
     prompt,
     options: {
@@ -77,7 +91,7 @@ export async function runAnt(
       persistSession: false,
       hooks: {
         ...preToolUseHooks,
-        PostToolUse: [{ hooks: [logHook] }],
+        ...postToolUseHooks,
       },
     },
   })) {
