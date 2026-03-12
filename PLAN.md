@@ -16,7 +16,7 @@ The core framework is **production-ready**. All primary roadmap items are comple
 | Ant session (Claude) | ✅ | Full Agent SDK `query()` integration, hooks wired |
 | Ant session (Gemini) | ✅ | CLI subprocess, prompt-based autonomy (no hook interception) |
 | Confirmation flow | ✅ | PreToolUse hooks, Discord ✅/❌ reactions, timeout → deny |
-| PostToolUse logging | ✅ | Every tool result forwarded to Discord (noisy — see backlog) |
+| PostToolUse logging | ✅ | Configurable: `"off"`, `"impactful"` (default), `"all"` |
 | Discord integration | ✅ | send, addReaction, waitForReaction, resolveChannelId |
 | Human → Ant commands | ✅ | pause/stop, resume/start, work instructions; all ants always listen |
 | GitHub integration | ✅ | listIssues (with label filter), createIssueComment |
@@ -44,23 +44,14 @@ The core framework is **production-ready**. All primary roadmap items are comple
 
 These are unresolved architectural questions that need a decision before implementing certain features:
 
-### 1. Container isolation strategy
-**Question:** One container per ant vs. one container per colony?
-**Current:** One container per colony (simpler to deploy, what Docker templates implement).
-**Trade-off:** Per-ant containers give stronger process isolation but multiply resource overhead.
-**Decision needed for:** any work on Docker hardening or multi-tenant deployment.
+### ~~1. Container isolation strategy~~ — resolved
+**Decision:** Keep one container per colony. See [DECISIONS.md](./DECISIONS.md#decision-1-container-isolation-strategy).
 
-### 2. Ant session memory / state persistence
-**Question:** Do ants remember context (past messages, completed tasks) across restarts?
-**Current:** `persistSession: false` in the SDK call; each session is stateless.
-**Options:** In-memory (lost on restart), SQLite (local), external store (Redis, Postgres).
-**Decision needed for:** implementing long-running ants that need continuity.
+### ~~2. Ant session memory / state persistence~~ — resolved
+**Decision:** Add `MEMORY.md` convention (preference memory per ant, engine-agnostic). Keep `persistSession: false`; session resume stays a future backlog item. See [DECISIONS.md](./DECISIONS.md#decision-2-ant-session-memory-and-preference-persistence).
 
-### 3. PostToolUse logging verbosity
-**Question:** Should every tool call be forwarded to Discord, or only significant events?
-**Current:** Every tool use (including `Read`, `Grep`, etc.) posts a Discord message — very noisy in practice.
-**Proposed:** Make tool logging opt-in via ant config (`logging.tool_calls: true`); default off.
-**Decision needed for:** polishing the Discord channel experience.
+### ~~3. PostToolUse logging verbosity~~ — resolved
+**Decision:** Add `logging.tool_calls: "off" | "impactful" | "all"` to ant config, default `"impactful"`. See [DECISIONS.md](./DECISIONS.md#decision-3-posttooluse-logging-verbosity).
 
 ---
 
@@ -70,13 +61,8 @@ Ordered by priority / impact.
 
 ### High priority
 
-#### PostToolUse logging — make opt-in
-- **Problem:** Current `createLoggingHook` fires on every single tool call; `Read`, `Glob`, `Grep` produce noise in the Discord channel. An active coding session produces dozens of messages.
-- **Proposal:**
-  - Add `logging.tool_calls: boolean` to ant config schema (default `false`)
-  - Only register the PostToolUse hook when `logging.tool_calls: true`
-  - Alternatively: log only tools that are in `confirmation.always_confirm_tools` or that fired a confirmation
-- **Files:** `packages/core/src/hooks.ts`, `packages/core/src/ant.ts`, `packages/core/src/config.ts`
+#### ~~PostToolUse logging — make opt-in~~ — done
+`logging.tool_calls: "off" | "impactful" | "all"` implemented (default `"impactful"`). Read-only tools (`Read`, `Grep`, `Glob`, `LS`, `WebSearch`, `WebFetch`, `TodoRead`) are skipped by default; `"all"` restores previous verbose behaviour; `"off"` disables the hook entirely.
 
 #### CLI: tests for `validate` and `run` commands
 - **Problem:** `validate.ts` and `run.ts` have no unit tests; only tested manually.
