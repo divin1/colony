@@ -119,6 +119,16 @@ export const AntConfigSchema = z.object({
   //   "full"   — auto-approve everything, never contact Discord
   //   "strict" — auto-deny everything flagged, never contact Discord
   autonomy: z.enum(["human", "full", "strict"]).default("human"),
+  // Controls which PostToolUse events are forwarded to Discord.
+  //   "off"      — no tool-call logging
+  //   "impactful" — log everything except known read-only tools (default)
+  //   "all"      — log every tool call (original behaviour; useful for debugging)
+  // Has no effect on Gemini ants (no hook interception available for subprocess engine).
+  logging: z
+    .object({
+      tool_calls: z.enum(["off", "impactful", "all"]).default("impactful"),
+    })
+    .optional(),
   // Which agent engine to use for this ant. Defaults to "claude".
   engine: z.enum(["claude", "gemini"]).default("claude"),
   // Gemini-specific options. Only used when engine is "gemini".

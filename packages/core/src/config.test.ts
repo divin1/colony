@@ -326,6 +326,67 @@ describe("AntConfigSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("defaults logging.tool_calls to impactful when logging block is present", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      logging: {},
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.logging?.tool_calls).toBe("impactful");
+    }
+  });
+
+  it("parses logging.tool_calls: off", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      logging: { tool_calls: "off" },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.logging?.tool_calls).toBe("off");
+    }
+  });
+
+  it("parses logging.tool_calls: all", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      logging: { tool_calls: "all" },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.logging?.tool_calls).toBe("all");
+    }
+  });
+
+  it("rejects an unknown logging.tool_calls value", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      logging: { tool_calls: "verbose" },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("logging block is optional — absent by default", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.logging).toBeUndefined();
+    }
+  });
 });
 
 describe("loadConfig", () => {
