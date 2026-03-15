@@ -231,3 +231,7 @@ See [docs/cli.md](./docs/cli.md) for installation instructions and full command 
 - [ ] Slack integration
 - [ ] Jira integration
 - [ ] Linear integration
+
+## License
+
+[MIT](./LICENSE)
