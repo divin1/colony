@@ -203,15 +203,34 @@ colony run [dir]          # start the colony runner (all ants)
 
 See [docs/cli.md](./docs/cli.md) for installation instructions and full command reference.
 
-## Integrations
+## Feature Matrix
 
-| Integration | Status              | Purpose                                          |
-|-------------|---------------------|--------------------------------------------------|
-| Discord     | ✅ Available        | Human ↔ ant messaging and confirmations          |
-| GitHub      | 🔄 Partial          | Read issues, post comments; issue triggers       |
-| Slack       | Planned             | Alternative to Discord                           |
-| Jira        | Planned             | Read tickets as ant backlog                      |
-| Linear      | Planned             | Read issues as ant backlog                       |
+| Feature | Status | Notes |
+|---|---|---|
+| Colony runner & supervisor | ✅ Available | Crash recovery, auto-restart, pause/resume |
+| Claude Agent SDK engine | ✅ Available | In-process agent sessions with hook support |
+| Gemini CLI engine | ✅ Available | Subprocess-based, `engine: gemini` |
+| Autonomy levels | ✅ Available | `human`, `full`, `strict` |
+| Confirmation flow | ✅ Available | Discord reactions, timeout, dangerous action detection |
+| Cron scheduling | ✅ Available | Standard cron expressions via `schedule.cron` |
+| Config validation (Zod) | ✅ Available | Env var interpolation, fail-fast on invalid config |
+| State persistence | ✅ Available | Memory and SQLite backends |
+| PostToolUse logging | ✅ Available | Configurable: `off`, `impactful`, `all` |
+| Discord integration | ✅ Available | Messages, reactions, slash commands, confirmations |
+| GitHub integration | 🔄 Partial | List issues, post comments, issue polling triggers |
+| GitHub PR creation | 📋 Planned | Ants can use `gh` CLI as a workaround |
+| GitHub webhooks | 📋 Planned | Currently polls every 5 minutes |
+| Backlog management | 📋 Planned | Auto-discover tasks from GitHub/Jira/Linear |
+| Session interruption | 📋 Planned | Commands take effect after current session completes |
+| Session persistence | 📋 Planned | Ants restart without prior context (`persistSession: false`) |
+| Slack integration | 📋 Planned | Alternative to Discord |
+| Jira integration | 📋 Planned | Read tickets as ant backlog |
+| Linear integration | 📋 Planned | Read issues as ant backlog |
+| Health check endpoint | 📋 Planned | HTTP endpoint for Docker monitoring |
+| CLI: init / validate / run | ✅ Available | Scaffold, check config, start colony |
+| CLI: version / update | ✅ Available | Binary distribution with auto-update |
+| Docker deployment | ✅ Available | Dockerfile, docker-compose, docs |
+| Install script | ✅ Available | `curl \| sh` for Linux, macOS, WSL |
 
 ## Roadmap
 
