@@ -11,6 +11,7 @@ import {
   type ConfirmationChannel,
 } from "./hooks";
 import { runAntWithGemini } from "./gemini";
+import { runAntWithCursor } from "./cursor";
 
 export interface AntRunOptions {
   config: AntConfig;
@@ -31,6 +32,14 @@ export async function runAnt(
 ): Promise<void> {
   if (opts.config.engine === "gemini") {
     return runAntWithGemini(prompt, {
+      config: opts.config,
+      channel: opts.channel,
+      channelId: opts.channelId,
+      cwd: opts.cwd,
+      commonInstructions: opts.commonInstructions,
+    });
+  } else if (opts.config.engine === "cursor") {
+    return runAntWithCursor(prompt, {
       config: opts.config,
       channel: opts.channel,
       channelId: opts.channelId,

@@ -130,11 +130,17 @@ export const AntConfigSchema = z.object({
     })
     .optional(),
   // Which agent engine to use for this ant. Defaults to "claude".
-  engine: z.enum(["claude", "gemini"]).default("claude"),
+  engine: z.enum(["claude", "gemini", "cursor"]).default("claude"),
   // Gemini-specific options. Only used when engine is "gemini".
   gemini: z
     .object({
       model: z.string().default("gemini-2.5-pro"),
+    })
+    .optional(),
+  // Cursor-specific options. Only used when engine is "cursor".
+  cursor: z
+    .object({
+      model: z.string().default("claude-4.5"),
     })
     .optional(),
 });
