@@ -17,6 +17,7 @@ Colony is a framework for deploying autonomous LLM-based agents. Each "ant" is a
 | Monorepo | Bun workspaces | `package.json` at root with `workspaces` field |
 | Agent engine | `@anthropic-ai/claude-agent-sdk` | Default engine; drives each ant's agentic loop |
 | Alt engine | Gemini CLI (`gemini`) | Optional; spawned as a subprocess for `engine: gemini` ants |
+| Alt engine | Cursor CLI (`cursor`) | Optional; spawned as a subprocess for `engine: cursor` ants |
 | Discord | `discord.js` | Most complete Discord bot library |
 | GitHub | `@octokit/rest` | GitHub REST API client |
 | YAML parsing | `yaml` | Config file parsing |
@@ -33,7 +34,7 @@ Colony is a framework for deploying autonomous LLM-based agents. Each "ant" is a
 | **Ant** | An autonomous agent session (Claude Agent SDK or Gemini CLI) configured via YAML |
 | **Colony** | A set of ants deployed together with shared configuration |
 | **Colony runner** | The process that manages ant sessions, restarts them on failure, and bridges integrations |
-| **Integration** | A connector to an external service (Discord, GitHub, Jira, etc.) |
+| **Integration** | A connector to an external service (Discord, GitHub, etc.) |
 | **Backlog** | A queue of work items discovered automatically (e.g. from GitHub Issues) |
 
 ### Component Diagram
@@ -66,7 +67,7 @@ Ants run as concurrent Agent SDK sessions within the colony runner process. They
 2. For each ant: runner calls the Agent SDK `query()` function with the ant's `instructions` as system context and a set of allowed tools
 3. Ant enters its work loop (managed by the SDK):
    - Check schedule / poll triggers / read pending Discord commands
-   - Discover work from backlog source (GitHub Issues, Jira, etc.)
+   - Discover work from backlog source (GitHub Issues, etc.)
    - Execute work using Claude Code tools (file edits, shell commands, API calls)
    - For dangerous/irreversible actions: apply the ant's `autonomy` policy — ask Discord (`human`), auto-approve (`full`), or auto-deny (`strict`)
    - If `human`: resume after operator reacts ✅ (proceed) or ❌ (skip), or after timeout (treat as ❌)
@@ -153,10 +154,13 @@ description: string           # human-readable purpose
 instructions: |               # injected as the agent's system prompt
   ...
 
-engine: claude                # "claude" (default) or "gemini"
+engine: claude                # "claude" (default) | "gemini" | "cursor"
 
 gemini:                       # only used when engine: gemini
   model: gemini-2.5-pro       # default; any Gemini model name accepted by the CLI
+
+cursor:                       # only used when engine: cursor
+  model: claude-4.5           # default; any model name accepted by the Cursor CLI
 
 autonomy: human               # "human" (default) | "full" | "strict"
                               # human:  forward dangerous actions to Discord for approval
@@ -183,7 +187,7 @@ triggers:                     # events that wake a dormant ant
                               # (all ants accept human commands regardless of this)
 
 backlog:                      # automatic work discovery (planned)
-  source: github_issues | jira | linear
+  source: github_issues
   filter:
     labels: [string]
     assignee: string
@@ -270,8 +274,6 @@ ants/
         src/
           index.ts
       slack/                # planned
-      jira/                 # planned
-      linear/               # planned
   config/
     examples/               # example colony.yaml and ants/*.yaml
   docker/                   # Dockerfile and docker-compose templates

@@ -112,14 +112,6 @@ Ordered by priority / impact.
 - Implement `packages/integrations/slack/` with the same `MessagingIntegration` interface.
 - The `runner.ts` already uses the interface structurally — swapping Discord for Slack requires only wiring changes in `commands/run.ts`.
 
-#### Jira integration
-- For teams using Jira as their issue tracker.
-- Implement `packages/integrations/jira/` with issue listing (for backlog source).
-- Config: `backlog.source: jira` with Jira project and credentials.
-
-#### Linear integration
-- Same as Jira but for Linear.
-
 #### Multi-colony management CLI
 - `colony status` — show running ants and their states (requires a running process or status file)
 - `colony restart <ant>` — gracefully restart a specific ant without stopping the colony
