@@ -24,7 +24,7 @@ features:
     details: Wake ants on GitHub issues, Discord commands, or cron schedules. Ants with no triggers run continuously, sleeping between sessions.
   - icon: 🔄
     title: Resilient supervisor
-    details: Each ant runs in its own supervisor loop. A crash in one ant never affects others — it restarts automatically after a short delay.
+    details: Each ant runs in its own supervisor loop. Crashes are classified — rate limits wait for reset, billing/auth errors pause and alert you, transient failures use exponential backoff. A crash in one ant never affects others.
   - icon: 🐳
     title: Docker-first deployment
     details: One container per colony. Mount your config directory as a volume, pass secrets via env file, and get 24/7 autonomous operation.

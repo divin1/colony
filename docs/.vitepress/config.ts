@@ -57,6 +57,7 @@ export default defineConfig({
           { text: "Configuration", link: "/configuration" },
           { text: "CLI", link: "/cli" },
           { text: "Docker", link: "/docker" },
+          { text: "Supervisor behavior", link: "/supervisor" },
         ],
       },
     ],

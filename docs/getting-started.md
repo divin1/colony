@@ -231,7 +231,21 @@ Open `#worker-logs` in Discord. As the ant works you will see:
 - Text responses from Claude as it narrates its work
 - Confirmation requests (see below) for dangerous actions
 - `✅ **worker** completed its work session.` when the run finishes
-- `❌ **worker** crashed: <reason>` if something goes wrong (it will restart automatically)
+
+If something goes wrong, the supervisor posts a message and responds based on the type of error:
+
+| Message | Cause | What happens next |
+|---|---|---|
+| `❌ **worker** crashed: … Restarting in Xs…` | Transient error (server error, network, etc.) | Restarts automatically after exponential backoff (10 s, 20 s, 40 s… up to 5 min) |
+| `⏳ **worker** is rate limited. Resuming in Xs…` | API rate limit hit | Waits until the rate limit resets (uses the exact timestamp from the API if available) |
+| `🚫 **worker** encountered a permanent error: … Restarting in Xs…` | Invalid request or structured output failure | Restarts after backoff; check your ant's instructions or config |
+| `💳 **worker** has a billing error — check your Anthropic account. Pausing until resumed.` | Billing / payment issue | **Ant pauses indefinitely.** Fix the issue (refill credits, update payment), then type `/resume` in the channel. |
+| `🔐 **worker** failed to authenticate — check credentials. Pausing until resumed.` | Bad API key | **Ant pauses indefinitely.** Fix the credential (update `.env`, restart), then type `/resume`. |
+| `💰 **worker** exceeded its USD budget cap. Pausing until resumed.` | `maxBudgetUsd` cap reached | **Ant pauses indefinitely.** Raise the budget or top up, then type `/resume`. |
+
+Turn-limit completions (`error_max_turns`) are treated as normal sessions — no error message is posted and the ant restarts immediately.
+
+See [Supervisor behavior](./supervisor.md) for the full reference on error categories and backoff.
 
 ### Sending commands to an ant
 
