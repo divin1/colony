@@ -12,6 +12,11 @@ import {
 } from "./hooks";
 import { runAntWithGemini } from "./gemini";
 import { runAntWithCursor } from "./cursor";
+import {
+  AntSessionError,
+  classifyAssistantError,
+  classifyResultError,
+} from "./errors";
 
 export interface AntRunOptions {
   config: AntConfig;
@@ -113,16 +118,32 @@ async function handleMessage(
   channel: ConfirmationChannel,
   channelId: string
 ): Promise<void> {
-  if (msg.type === "assistant" && !msg.error) {
+  if (msg.type === "assistant") {
+    if (msg.error) {
+      const category = classifyAssistantError(msg.error);
+      throw new AntSessionError(`API error: ${msg.error}`, category);
+    }
     const text = extractText(msg);
     if (text) {
       for (const chunk of chunkText(text)) {
         await channel.send(channelId, chunk).catch(() => {});
       }
     }
+  } else if (msg.type === "rate_limit_event") {
+    const { status, resetsAt } = msg.rate_limit_info;
+    if (status === "rejected") {
+      const retryAfterMs =
+        resetsAt !== undefined ? resetsAt * 1000 - Date.now() : undefined;
+      throw new AntSessionError("Rate limit reached", "rate_limit", retryAfterMs);
+    }
+    // 'allowed' or 'allowed_warning': informational, no action
   } else if (msg.type === "result" && msg.subtype !== "success") {
+    const category = classifyResultError(msg.subtype);
     const errMsg = (msg as SDKResultError).errors.join("; ");
-    throw new Error(`Session ended with ${msg.subtype}: ${errMsg}`);
+    throw new AntSessionError(
+      `Session ended with ${msg.subtype}: ${errMsg}`,
+      category
+    );
   }
 }
 
