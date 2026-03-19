@@ -73,7 +73,7 @@ Ants run as concurrent Agent SDK sessions within the colony runner process. They
    - If `human`: resume after operator reacts ✅ (proceed) or ❌ (skip), or after timeout (treat as ❌)
    - Report results and status to Discord
    - Respond to human control commands from Discord (pause/stop, resume/start, work instructions)
-4. Colony runner wraps each SDK session in a supervisor loop; restarts it on unexpected error
+4. Colony runner wraps each SDK session in a supervisor loop; classifies the failure and responds appropriately (see Error Classification below)
 
 ### Confirmation Flow (Detail)
 
@@ -121,10 +121,33 @@ Colony runner classifies the message:
 The `discord_command` trigger in the ant's YAML config controls whether the ant runs **autonomously** (event-only when configured), not whether it can receive messages. All ants always accept Discord commands from humans.
 
 Ant → Human communication (outbound) covers:
-- Session lifecycle: `🐜 starting`, `✅ completed`, `❌ crashed`
+- Session lifecycle: `🐜 starting`, `✅ completed`
+- Crash / error notifications (see Error Classification below)
 - Pause/resume acks: `⏸️ will pause`, `▶️ resuming`
 - Dangerous action confirmations (requires reaction ✅/❌)
 - The ant's own text output as it narrates its work
+
+### Error Classification and Supervisor Behavior
+
+The supervisor (`runner.ts`) uses typed errors from `errors.ts` rather than treating all failures identically. The Agent SDK exposes rich error information that is mapped to one of these categories:
+
+| Category | SDK source | Discord message | Restart behavior |
+|---|---|---|---|
+| `max_turns` | `error_max_turns` result | *(none — silent)* | Immediate restart, no penalty |
+| `rate_limit` | `rate_limit` assistant error or `rate_limit_event` with `status: rejected` | ⏳ rate limited, countdown | Waits `resetsAt` timestamp if provided, otherwise exponential backoff |
+| `transient` | `server_error`, `unknown`, `max_output_tokens`, `error_during_execution` | ❌ crashed, countdown | Exponential backoff (10s → 20s → 40s… cap 5 min) |
+| `permanent` | `invalid_request`, `error_max_structured_output_retries` | 🚫 permanent error, countdown | Exponential backoff |
+| `billing` | `billing_error` | 💳 billing error — check Anthropic account | **Pauses indefinitely** — waits for human `/resume` |
+| `auth` | `authentication_failed` | 🔐 auth failed — check credentials | **Pauses indefinitely** — waits for human `/resume` |
+| `budget` | `error_max_budget_usd` | 💰 USD budget cap exceeded | **Pauses indefinitely** — waits for human `/resume` |
+
+**Blocking errors** (`billing`, `auth`, `budget`) require human intervention — refill credits, rotate a key, raise the budget cap — before the ant can continue. The supervisor sets `paused = true` and calls `waitForResume()`, which blocks on a Promise until the human sends `resume` or `/resume` in the ant's Discord channel. No polling, no retry loop.
+
+**Exponential backoff** starts at 10 s and doubles with each consecutive crash (10 s → 20 s → 40 s → 80 s … cap 5 min). The counter resets to 0 on any successful session.
+
+**`max_turns`** is an expected, normal termination (the SDK hit its turn budget). The supervisor treats it identically to a successful session for backoff purposes: no Discord message, no delay, immediate restart.
+
+Implementation: `packages/core/src/errors.ts` contains `AntSessionError`, `classifyAssistantError`, and `classifyResultError`. `ant.ts` throws typed errors from `handleMessage`. `runner.ts` catches and dispatches them in the supervisor loop.
 
 ## Config Schema
 
@@ -259,6 +282,7 @@ ants/
         ant.ts              # ant session wrapper + supervisor loop
         config.ts           # Zod schemas + YAML config loading
         hooks.ts            # Agent SDK hook factories (confirmation, logging)
+        errors.ts           # AntSessionError + classify functions (error categories → supervisor behavior)
     cli/                    # `colony` CLI
       package.json
       src/
