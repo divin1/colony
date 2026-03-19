@@ -1,6 +1,6 @@
 # Colony
 
-Colony is a framework for deploying autonomous LLM-based agents. Each ant is an agent session — powered by [Claude](https://github.com/anthropics/claude-agent-sdk) or [Gemini](https://github.com/google-gemini/gemini-cli) — configured to do work autonomously while you focus on other things.
+Colony is a framework for deploying autonomous LLM-based agents. Each ant is an agent session — powered by [Claude](https://github.com/anthropics/claude-agent-sdk), [Gemini](https://github.com/google-gemini/gemini-cli), or [Cursor](https://cursor.com) — configured to do work autonomously while you focus on other things.
 
 Ants can maintain software projects, write blog posts, process data, or do anything an LLM agent can do &mdash; guided by a YAML config file and reporting back to you via Discord.
 
@@ -21,7 +21,7 @@ See [docs/cli.md](docs/cli.md) for manual download, Windows instructions, and ot
 ## Core Concepts
 
 ### Ant
-An **ant** is an agent session (Claude or Gemini) running in-process with a defined purpose. Each ant:
+An **ant** is an agent session (Claude, Gemini, or Cursor) running in-process with a defined purpose. Each ant:
 - Is declared in a YAML config file (name, instructions, integrations, schedule)
 - Runs autonomously: on a schedule, in response to events, on human command, or from its own backlog
 - Reports its activity to Discord; optionally asks for human approval before dangerous actions
@@ -40,7 +40,7 @@ Human (Discord)
        ↕
 Colony Runner
        ↕
-Ant (Claude or Gemini agent session, running in-process)
+Ant (Claude, Gemini, or Cursor agent session, running in-process)
        ↕
 External services (GitHub, etc.)
 ```
@@ -65,7 +65,7 @@ instructions: |
   Review open GitHub issues labelled 'ant-ready', implement fixes, and open PRs.
   Always run the test suite before opening a PR. Never force-push to main.
 
-engine: claude       # "claude" (default) or "gemini"
+engine: claude       # "claude" (default) | "gemini" | "cursor"
 autonomy: human      # "human" (default) | "full" | "strict"
                      # human:  dangerous actions forwarded to Discord for approval
                      # full:   fully autonomous, no confirmation prompts
@@ -113,7 +113,14 @@ Each ant has a dedicated Discord channel.
 ### Ant → Human
 
 The ant posts to the channel as it works:
-- Status: `🐜 starting`, `✅ session complete`, `❌ crashed: … Restarting in 10s…`
+- Status: `🐜 starting`, `✅ session complete`
+- Crash and error notifications with context-specific messages:
+  - `❌ crashed: … Restarting in Ns…` (transient errors — exponential backoff: 10s → 20s → 40s… cap 5 min)
+  - `⏳ rate limited. Resuming in Ns…` (rate limit — waits until the limit resets)
+  - `💳 billing error — check Anthropic account. Pausing until resumed.`
+  - `🔐 auth failed — check credentials. Pausing until resumed.`
+  - `💰 USD budget cap exceeded. Pausing until resumed.`
+  - `🚫 permanent error: … Restarting in Ns…` (invalid request, structured output retries)
 - Narration: the ant's own text output describing what it's doing
 - Confirmation requests when a dangerous action is detected (requires ✅/❌ reaction)
 - Pause/resume acks: `⏸️ will pause after current session`, `▶️ resuming`
@@ -207,9 +214,10 @@ See [docs/cli.md](./docs/cli.md) for installation instructions and full command 
 
 | Feature | Status | Notes |
 |---|---|---|
-| Colony runner & supervisor | ✅ Available | Crash recovery, auto-restart, pause/resume |
+| Colony runner & supervisor | ✅ Available | Crash recovery, typed errors, exponential backoff, pause/resume |
 | Claude Agent SDK engine | ✅ Available | In-process agent sessions with hook support |
 | Gemini CLI engine | ✅ Available | Subprocess-based, `engine: gemini` |
+| Cursor CLI engine | ✅ Available | Subprocess-based, `engine: cursor` |
 | Autonomy levels | ✅ Available | `human`, `full`, `strict` |
 | Confirmation flow | ✅ Available | Discord reactions, timeout, dangerous action detection |
 | Cron scheduling | ✅ Available | Standard cron expressions via `schedule.cron` |
@@ -235,8 +243,10 @@ See [docs/cli.md](./docs/cli.md) for installation instructions and full command 
 ## Roadmap
 
 - [x] Colony runner: ant lifecycle management (spawn, monitor, restart)
+- [x] Typed error classification with exponential backoff and blocking-error handling
 - [x] Claude Agent SDK session integration
 - [x] Gemini CLI engine support (`engine: gemini`)
+- [x] Cursor CLI engine support (`engine: cursor`)
 - [x] Autonomy levels: `human`, `full`, `strict`
 - [x] Discord integration: message send/receive, confirmation reactions, human commands (pause/resume/instruct)
 - [x] Discord slash commands: `/help`, `/status`, `/stats`, `/pause`, `/resume`, `/clear`
