@@ -3,6 +3,7 @@ import { runAnt } from "./ant";
 import type { ConfirmationChannel } from "./hooks";
 import type { LoadedConfig, AntConfig, ColonyConfig } from "./config";
 import { createState } from "./state";
+import { AntSessionError } from "./errors";
 
 // Extended interface the runner needs beyond ConfirmationChannel.
 // DiscordIntegration satisfies this structurally — core does not depend on @colony/discord.
@@ -23,8 +24,16 @@ export interface RunnerGitHub {
   ): Promise<Array<{ number: number; title: string; body: string | null }>>;
 }
 
-const RESTART_DELAY_MS = 10_000;
+const BASE_RESTART_DELAY_MS = 10_000;
+const MAX_RESTART_DELAY_MS = 5 * 60 * 1000; // 5 min cap
 const GITHUB_POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+function backoffDelayMs(consecutiveCrashes: number): number {
+  return Math.min(
+    BASE_RESTART_DELAY_MS * 2 ** consecutiveCrashes,
+    MAX_RESTART_DELAY_MS
+  );
+}
 
 /**
  * Builds the colony-level instructions appended to every ant's system prompt.
@@ -227,6 +236,7 @@ async function runAntWithSupervision(
   const startedAt = Date.now();
   let sessionsCompleted = 0;
   let sessionsCrashed = 0;
+  let consecutiveCrashes = 0;
 
   // --- Slash command handler ---
   // Slash commands starting with "/" are intercepted here and never forwarded to the ant LLM.
@@ -445,19 +455,109 @@ async function runAntWithSupervision(
         commonInstructions: buildCommonInstructions(colony),
       });
       sessionsCompleted++;
+      consecutiveCrashes = 0;
       await discord
         .send(channelId, `✅ **${ant.name}** completed its work session.`)
         .catch(() => {});
     } catch (err) {
       sessionsCrashed++;
-      const message = err instanceof Error ? err.message : String(err);
-      await discord
-        .send(
-          channelId,
-          `❌ **${ant.name}** crashed: ${message}\nRestarting in ${RESTART_DELAY_MS / 1000}s…`
-        )
-        .catch(() => {});
-      await Bun.sleep(RESTART_DELAY_MS);
+      if (err instanceof AntSessionError) {
+        switch (err.category) {
+          case "max_turns":
+            // Normal turn-limit completion — silent restart, no penalty.
+            consecutiveCrashes = 0;
+            break;
+
+          case "rate_limit": {
+            consecutiveCrashes++;
+            const waitMs =
+              err.retryAfterMs ?? backoffDelayMs(consecutiveCrashes);
+            const waitSec = Math.round(waitMs / 1000);
+            await discord
+              .send(
+                channelId,
+                `⏳ **${ant.name}** is rate limited. Resuming in ${waitSec}s…`
+              )
+              .catch(() => {});
+            await Bun.sleep(waitMs);
+            break;
+          }
+
+          case "billing":
+            consecutiveCrashes = 0;
+            await discord
+              .send(
+                channelId,
+                `💳 **${ant.name}** has a billing error — check your Anthropic account. Pausing until resumed.`
+              )
+              .catch(() => {});
+            paused = true;
+            await waitForResume();
+            break;
+
+          case "auth":
+            consecutiveCrashes = 0;
+            await discord
+              .send(
+                channelId,
+                `🔐 **${ant.name}** failed to authenticate — check credentials. Pausing until resumed.`
+              )
+              .catch(() => {});
+            paused = true;
+            await waitForResume();
+            break;
+
+          case "budget":
+            consecutiveCrashes = 0;
+            await discord
+              .send(
+                channelId,
+                `💰 **${ant.name}** exceeded its USD budget cap. Pausing until resumed.`
+              )
+              .catch(() => {});
+            paused = true;
+            await waitForResume();
+            break;
+
+          case "permanent": {
+            consecutiveCrashes++;
+            const delay = backoffDelayMs(consecutiveCrashes);
+            await discord
+              .send(
+                channelId,
+                `🚫 **${ant.name}** encountered a permanent error: ${err.message}\nRestarting in ${delay / 1000}s…`
+              )
+              .catch(() => {});
+            await Bun.sleep(delay);
+            break;
+          }
+
+          default: {
+            // 'transient'
+            consecutiveCrashes++;
+            const delay = backoffDelayMs(consecutiveCrashes);
+            await discord
+              .send(
+                channelId,
+                `❌ **${ant.name}** crashed: ${err.message}\nRestarting in ${delay / 1000}s…`
+              )
+              .catch(() => {});
+            await Bun.sleep(delay);
+          }
+        }
+      } else {
+        // Non-AntSessionError (e.g. unexpected JS error): treat as transient.
+        consecutiveCrashes++;
+        const delay = backoffDelayMs(consecutiveCrashes);
+        const message = err instanceof Error ? err.message : String(err);
+        await discord
+          .send(
+            channelId,
+            `❌ **${ant.name}** crashed: ${message}\nRestarting in ${delay / 1000}s…`
+          )
+          .catch(() => {});
+        await Bun.sleep(delay);
+      }
     }
 
     // If no triggers: sleep (if configured) then re-queue so the ant keeps running.
