@@ -228,11 +228,10 @@ See [docs/cli.md](./docs/cli.md) for installation instructions and full command 
 | GitHub integration | 🔄 Partial | List issues, post comments, issue polling triggers |
 | GitHub PR creation | 📋 Planned | Ants can use `gh` CLI as a workaround |
 | GitHub webhooks | 📋 Planned | Currently polls every 5 minutes |
-| Backlog management | 📋 Planned | Auto-discover tasks from GitHub/Jira/Linear |
+| Backlog management | 📋 Planned | Auto-discover tasks from GitHub/Linear |
 | Session interruption | 📋 Planned | Commands take effect after current session completes |
 | Session persistence | 📋 Planned | Ants restart without prior context (`persistSession: false`) |
 | Slack integration | 📋 Planned | Alternative to Discord |
-| Jira integration | 📋 Planned | Read tickets as ant backlog |
 | Linear integration | 📋 Planned | Read issues as ant backlog |
 | Health check endpoint | 📋 Planned | HTTP endpoint for Docker monitoring |
 | CLI: init / validate / run | ✅ Available | Scaffold, check config, start colony |
@@ -258,7 +257,6 @@ See [docs/cli.md](./docs/cli.md) for installation instructions and full command 
 - [ ] Backlog management: auto-discover tasks from GitHub Issues
 - [ ] GitHub webhook triggers (replace polling)
 - [ ] Slack integration
-- [ ] Jira integration
 - [ ] Linear integration
 
 ## License
