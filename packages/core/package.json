@@ -6,6 +6,7 @@
   "main": "src/index.ts",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
+    "@google/genai": "latest",
     "croner": "latest",
     "yaml": "latest",
     "zod": "latest"
