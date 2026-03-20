@@ -7,7 +7,7 @@ The `colony` CLI is the primary tool for scaffolding, validating, and running co
 ### One-line install (macOS and Linux)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ndv/colony/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
 ```
 
 This downloads the correct pre-built binary for your OS and architecture to `~/.local/bin/colony`. No dependencies required — not even Bun.
@@ -16,10 +16,10 @@ This downloads the correct pre-built binary for your OS and architecture to `~/.
 
 ```bash
 # Install a specific version
-COLONY_VERSION=v0.2.0 curl -fsSL https://raw.githubusercontent.com/ndv/colony/main/install.sh | sh
+COLONY_VERSION=v0.2.0 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
 
 # Install to a custom directory
-COLONY_INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/ndv/colony/main/install.sh | sh
+COLONY_INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
 ```
 
 After install, add `~/.local/bin` to your PATH if it isn't already:
@@ -31,7 +31,7 @@ source ~/.bashrc
 
 ### Manual download
 
-Download a pre-built binary directly from [GitHub Releases](https://github.com/ndv/colony/releases/latest):
+Download a pre-built binary directly from [GitHub Releases](https://github.com/divin1/colony/releases/latest):
 
 | Platform | Binary |
 |---|---|
@@ -43,7 +43,7 @@ Download a pre-built binary directly from [GitHub Releases](https://github.com/n
 
 ```bash
 # Example: Linux x64
-curl -fsSL https://github.com/ndv/colony/releases/latest/download/colony-linux-x64 \
+curl -fsSL https://github.com/divin1/colony/releases/latest/download/colony-linux-x64 \
   -o /usr/local/bin/colony
 chmod +x /usr/local/bin/colony
 ```
