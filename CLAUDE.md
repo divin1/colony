@@ -321,3 +321,38 @@ ants/
 - **One container per ant vs. one container per colony**: single container is simpler to deploy; per-ant containers give stronger isolation but multiply resource overhead
 - **Ant state persistence**: does an ant remember context (past messages, completed tasks) across restarts, and if so — in-memory, SQLite, or external store?
 - **Ant sleep/wake**: how does a scheduled ant "sleep" between runs — exit and restart, or stay alive and use `setTimeout`?
+
+## Release Checklist
+
+Run this checklist before every version bump and tag.
+
+### Code quality
+- [ ] `bun test` — 0 failures
+- [ ] No `any` in new code (`tsc --noEmit` clean)
+- [ ] No non-null assertions (`!`) on environment variables — use explicit guards with clear error messages
+- [ ] New public-facing behaviour covered by at least one test
+
+### Versioning
+- [ ] Bump `version` in `package.json` (root), `packages/cli/package.json`, `packages/core/package.json` to the new version
+- [ ] Add a `## [x.y.z] — YYYY-MM-DD` entry to `CHANGELOG.md` with **Added / Changed / Fixed / Docs** sections
+- [ ] Update the version example in `docs/cli.md` (`COLONY_VERSION=vX.Y.Z`)
+
+### Docs review
+- [ ] `docs/index.md` — feature cards match current engine/capability set (no stale CLI references)
+- [ ] `docs/getting-started.md` — prerequisites, install URL, and `.env` example all accurate
+- [ ] `docs/configuration.md` — engine table and env var requirements up to date
+- [ ] `docs/cli.md` — install URLs use the correct GitHub username (`divin1/colony`), env var descriptions accurate
+- [ ] `docs/supervisor.md` — error categories and recovery steps cover all engines (Claude + Gemini)
+- [ ] `docs/docker.md` — `.env` example includes all required keys
+- [ ] Search for removed features across all docs: `grep -r "<removed-term>" docs/`
+
+### PLAN.md
+- [ ] Update `_Last updated_` date
+- [ ] Mark completed backlog items as done (strike-through or move to completed section)
+- [ ] Update test count in "Test coverage" section
+- [ ] Update the Gemini/engine status row if engine behaviour changed
+
+### Pre-tag sanity
+- [ ] `colony validate config/examples/` passes (if examples directory has valid configs)
+- [ ] No `divin1/colony` or other stale org/repo references in docs
+- [ ] No hardcoded old version numbers outside of CHANGELOG historical entries
