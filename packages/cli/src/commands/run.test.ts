@@ -19,7 +19,7 @@ function spawnRun(
   dir: string,
   env?: Record<string, string | undefined>
 ): ReturnType<typeof Bun.spawn> {
-  return Bun.spawn(["bun", "run", "packages/cli/src/index.ts", "run", dir], {
+  return Bun.spawn([process.execPath, "run", "packages/cli/src/index.ts", "run", dir], {
     cwd: CLI_ROOT,
     env: { ...process.env, ...env },
     stdout: "pipe",
