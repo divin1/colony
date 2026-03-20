@@ -1,6 +1,6 @@
 # Colony — Project Plan
 
-_Last updated: 2026-03-11_
+_Last updated: 2026-03-20_
 
 ---
 
@@ -14,7 +14,7 @@ The core framework is **production-ready**. All primary roadmap items are comple
 |---|---|---|
 | Colony runner | ✅ | Ant lifecycle, supervisor loop, restart on crash, cron, GitHub polling |
 | Ant session (Claude) | ✅ | Full Agent SDK `query()` integration, hooks wired |
-| Ant session (Gemini) | ✅ | CLI subprocess, prompt-based autonomy (no hook interception) |
+| Ant session (Gemini) | ✅ | In-process `@google/genai` SDK loop, full hook interception (same as Claude) |
 | Confirmation flow | ✅ | PreToolUse hooks, Discord ✅/❌ reactions, timeout → deny |
 | PostToolUse logging | ✅ | Configurable: `"off"`, `"impactful"` (default), `"all"` |
 | Discord integration | ✅ | send, addReaction, waitForReaction, resolveChannelId |
@@ -33,10 +33,10 @@ The core framework is **production-ready**. All primary roadmap items are comple
 
 ### Test coverage
 
-- **Core:** Full coverage — runner, ant, hooks, config, state, gemini
-- **CLI:** `init` tested; `validate` and `run` are thin wrappers over tested core — untested
+- **Core:** Full coverage — runner, ant, hooks, config, state, gemini, errors
+- **CLI:** `init`, `validate`, and `run` all have integration tests
 - **Integrations:** Discord and GitHub fully tested
-- All 123 tests pass (`bun test`)
+- All 198 tests pass (`bun test`)
 
 ---
 
@@ -64,10 +64,8 @@ Ordered by priority / impact.
 #### ~~PostToolUse logging — make opt-in~~ — done
 `logging.tool_calls: "off" | "impactful" | "all"` implemented (default `"impactful"`). Read-only tools (`Read`, `Grep`, `Glob`, `LS`, `WebSearch`, `WebFetch`, `TodoRead`) are skipped by default; `"all"` restores previous verbose behaviour; `"off"` disables the hook entirely.
 
-#### CLI: tests for `validate` and `run` commands
-- **Problem:** `validate.ts` and `run.ts` have no unit tests; only tested manually.
-- **Proposal:** Add tests that mock the Discord/GitHub integrations and verify correct startup / error paths.
-- **Files:** `packages/cli/src/commands/validate.ts`, `packages/cli/src/commands/run.ts`
+#### ~~CLI: tests for `validate` and `run` commands~~ — done
+Integration tests added for both commands. Spawn uses `process.execPath` to find `bun` reliably in any environment.
 
 #### `persistSession: true` investigation
 - **Problem:** The Agent SDK call uses `persistSession: false`, meaning each ant session has no memory of prior sessions.
