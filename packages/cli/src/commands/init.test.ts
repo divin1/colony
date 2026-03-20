@@ -35,10 +35,10 @@ describe("colony init", () => {
     expect(existsSync(join(target, "ants", "worker.yaml"))).toBe(true);
   });
 
-  it("creates .env.example in the target directory", async () => {
+  it("creates .env in the target directory", async () => {
     const target = join(tempDir, "my-colony");
     await runInit(target);
-    expect(existsSync(join(target, ".env.example"))).toBe(true);
+    expect(existsSync(join(target, ".env"))).toBe(true);
   });
 
   it("colony.yaml contains a non-empty name field", async () => {

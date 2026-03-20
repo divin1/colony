@@ -39,7 +39,7 @@ triggers:
   - type: discord_command
 `;
 
-const ENV_EXAMPLE = `# Copy this file to .env and fill in the values.
+const ENV = `# Fill in your tokens before running colony.
 DISCORD_TOKEN=your-discord-bot-token-here
 GITHUB_TOKEN=your-github-personal-access-token-here
 `;
@@ -59,13 +59,13 @@ export const initCommand = new Command("init")
 
     writeFileSync(join(target, "colony.yaml"), COLONY_YAML);
     writeFileSync(join(target, "ants", "worker.yaml"), WORKER_YAML);
-    writeFileSync(join(target, ".env.example"), ENV_EXAMPLE);
+    writeFileSync(join(target, ".env"), ENV);
 
     console.log(`Colony scaffolded at ${target}`);
     console.log("");
     console.log("Next steps:");
     console.log(`  1. cd ${dir}`);
-    console.log("  2. cp .env.example .env  # fill in your tokens");
+    console.log("  2. Edit .env and fill in your tokens");
     console.log("  3. Edit colony.yaml and ants/worker.yaml to match your setup");
     console.log("  4. colony validate .");
     console.log("  5. colony run .");
