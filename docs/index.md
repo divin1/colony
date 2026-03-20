@@ -10,7 +10,7 @@ hero:
       link: /getting-started
     - theme: alt
       text: GitHub
-      link: https://github.com/ndv/colony
+      link: https://github.com/divin1/colony
 
 features:
   - icon: 🐜
@@ -30,5 +30,5 @@ features:
     details: One container per colony. Mount your config directory as a volume, pass secrets via env file, and get 24/7 autonomous operation.
   - icon: 🔌
     title: Multi-engine support
-    details: Run ants on Claude (Agent SDK) or Gemini CLI. Set engine per ant — mix and match in the same colony.
+    details: Run ants on Claude (Agent SDK) or Gemini (Google Gen AI SDK). Set engine per ant — mix and match in the same colony.
 ---

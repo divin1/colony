@@ -16,7 +16,7 @@ This downloads the correct pre-built binary for your OS and architecture to `~/.
 
 ```bash
 # Install a specific version
-COLONY_VERSION=v0.2.0 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
+COLONY_VERSION=v0.3.0 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
 
 # Install to a custom directory
 COLONY_INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
@@ -84,7 +84,7 @@ colony init ./acme-bots  # creates ./acme-bots
 
 ```bash
 cd <dir>
-cp .env.example .env   # then fill in DISCORD_TOKEN, GITHUB_TOKEN, ANTHROPIC_API_KEY
+cp .env.example .env   # then fill in DISCORD_TOKEN, ANTHROPIC_API_KEY or GEMINI_API_KEY, and optionally GITHUB_TOKEN
 ```
 
 Edit `colony.yaml` to set your Discord guild name, then edit or replace `ants/worker.yaml` with your actual ant configuration.
@@ -168,7 +168,7 @@ All three commands read environment variables for secret resolution. Set them in
 | Variable | Required | Purpose |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | For Claude ants (default) | Authenticates Claude Agent SDK calls |
-| `GEMINI_API_KEY` | For Gemini ants | Authenticates the `gemini` CLI subprocess |
+| `GEMINI_API_KEY` | For Gemini ants | Authenticates Google Gen AI SDK calls |
 | `DISCORD_TOKEN` | Yes (for `run`) | Discord bot token |
 | `GITHUB_TOKEN` | When using GitHub | GitHub personal access token or app token |
 

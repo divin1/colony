@@ -79,9 +79,11 @@ The counter resets to 0 after any successful session or after a `max_turns` comp
 When an ant posts a `💳`, `🔐`, or `💰` message:
 
 1. **Fix the underlying cause.**
-   - **Billing** — update your payment method or top up your Anthropic credits at [console.anthropic.com](https://console.anthropic.com).
-   - **Auth** — rotate or replace the `ANTHROPIC_API_KEY` in your `.env` file and restart the colony runner (the runner reads the environment at startup, so a live reload requires a restart).
-   - **Budget** — raise the `maxBudgetUsd` limit in your ant config, or top up credits if the account-level cap was hit.
+   - **Billing** — update your payment method or top up credits:
+     - Claude ants: [console.anthropic.com](https://console.anthropic.com)
+     - Gemini ants: [aistudio.google.com](https://aistudio.google.com) or your Google Cloud billing account
+   - **Auth** — rotate or replace the relevant API key in your `.env` file (`ANTHROPIC_API_KEY` for Claude ants, `GEMINI_API_KEY` for Gemini ants) and restart the colony runner (the runner reads the environment at startup, so a live reload requires a restart).
+   - **Budget** — raise the `maxBudgetUsd` limit in your ant config, or top up credits if the account-level cap was hit. (Claude ants only — Gemini does not enforce a per-session USD budget.)
 
 2. **Send `/resume`** (or just `resume`) in the ant's Discord channel.
 

@@ -6,8 +6,8 @@ Colony deploys autonomous LLM agents ("ants") that work continuously, react to e
 
 - **A Discord bot** — ants communicate through Discord. You need a bot token and a server where the bot has been invited with message + reaction permissions.
 - **An agent engine** — at least one of:
-  - **Anthropic API key** (`ANTHROPIC_API_KEY`) — for Claude-powered ants (the default). Sign up at [console.anthropic.com](https://console.anthropic.com).
-  - **Gemini API key** (`GEMINI_API_KEY`) — for Gemini-powered ants. No additional CLI installation required.
+  - **Anthropic API key** (`ANTHROPIC_API_KEY`) — for Claude-powered ants (the default). Sign up at [console.anthropic.com](https://console.anthropic.com) and create a key under **API Keys**. This is a pay-per-token account separate from any Claude.ai or Claude Code subscription — a subscription does not grant API access.
+  - **Gemini API key** (`GEMINI_API_KEY`) — for Gemini-powered ants. Get a free key at [aistudio.google.com](https://aistudio.google.com) under **Get API key**. Google AI Studio has a free tier, making this the zero-cost option to get started.
 - **A GitHub token** *(optional)* — needed only if you want ants that read issues or interact with GitHub repos.
 
 ### Setting up a Discord bot
@@ -41,7 +41,7 @@ Verify:
 colony --version
 ```
 
-> **Windows:** Download `colony-windows-x64.exe` from the [latest release](https://github.com/ndv/colony/releases/latest) and add it to a directory on your PATH.
+> **Windows:** Download `colony-windows-x64.exe` from the [latest release](https://github.com/divin1/colony/releases/latest) and add it to a directory on your PATH.
 
 ---
 
