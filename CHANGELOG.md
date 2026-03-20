@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] — 2026-03-20
+
+### Changed
+
+- **Gemini engine replaced**: the Gemini CLI subprocess (`spawn("gemini", ...)`) has been replaced with an in-process agentic loop using the `@google/genai` SDK. Gemini ants now have full tool-call interception — `autonomy` and `confirmation` are enforced in code, not via prompt injection. No CLI installation required; only `GEMINI_API_KEY` is needed.
+- **Cursor engine removed**: `engine: cursor` is no longer supported. The Cursor CLI subprocess approach could not support in-process tool interception, making it incompatible with Colony's confirmation flow.
+
+### Added
+
+- **`GEMINI_API_KEY` startup validation**: missing key is caught at the start of `runAntWithGemini()` with a clear error message rather than failing deep inside the first API call.
+- **Gemini bash output truncation**: command output is capped at 2000 characters (Discord's message limit) with a `[output truncated]` notice when the limit is hit.
+
+### Fixed
+
+- **CLI integration tests**: subprocess spawning in `validate.test.ts` and `run.test.ts` now uses `process.execPath` instead of `"bun"`, fixing test failures when `bun` is not on `$PATH`.
+
+### Docs
+
+- Getting started: added direct links and descriptions for obtaining `ANTHROPIC_API_KEY` (console.anthropic.com) and `GEMINI_API_KEY` (Google AI Studio free tier); clarified that a Claude.ai or Claude Code subscription does not include API access.
+- Corrected stale "Gemini CLI" references across index, CLI reference, and environment variable tables.
+- Fixed inconsistent GitHub repository URLs — all references now use `divin1/colony`.
+- Supervisor: billing/auth recovery instructions now cover both Anthropic and Google accounts.
+
+---
+
 ## [0.2.0] — 2026-03-19
 
 ### Added
