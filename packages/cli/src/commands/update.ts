@@ -39,6 +39,10 @@ export const updateCommand = new Command("update")
       const res = await fetch(releaseUrl, {
         headers: { Accept: "application/vnd.github+json" },
       });
+      if (res.status === 404) {
+        console.log("No releases published yet.");
+        process.exit(0);
+      }
       if (!res.ok) {
         throw new Error(`GitHub API returned ${res.status}`);
       }
