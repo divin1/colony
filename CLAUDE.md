@@ -16,8 +16,7 @@ Colony is a framework for deploying autonomous LLM-based agents. Each "ant" is a
 | Runtime | Bun | No build step; runs `.ts` directly |
 | Monorepo | Bun workspaces | `package.json` at root with `workspaces` field |
 | Agent engine | `@anthropic-ai/claude-agent-sdk` | Default engine; drives each ant's agentic loop |
-| Alt engine | Gemini CLI (`gemini`) | Optional; spawned as a subprocess for `engine: gemini` ants |
-| Alt engine | Cursor CLI (`cursor`) | Optional; spawned as a subprocess for `engine: cursor` ants |
+| Alt engine | `@google/genai` | Google Gen AI SDK; in-process agentic loop for `engine: gemini` ants |
 | Discord | `discord.js` | Most complete Discord bot library |
 | GitHub | `@octokit/rest` | GitHub REST API client |
 | YAML parsing | `yaml` | Config file parsing |
@@ -31,7 +30,7 @@ Colony is a framework for deploying autonomous LLM-based agents. Each "ant" is a
 
 | Term | Definition |
 |---|---|
-| **Ant** | An autonomous agent session (Claude Agent SDK or Gemini CLI) configured via YAML |
+| **Ant** | An autonomous agent session (Claude Agent SDK or Google Gen AI SDK) configured via YAML |
 | **Colony** | A set of ants deployed together with shared configuration |
 | **Colony runner** | The process that manages ant sessions, restarts them on failure, and bridges integrations |
 | **Integration** | A connector to an external service (Discord, GitHub, etc.) |
@@ -177,13 +176,11 @@ description: string           # human-readable purpose
 instructions: |               # injected as the agent's system prompt
   ...
 
-engine: claude                # "claude" (default) | "gemini" | "cursor"
+engine: claude                # "claude" (default) | "gemini"
 
 gemini:                       # only used when engine: gemini
-  model: gemini-2.5-pro       # default; any Gemini model name accepted by the CLI
-
-cursor:                       # only used when engine: cursor
-  model: claude-4.5           # default; any model name accepted by the Cursor CLI
+  model: gemini-2.5-pro       # default; any Gemini model name
+  max_turns: 100              # default; maximum agentic loop iterations
 
 autonomy: human               # "human" (default) | "full" | "strict"
                               # human:  forward dangerous actions to Discord for approval
