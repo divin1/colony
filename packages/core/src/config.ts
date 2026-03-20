@@ -123,24 +123,18 @@ export const AntConfigSchema = z.object({
   //   "off"      — no tool-call logging
   //   "impactful" — log everything except known read-only tools (default)
   //   "all"      — log every tool call (original behaviour; useful for debugging)
-  // Has no effect on Gemini ants (no hook interception available for subprocess engine).
   logging: z
     .object({
       tool_calls: z.enum(["off", "impactful", "all"]).default("impactful"),
     })
     .optional(),
   // Which agent engine to use for this ant. Defaults to "claude".
-  engine: z.enum(["claude", "gemini", "cursor"]).default("claude"),
+  engine: z.enum(["claude", "gemini"]).default("claude"),
   // Gemini-specific options. Only used when engine is "gemini".
   gemini: z
     .object({
       model: z.string().default("gemini-2.5-pro"),
-    })
-    .optional(),
-  // Cursor-specific options. Only used when engine is "cursor".
-  cursor: z
-    .object({
-      model: z.string().default("claude-4.5"),
+      max_turns: z.number().int().positive().default(100),
     })
     .optional(),
 });

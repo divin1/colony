@@ -11,7 +11,6 @@ import {
   type ConfirmationChannel,
 } from "./hooks";
 import { runAntWithGemini } from "./gemini";
-import { runAntWithCursor } from "./cursor";
 import {
   AntSessionError,
   classifyAssistantError,
@@ -40,14 +39,7 @@ export async function runAnt(
       config: opts.config,
       channel: opts.channel,
       channelId: opts.channelId,
-      cwd: opts.cwd,
-      commonInstructions: opts.commonInstructions,
-    });
-  } else if (opts.config.engine === "cursor") {
-    return runAntWithCursor(prompt, {
-      config: opts.config,
-      channel: opts.channel,
-      channelId: opts.channelId,
+      confirmationTimeoutMs: opts.confirmationTimeoutMs,
       cwd: opts.cwd,
       commonInstructions: opts.commonInstructions,
     });
