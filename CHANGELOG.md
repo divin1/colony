@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] — 2026-03-20
+
+### Fixed
+
+- **`colony update` 404 on no releases**: the update command now exits cleanly with `No releases published yet.` instead of throwing an error when the GitHub API returns 404 (repo has no releases yet).
+
+### Changed
+
+- **`colony init` no longer creates `.env.example`**: colony directories are local on-disk configurations, not git repositories, so the `.env.example` convention does not apply. `init` now creates `.env` directly with placeholder values. If you commit your colony config to git, add a `.gitignore` yourself to exclude `.env`.
+
+### Docs
+
+- README: removed stale `Cursor` engine references (removed in 0.3.0); updated `Gemini CLI engine` to `Gemini Gen AI SDK engine` throughout.
+
+---
+
 ## [0.3.0] — 2026-03-20
 
 ### Changed
