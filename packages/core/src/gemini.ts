@@ -47,8 +47,11 @@ export async function runAntWithGemini(
     .filter(Boolean)
     .join("\n\n");
 
+  if (!opts._genAI && !process.env.GEMINI_API_KEY) {
+    throw new Error("Missing environment variable: GEMINI_API_KEY");
+  }
   const client =
-    opts._genAI ?? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+    opts._genAI ?? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
   // Contents array is mutated each turn: append model response + function responses.
   const contents: unknown[] = [{ role: "user", parts: [{ text: prompt }] }];
@@ -158,9 +161,12 @@ export async function runAntWithGemini(
       });
       const stdout = proc.stdout ? Buffer.from(proc.stdout).toString() : "";
       const stderr = proc.stderr ? Buffer.from(proc.stderr).toString() : "";
+      const MAX_OUTPUT = 2000;
+      const rawOutput = `${stdout}${stderr ? `\nstderr: ${stderr}` : ""}`.trim();
       const output =
-        [stdout, stderr ? `\nstderr: ${stderr}` : ""].join("").trim() ||
-        "(no output)";
+        rawOutput.length > MAX_OUTPUT
+          ? rawOutput.slice(0, MAX_OUTPUT) + `\n[output truncated at ${MAX_OUTPUT} chars]`
+          : rawOutput || "(no output)";
 
       functionResponses.push({
         functionResponse: {
