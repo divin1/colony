@@ -5,81 +5,122 @@
 /* ---------- Font ---------- */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
 
-/* ---------- Dark palette ---------- */
+/* ---------- Light palette (Vercel/Stripe-light inspired) ---------- */
+:root {
+  /* Backgrounds — pure white base with subtle depth layers */
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-soft: #f7f7f7;
+  --vp-c-bg-mute: #f0f0f0;
+  --vp-c-bg-alt: #f7f7f7;
+  --vp-c-bg-elv: #ffffff;
+
+  /* Text — near-black for maximum contrast */
+  --vp-c-text-1: #0a0a0a;
+  --vp-c-text-2: #4b4b4b;
+  --vp-c-text-3: #8a8a8a;
+
+  /* Brand — dark/typographic (minimal aesthetic) */
+  --vp-c-brand-1: #0a0a0a;
+  --vp-c-brand-2: #333333;
+  --vp-c-brand-3: #666666;
+  --vp-c-brand-soft: rgba(0, 0, 0, 0.06);
+
+  /* Borders & dividers */
+  --vp-c-divider: #e8e8e8;
+  --vp-c-gutter: #f0f0f0;
+  --vp-c-border: #d4d4d4;
+
+  /* Code blocks */
+  --vp-code-block-bg: #f9f9f9;
+  --vp-code-block-divider-color: #e8e8e8;
+  --vp-code-tab-bg: #f9f9f9;
+  --vp-code-copy-code-bg: rgba(0, 0, 0, 0.04);
+  --vp-code-copy-code-hover-bg: rgba(0, 0, 0, 0.08);
+  --vp-code-copy-code-color: rgba(0, 0, 0, 0.4);
+  --vp-code-copy-code-hover-color: rgba(0, 0, 0, 0.7);
+
+  /* Inline code */
+  --vp-code-color: #1a1a1a;
+  --vp-code-bg: rgba(0, 0, 0, 0.05);
+
+  /* Callout containers */
+  --vp-custom-block-tip-bg: #f6fef9;
+  --vp-custom-block-tip-border: #bbf7d0;
+  --vp-custom-block-tip-text: #166534;
+  --vp-custom-block-warning-bg: #fffbeb;
+  --vp-custom-block-warning-border: #fde68a;
+  --vp-custom-block-warning-text: #92400e;
+  --vp-custom-block-danger-bg: #fff1f2;
+  --vp-custom-block-danger-border: #fecdd3;
+  --vp-custom-block-danger-text: #9f1239;
+  --vp-custom-block-info-bg: #eff6ff;
+  --vp-custom-block-info-border: #bfdbfe;
+  --vp-custom-block-info-text: #1e40af;
+
+  /* Input / default palette */
+  --vp-c-default-1: #0a0a0a;
+  --vp-c-default-2: #4b4b4b;
+  --vp-c-default-3: #8a8a8a;
+  --vp-c-default-soft: rgba(0, 0, 0, 0.06);
+}
+
+/* ---------- Dark palette (Vercel/Nextra/Linear inspired) ---------- */
 .dark {
-  /* Backgrounds */
+  /* Backgrounds — near-black with clear depth layers */
   --vp-c-bg: #0a0a0a;
   --vp-c-bg-soft: #111111;
-  --vp-c-bg-mute: #161616;
+  --vp-c-bg-mute: #1a1a1a;
   --vp-c-bg-alt: #0a0a0a;
-  --vp-c-bg-elv: #111111;
+  --vp-c-bg-elv: #161616;
 
-  /* Text */
+  /* Text — off-white primary, stepped grays */
   --vp-c-text-1: #ededed;
   --vp-c-text-2: #a1a1a1;
-  --vp-c-text-3: #666666;
+  --vp-c-text-3: #525252;
 
-  /* Brand — pure white on dark, keeping it minimal like Nextra */
+  /* Brand — pure white on dark */
   --vp-c-brand-1: #ffffff;
   --vp-c-brand-2: #ededed;
   --vp-c-brand-3: #a1a1a1;
   --vp-c-brand-soft: rgba(255, 255, 255, 0.06);
 
   /* Borders & dividers */
-  --vp-c-divider: #1e1e1e;
+  --vp-c-divider: #1f1f1f;
   --vp-c-gutter: #000000;
-  --vp-c-border: #262626;
+  --vp-c-border: #2e2e2e;
 
   /* Code blocks */
   --vp-code-block-bg: #111111;
-  --vp-code-block-divider-color: #1e1e1e;
+  --vp-code-block-divider-color: #1f1f1f;
   --vp-code-tab-bg: #111111;
-  --vp-code-copy-code-bg: #1a1a1a;
-  --vp-code-copy-code-hover-bg: #222222;
+  --vp-code-copy-code-bg: #1c1c1c;
+  --vp-code-copy-code-hover-bg: #262626;
+  --vp-code-copy-code-color: rgba(255, 255, 255, 0.4);
+  --vp-code-copy-code-hover-color: rgba(255, 255, 255, 0.75);
 
   /* Inline code */
   --vp-code-color: #e2e2e2;
-  --vp-code-bg: rgba(110, 118, 129, 0.14);
+  --vp-code-bg: rgba(255, 255, 255, 0.08);
 
-  /* Callout containers */
-  --vp-custom-block-tip-bg: rgba(255, 255, 255, 0.03);
-  --vp-custom-block-tip-border: #262626;
-  --vp-custom-block-tip-text: #ededed;
-  --vp-custom-block-warning-bg: rgba(255, 229, 100, 0.03);
-  --vp-custom-block-warning-border: #3a3000;
-  --vp-custom-block-danger-bg: rgba(255, 85, 85, 0.04);
-  --vp-custom-block-danger-border: #3a1010;
+  /* Callout containers — low-saturation tints with readable text */
+  --vp-custom-block-tip-bg: rgba(255, 255, 255, 0.025);
+  --vp-custom-block-tip-border: #1f3a2a;
+  --vp-custom-block-tip-text: #86efac;
+  --vp-custom-block-warning-bg: rgba(255, 229, 100, 0.025);
+  --vp-custom-block-warning-border: #3d3000;
+  --vp-custom-block-warning-text: #fde68a;
+  --vp-custom-block-danger-bg: rgba(255, 85, 85, 0.03);
+  --vp-custom-block-danger-border: #3d1212;
+  --vp-custom-block-danger-text: #fca5a5;
+  --vp-custom-block-info-bg: rgba(96, 165, 250, 0.04);
+  --vp-custom-block-info-border: #1e2f4a;
+  --vp-custom-block-info-text: #93c5fd;
 
-  /* Input */
+  /* Input / default palette */
   --vp-c-default-1: #ededed;
   --vp-c-default-2: #a1a1a1;
-  --vp-c-default-3: #666666;
+  --vp-c-default-3: #525252;
   --vp-c-default-soft: rgba(255, 255, 255, 0.06);
-}
-
-/* ---------- Light palette (minimal, clean) ---------- */
-:root {
-  --vp-c-bg: #fafafa;
-  --vp-c-bg-soft: #f4f4f4;
-  --vp-c-bg-mute: #eeeeee;
-  --vp-c-bg-alt: #fafafa;
-
-  --vp-c-text-1: #111111;
-  --vp-c-text-2: #555555;
-  --vp-c-text-3: #999999;
-
-  --vp-c-brand-1: #111111;
-  --vp-c-brand-2: #333333;
-  --vp-c-brand-3: #555555;
-  --vp-c-brand-soft: rgba(0, 0, 0, 0.06);
-
-  --vp-c-divider: #e5e5e5;
-  --vp-c-border: #e0e0e0;
-  --vp-c-gutter: #eeeeee;
-
-  --vp-code-block-bg: #f6f6f6;
-  --vp-code-color: #333333;
-  --vp-code-bg: rgba(0, 0, 0, 0.06);
 }
 
 /* ---------- Typography ---------- */
@@ -507,6 +548,11 @@
 
 /* ---------- Selection ---------- */
 ::selection {
+  background: rgba(0, 0, 0, 0.10);
+  color: var(--vp-c-text-1);
+}
+
+.dark ::selection {
   background: rgba(255, 255, 255, 0.12);
   color: var(--vp-c-text-1);
 }
