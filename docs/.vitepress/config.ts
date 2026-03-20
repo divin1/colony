@@ -64,13 +64,13 @@ export default defineConfig({
 
     // "Edit this page" links.
     editLink: {
-      pattern: "https://github.com/ndv/colony/edit/main/docs/:path",
+      pattern: "https://github.com/divin1/colony/edit/main/docs/:path",
       text: "Edit this page on GitHub",
     },
 
     // GitHub link in top-right nav.
     socialLinks: [
-      { icon: "github", link: "https://github.com/ndv/colony" },
+      { icon: "github", link: "https://github.com/divin1/colony" },
     ],
 
     // Built-in local full-text search (no API key required).

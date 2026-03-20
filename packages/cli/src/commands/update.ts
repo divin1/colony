@@ -32,7 +32,7 @@ export const updateCommand = new Command("update")
   .description("Update colony to the latest release")
   .action(async () => {
     const releaseUrl =
-      "https://api.github.com/repos/ndv/colony/releases/latest";
+      "https://api.github.com/repos/divin1/colony/releases/latest";
 
     let release: GitHubRelease;
     try {
