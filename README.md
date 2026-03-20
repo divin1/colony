@@ -4,7 +4,7 @@ Colony is a framework for deploying autonomous LLM-based agents. Each ant is an 
 
 Ants can maintain software projects, write blog posts, process data, or do anything an LLM agent can do &mdash; guided by a YAML config file and reporting back to you via Discord.
 
-**[Documentation](https://ndv.github.io/colony/)** · [Getting started](https://ndv.github.io/colony/getting-started) · [Configuration reference](https://ndv.github.io/colony/configuration) · [Docker](https://ndv.github.io/colony/docker)
+**[Documentation](https://divin1.github.io/colony/)** · [Getting started](https://divin1.github.io/colony/getting-started) · [Configuration reference](https://divin1.github.io/colony/configuration) · [Docker](https://divin1.github.io/colony/docker)
 
 ## Install
 
@@ -165,10 +165,10 @@ Additional rules — specific tools or bash patterns that should always be flagg
 
 ## Documentation
 
-- [Getting started](./docs/getting-started.md) — install, scaffold, configure, and run your first colony
-- [Configuration reference](./docs/configuration.md) — all `colony.yaml` and `ants/*.yaml` options with examples
-- [CLI reference](./docs/cli.md) — `colony init`, `validate`, `run`
-- [Docker deployment](./docs/docker.md) — docker compose and docker run, persistent state, multi-colony setups
+- [Getting started](https://divin1.github.io/colony/getting-started) — install, scaffold, configure, and run your first colony
+- [Configuration reference](https://divin1.github.io/colony/configuration) — all `colony.yaml` and `ants/*.yaml` options with examples
+- [CLI reference](https://divin1.github.io/colony/cli) — `colony init`, `validate`, `run`
+- [Docker deployment](https://divin1.github.io/colony/docker) — docker compose and docker run, persistent state, multi-colony setups
 
 ## Deployment
 
@@ -208,7 +208,7 @@ colony validate [dir]     # validate colony and ant config files
 colony run [dir]          # start the colony runner (all ants)
 ```
 
-See [docs/cli.md](./docs/cli.md) for installation instructions and full command reference.
+See [CLI reference](https://divin1.github.io/colony/cli) for installation instructions and full command reference.
 
 ## Feature Matrix
 
