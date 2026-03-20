@@ -130,9 +130,10 @@ Secrets are passed to the container via `--env-file` (docker run) or `env_file:`
 **`.env` format:**
 
 ```env
-ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_API_KEY=sk-ant-...   # required for Claude ants (default)
 DISCORD_TOKEN=MTIz...
-GITHUB_TOKEN=ghp_...
+GITHUB_TOKEN=ghp_...           # optional
+GEMINI_API_KEY=AIza...         # required for Gemini ants (no CLI needed; SDK only)
 ```
 
 Variables referenced in YAML as `${VAR_NAME}` are read from the container's environment at startup. If a variable is missing, `colony run` exits immediately with a clear error — check `docker logs` to see which variable is absent.

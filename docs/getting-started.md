@@ -7,8 +7,7 @@ Colony deploys autonomous LLM agents ("ants") that work continuously, react to e
 - **A Discord bot** — ants communicate through Discord. You need a bot token and a server where the bot has been invited with message + reaction permissions.
 - **An agent engine** — at least one of:
   - **Anthropic API key** (`ANTHROPIC_API_KEY`) — for Claude-powered ants (the default). Sign up at [console.anthropic.com](https://console.anthropic.com).
-  - **Gemini CLI** (`gemini`) + **Gemini API key** (`GEMINI_API_KEY`) — for Gemini-powered ants. Install with `npm install -g @google/gemini-cli`.
-  - **Cursor CLI** (`cursor`) — for Cursor-powered ants. Requires Cursor to be installed.
+  - **Gemini API key** (`GEMINI_API_KEY`) — for Gemini-powered ants. No additional CLI installation required.
 - **A GitHub token** *(optional)* — needed only if you want ants that read issues or interact with GitHub repos.
 
 ### Setting up a Discord bot
@@ -150,7 +149,7 @@ triggers:
 | `name` | Identifier used in Discord messages. Must be unique within the colony. |
 | `description` | One-line purpose, included in the agent's opening prompt. |
 | `instructions` | The agent's primary directive. Write it as if briefing a new engineer. Be specific. |
-| `engine` | `claude` (default), `gemini`, or `cursor`. Selects the agent engine for this ant. |
+| `engine` | `claude` (default) or `gemini`. Selects the agent engine for this ant. |
 | `autonomy` | `human` (default), `full`, or `strict`. Controls what happens when a dangerous action is detected. |
 | `integrations.discord.channel` | Discord channel name where the ant posts and listens. **Required.** |
 | `integrations.github.repos` | Repos the ant may access. Format: `owner/repo`. |

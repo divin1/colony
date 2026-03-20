@@ -128,7 +128,7 @@ instructions: |       # The agent's primary directive. Appended to the agent's s
 ### Engine
 
 ```yaml
-engine: claude   # "claude" (default), "gemini", or "cursor"
+engine: claude   # "claude" (default) or "gemini"
 ```
 
 Controls which agent engine drives this ant.
@@ -136,12 +136,9 @@ Controls which agent engine drives this ant.
 | Value | Engine | Requirement |
 |---|---|---|
 | `claude` | Claude Agent SDK (Claude Code) | `ANTHROPIC_API_KEY` |
-| `gemini` | Gemini CLI subprocess | `gemini` CLI installed, `GEMINI_API_KEY` |
-| `cursor` | Cursor CLI subprocess | `cursor` CLI installed |
+| `gemini` | Google Gen AI SDK (`@google/genai`) | `GEMINI_API_KEY` |
 
-When `engine: gemini` or `engine: cursor`, the runner spawns the respective CLI as a subprocess, passes your `instructions` as the system prompt and the work prompt as the user turn, then captures stdout and posts it to the ant's Discord channel.
-
-> **Gemini and Cursor ants enforce autonomy via prompt instructions only.** Pre-tool-use hooks are a Claude Agent SDK feature. For subprocess-engine ants, Colony injects the autonomy constraints into the system prompt — the model is instructed to pause and describe dangerous actions before proceeding, but individual tool calls cannot be intercepted. A startup warning is logged when a Gemini or Cursor ant uses `autonomy: human` or `autonomy: strict`.
+Both engines run in-process with full tool interception — `autonomy` and `confirmation` behave identically for both.
 
 ### Gemini options
 
@@ -149,16 +146,8 @@ Only used when `engine: gemini`.
 
 ```yaml
 gemini:
-  model: gemini-2.5-pro   # Default. Any Gemini model name accepted by the CLI.
-```
-
-### Cursor options
-
-Only used when `engine: cursor`.
-
-```yaml
-cursor:
-  model: claude-4.5   # Default. Any model name accepted by the Cursor CLI.
+  model: gemini-2.5-pro   # Default. Any Gemini model name.
+  max_turns: 100          # Default. Maximum agentic loop iterations before stopping.
 ```
 
 ### Integrations
@@ -244,7 +233,7 @@ autonomy: strict   # auto-deny everything flagged, Discord is never contacted
 | `full` | The confirmation hook is not registered at all. Every action proceeds immediately. Use for read-only ants or ants operating in safe sandboxed environments. |
 | `strict` | Dangerous actions are automatically denied without any Discord message. The ant receives a block response and can react accordingly (e.g. explain why it stopped). |
 
-For **Gemini and Cursor ants**, `autonomy` is enforced via prompt instructions injected into the system prompt — individual tool calls cannot be intercepted. A warning is logged at startup for non-`full` Gemini or Cursor ants.
+All engines support full `autonomy` enforcement — tool calls are intercepted in-process for both `claude` and `gemini` ants.
 
 ### Confirmation
 
@@ -290,7 +279,7 @@ logging:
 
 The `impactful` default keeps the Discord channel focused on what the ant **did** (wrote files, ran commands, made commits) while silencing what it **looked at** (reading files, searching code).
 
-> **Gemini and Cursor ants:** this setting has no effect. PostToolUse hooks are a Claude Agent SDK feature; subprocess-engine ants run with no per-tool interception. Tool-level visibility comes from the model's own narration in its text output.
+> **Gemini ants:** this setting applies to the `bash` tool that the Gemini engine exposes. Text output from the model is always sent to Discord.
 
 ### State persistence
 
@@ -327,6 +316,7 @@ description: Answers research questions posted in Discord using Gemini
 engine: gemini
 gemini:
   model: gemini-2.5-pro   # optional; this is the default
+  max_turns: 100          # optional; maximum loop iterations
 
 instructions: |
   You are a research assistant. When given a question, search for current information,
@@ -340,39 +330,7 @@ triggers:
   - type: discord_command   # wake when someone posts a question in #research
 ```
 
-> Gemini ants enforce autonomy via prompt instructions only. For truly autonomous Gemini ants set `autonomy: full`; for human oversight set `autonomy: human` and the model will be instructed to pause before dangerous actions.
-
----
-
-## Complete ant example — Cursor-powered worker
-
-An ant that uses the Cursor CLI instead of Claude:
-
-```yaml
-name: cursor-worker
-description: Implements GitHub issues using Cursor
-
-engine: cursor
-cursor:
-  model: claude-4.5   # optional; this is the default
-
-instructions: |
-  You are a software engineer working on the my-org/my-repo repository.
-  Implement the assigned GitHub issue, run the test suite, and open a pull request.
-
-integrations:
-  github:
-    repos:
-      - my-org/my-repo
-  discord:
-    channel: cursor-worker
-
-triggers:
-  - type: github_issue
-    labels: [ant-ready]
-```
-
-> Cursor ants enforce autonomy via prompt instructions only. For truly autonomous Cursor ants set `autonomy: full`; for human oversight set `autonomy: human` and the model will be instructed to pause before dangerous actions.
+Gemini ants have full autonomy enforcement — dangerous tool calls are intercepted in-process, exactly like Claude ants. Set `autonomy: human` to forward dangerous actions to Discord for approval, `autonomy: strict` to auto-deny them, or `autonomy: full` to skip all checks.
 
 ---
 
