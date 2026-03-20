@@ -279,6 +279,34 @@ describe("AntConfigSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("parses gemini.max_turns", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      engine: "gemini",
+      gemini: { max_turns: 50 },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.gemini?.max_turns).toBe(50);
+    }
+  });
+
+  it("defaults gemini.max_turns to 100", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      engine: "gemini",
+      gemini: {},
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.gemini?.max_turns).toBe(100);
+    }
+  });
+
   it("defaults autonomy to human", () => {
     const result = AntConfigSchema.safeParse({
       name: "worker",
