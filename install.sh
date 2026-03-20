@@ -1,6 +1,6 @@
 #!/bin/sh
 # Colony install script
-# Usage: curl -fsSL https://raw.githubusercontent.com/ndv/colony/main/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
 #
 # Options (environment variables):
 #   COLONY_VERSION    specific version tag, e.g. v0.2.0 (default: latest)
@@ -8,7 +8,7 @@
 
 set -eu
 
-REPO="ndv/colony"
+REPO="divin1/colony"
 BINARY_NAME="colony"
 INSTALL_DIR="${COLONY_INSTALL_DIR:-$HOME/.local/bin}"
 
