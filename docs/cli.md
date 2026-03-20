@@ -77,17 +77,19 @@ colony init ./acme-bots  # creates ./acme-bots
   colony.yaml        # top-level colony config with placeholder values
   ants/
     worker.yaml      # example ant config
-  .env.example       # environment variable placeholders
+  .env               # fill in your tokens here
 ```
 
 **After running `init`:**
 
 ```bash
 cd <dir>
-cp .env.example .env   # then fill in DISCORD_TOKEN, ANTHROPIC_API_KEY or GEMINI_API_KEY, and optionally GITHUB_TOKEN
+# Edit .env and fill in DISCORD_TOKEN, ANTHROPIC_API_KEY or GEMINI_API_KEY, and optionally GITHUB_TOKEN
 ```
 
 Edit `colony.yaml` to set your Discord guild name, then edit or replace `ants/worker.yaml` with your actual ant configuration.
+
+> **Colony directories are local on-disk configurations.** They are not expected to be git repositories. If you do choose to commit your colony config, add a `.gitignore` to exclude `.env` from version control.
 
 ---
 

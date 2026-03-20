@@ -60,14 +60,15 @@ my-colony/
   colony.yaml          # top-level config: integrations, shared defaults
   ants/
     worker.yaml        # example ant config
-  .env.example         # token placeholders to copy and fill in
+  .env                 # fill in your tokens here
 ```
 
-Move into the directory and set up your secrets:
+Colony directories are local on-disk configurations — not git repositories. If you later choose to commit your colony config to git, add a `.gitignore` to exclude `.env` from version control.
+
+Move into the directory and fill in your secrets:
 
 ```bash
 cd my-colony
-cp .env.example .env
 ```
 
 Open `.env` and fill in your tokens:
