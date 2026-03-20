@@ -32,7 +32,7 @@ async function runValidate(
   dir: string,
   env?: Record<string, string | undefined>
 ): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
-  const proc = Bun.spawn(["bun", "run", "packages/cli/src/index.ts", "validate", dir], {
+  const proc = Bun.spawn([process.execPath, "run", "packages/cli/src/index.ts", "validate", dir], {
     cwd: PROJECT_ROOT,
     env: { ...process.env, DISCORD_TOKEN: "fake-token", GITHUB_TOKEN: "fake-token", ...env },
     stdout: "pipe",
