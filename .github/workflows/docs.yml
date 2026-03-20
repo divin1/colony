@@ -49,9 +49,6 @@ jobs:
         working-directory: docs
         # VitePress/Vite requires Node.js; Bun is used only for package installation.
         run: node ./node_modules/.bin/vitepress build
-        env:
-          # Override base if deploying to a custom domain (leave empty for /colony/).
-          VITEPRESS_BASE: ""
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
