@@ -1,9 +1,10 @@
 import { describe, it, expect, mock } from "bun:test";
 import {
   isDangerous,
+  isDangerousRaw,
+  requestConfirmation,
   createConfirmationHook,
   createLoggingHook,
-  buildGeminiAutonomyInstructions,
   type ConfirmationChannel,
   type ToolLoggingMode,
 } from "./hooks";
@@ -233,33 +234,99 @@ describe("createConfirmationHook (autonomy: strict)", () => {
   });
 });
 
-// --- buildGeminiAutonomyInstructions ---
+// --- isDangerousRaw ---
 
-describe("buildGeminiAutonomyInstructions", () => {
-  it("returns empty string for full autonomy", () => {
-    expect(buildGeminiAutonomyInstructions("full")).toBe("");
+describe("isDangerousRaw", () => {
+  it("returns false for safe tool names", () => {
+    expect(isDangerousRaw("Read", {})).toBe(false);
+    expect(isDangerousRaw("Glob", {})).toBe(false);
+    expect(isDangerousRaw("Write", {})).toBe(false);
   });
 
-  it("returns non-empty instructions for human autonomy", () => {
-    const result = buildGeminiAutonomyInstructions("human");
-    expect(result.length).toBeGreaterThan(0);
-    expect(result).toContain("human");
+  it("returns true for computer_use", () => {
+    expect(isDangerousRaw("computer_use", {})).toBe(true);
   });
 
-  it("returns non-empty instructions for strict autonomy", () => {
-    const result = buildGeminiAutonomyInstructions("strict");
-    expect(result.length).toBeGreaterThan(0);
-    expect(result).toContain("strict");
+  it("detects dangerous bash commands with lowercase tool name (Gemini)", () => {
+    expect(isDangerousRaw("bash", { command: "git push origin main" })).toBe(true);
+    expect(isDangerousRaw("bash", { command: "rm -rf /tmp/foo" })).toBe(true);
+    expect(isDangerousRaw("bash", { command: "sudo apt install curl" })).toBe(true);
   });
 
-  it("strict instructions forbid irreversible actions", () => {
-    const result = buildGeminiAutonomyInstructions("strict");
-    expect(result).toContain("NOT");
+  it("detects dangerous bash commands with uppercase tool name (Claude SDK)", () => {
+    expect(isDangerousRaw("Bash", { command: "git push origin main" })).toBe(true);
+    expect(isDangerousRaw("Bash", { command: "rm -rf /tmp/foo" })).toBe(true);
   });
 
-  it("human instructions require pausing before acting", () => {
-    const result = buildGeminiAutonomyInstructions("human");
-    expect(result.toLowerCase()).toMatch(/pause|approval/);
+  it("returns false for safe bash commands", () => {
+    expect(isDangerousRaw("bash", { command: "ls -la" })).toBe(false);
+    expect(isDangerousRaw("bash", { command: "echo hello" })).toBe(false);
+  });
+
+  it("respects always_confirm_tools config", () => {
+    const config = { always_confirm_tools: ["Write"] };
+    expect(isDangerousRaw("Write", {}, config)).toBe(true);
+    expect(isDangerousRaw("Read", {}, config)).toBe(false);
+  });
+
+  it("respects dangerous_patterns config", () => {
+    const config = { dangerous_patterns: ["\\bmy-deploy\\.sh\\b"] };
+    expect(isDangerousRaw("bash", { command: "bash my-deploy.sh" }, config)).toBe(true);
+    expect(isDangerousRaw("bash", { command: "echo hello" }, config)).toBe(false);
+  });
+});
+
+// --- requestConfirmation ---
+
+describe("requestConfirmation", () => {
+  it("returns approved: false immediately for strict autonomy without contacting Discord", async () => {
+    const channel = makeChannel();
+    const result = await requestConfirmation(channel, "ch-1", 30_000, "git push", "strict");
+
+    expect(result.approved).toBe(false);
+    expect(result.reason).toMatch(/auto-denied/i);
+    expect(channel.send).not.toHaveBeenCalled();
+    expect(channel.waitForReaction).not.toHaveBeenCalled();
+  });
+
+  it("includes the description in the strict denial reason", async () => {
+    const channel = makeChannel();
+    const result = await requestConfirmation(channel, "ch-1", 30_000, "sudo rm -rf /", "strict");
+
+    expect(result.reason).toContain("sudo rm -rf /");
+  });
+
+  it("sends a Discord confirmation message for human autonomy", async () => {
+    const channel = makeChannel({ waitForReaction: mock(async () => "✅") });
+    await requestConfirmation(channel, "ch-1", 30_000, "git push", "human");
+
+    expect(channel.send).toHaveBeenCalledTimes(1);
+    const [, content] = (channel.send as ReturnType<typeof mock>).mock.calls[0] as [string, string];
+    expect(content).toContain("Confirmation required");
+    expect(content).toContain("git push");
+  });
+
+  it("returns approved: true when operator reacts ✅", async () => {
+    const channel = makeChannel({ waitForReaction: mock(async () => "✅") });
+    const result = await requestConfirmation(channel, "ch-1", 30_000, "git push", "human");
+
+    expect(result.approved).toBe(true);
+  });
+
+  it("returns approved: false when operator reacts ❌", async () => {
+    const channel = makeChannel({ waitForReaction: mock(async () => "❌") });
+    const result = await requestConfirmation(channel, "ch-1", 30_000, "git push", "human");
+
+    expect(result.approved).toBe(false);
+    expect(result.reason).toMatch(/denied by human/i);
+  });
+
+  it("returns approved: false with timeout message when reaction times out", async () => {
+    const channel = makeChannel({ waitForReaction: mock(async () => null) });
+    const result = await requestConfirmation(channel, "ch-1", 30_000, "git push", "human");
+
+    expect(result.approved).toBe(false);
+    expect(result.reason).toMatch(/timed out/i);
   });
 });
 

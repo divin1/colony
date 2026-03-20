@@ -27,30 +27,43 @@ const DANGEROUS_BASH_PATTERNS: RegExp[] = [
   /\btruncate\s+table\b/i,
 ];
 
-export function isDangerous(
-  input: PreToolUseHookInput,
+/**
+ * Core danger detection — operates on plain values so it can be reused by
+ * both the Claude SDK hook (PreToolUseHookInput) and the Gemini agentic loop
+ * (where tool names and inputs come from the Gemini API directly).
+ *
+ * Handles both "Bash" (Claude SDK tool name) and "bash" (Gemini tool name).
+ */
+export function isDangerousRaw(
+  toolName: string,
+  toolInput: unknown,
   config?: AntConfirmationConfig
 ): boolean {
-  // Per-ant: always confirm specific tools.
-  if (config?.always_confirm_tools?.includes(input.tool_name)) return true;
+  if (config?.always_confirm_tools?.includes(toolName)) return true;
 
-  if (ALWAYS_DANGEROUS.has(input.tool_name)) return true;
+  if (ALWAYS_DANGEROUS.has(toolName)) return true;
 
-  if (input.tool_name === "Bash") {
-    const raw = input.tool_input;
+  if (toolName === "Bash" || toolName === "bash") {
+    const raw = toolInput;
     if (typeof raw !== "object" || raw === null) return false;
     const command = (raw as Record<string, unknown>).command;
     if (typeof command !== "string") return false;
 
     if (DANGEROUS_BASH_PATTERNS.some((p) => p.test(command))) return true;
 
-    // Per-ant: additional bash patterns.
     if (config?.dangerous_patterns) {
       return config.dangerous_patterns.some((p) => new RegExp(p).test(command));
     }
   }
 
   return false;
+}
+
+export function isDangerous(
+  input: PreToolUseHookInput,
+  config?: AntConfirmationConfig
+): boolean {
+  return isDangerousRaw(input.tool_name, input.tool_input, config);
 }
 
 // --- Minimal channel interface ---
@@ -64,6 +77,56 @@ export interface ConfirmationChannel {
     messageId: string,
     options: { timeout: number; allowedEmojis: string[] }
   ): Promise<string | null>;
+}
+
+// --- Shared confirmation UI ---
+
+/**
+ * Applies the autonomy policy for a dangerous action and returns whether it
+ * was approved. This is shared between the Claude SDK hook and the Gemini
+ * agentic loop.
+ *
+ *   "strict" — immediately denies without contacting Discord.
+ *   "human"  — posts a Discord confirmation and waits for ✅/❌ reaction.
+ */
+export async function requestConfirmation(
+  channel: ConfirmationChannel,
+  channelId: string,
+  timeoutMs: number,
+  description: string,
+  autonomy: "human" | "strict"
+): Promise<{ approved: boolean; reason?: string }> {
+  if (autonomy === "strict") {
+    return {
+      approved: false,
+      reason: `Auto-denied (autonomy: strict): ${description}`,
+    };
+  }
+
+  // human: forward to Discord and wait for a reaction.
+  const timeoutSec = Math.round(timeoutMs / 1000);
+
+  const sent = await channel.send(
+    channelId,
+    `⚙️ **[Confirmation required]**\n\`\`\`\n${description}\n\`\`\`\nReact ✅ to proceed or ❌ to skip (timeout: ${timeoutSec}s).`
+  );
+
+  await channel.addReaction(sent.id, "✅");
+  await channel.addReaction(sent.id, "❌");
+
+  const reaction = await channel.waitForReaction(sent.id, {
+    timeout: timeoutMs,
+    allowedEmojis: ["✅", "❌"],
+  });
+
+  if (reaction === "✅") return { approved: true };
+
+  const reason =
+    reaction === null
+      ? `Timed out after ${timeoutSec}s — denied by default.`
+      : "Denied by human operator.";
+
+  return { approved: false, reason };
 }
 
 // --- Hook factories ---
@@ -91,75 +154,12 @@ export function createConfirmationHook(
     const preInput = input as PreToolUseHookInput;
     if (!isDangerous(preInput, antConfig)) return { decision: "approve" };
 
-    // strict: auto-deny without bothering Discord.
-    if (autonomy === "strict") {
-      const description = formatToolDescription(preInput.tool_name, preInput.tool_input);
-      return {
-        decision: "block",
-        reason: `Auto-denied (autonomy: strict): ${description}`,
-      };
-    }
-
-    // human: forward to Discord and wait for a reaction.
     const description = formatToolDescription(preInput.tool_name, preInput.tool_input);
-    const timeoutSec = Math.round(timeoutMs / 1000);
+    const result = await requestConfirmation(channel, channelId, timeoutMs, description, autonomy);
 
-    const sent = await channel.send(
-      channelId,
-      `⚙️ **[Confirmation required]**\n\`\`\`\n${description}\n\`\`\`\nReact ✅ to proceed or ❌ to skip (timeout: ${timeoutSec}s).`
-    );
-
-    await channel.addReaction(sent.id, "✅");
-    await channel.addReaction(sent.id, "❌");
-
-    const reaction = await channel.waitForReaction(sent.id, {
-      timeout: timeoutMs,
-      allowedEmojis: ["✅", "❌"],
-    });
-
-    if (reaction === "✅") return { decision: "approve" };
-
-    const reason =
-      reaction === null
-        ? `Timed out after ${timeoutSec}s — denied by default.`
-        : "Denied by human operator.";
-
-    return { decision: "block", reason };
+    if (result.approved) return { decision: "approve" };
+    return { decision: "block", reason: result.reason };
   };
-}
-
-/**
- * Returns a system-prompt appendix that instructs a Gemini ant how to behave
- * given its autonomy level. Best-effort only — Gemini has no hook interception.
- */
-export function buildGeminiAutonomyInstructions(
-  autonomy: "human" | "full" | "strict"
-): string {
-  if (autonomy === "full") return "";
-
-  if (autonomy === "strict") {
-    return [
-      "",
-      "--- AUTONOMY CONSTRAINTS ---",
-      'Your autonomy level is "strict". You must NOT perform any irreversible or',
-      "high-impact actions, including: git push, deleting files recursively, sudo,",
-      "piping to a shell, DROP TABLE / TRUNCATE TABLE, or using computer_use.",
-      "If such an action is required to complete a task, explain why and stop.",
-      "--- END CONSTRAINTS ---",
-    ].join("\n");
-  }
-
-  // "human" — instruct the model to pause and describe before acting.
-  return [
-    "",
-    "--- AUTONOMY CONSTRAINTS ---",
-    'Your autonomy level is "human". Before performing any irreversible or',
-    "high-impact action (git push, deleting files, sudo, pipe-to-shell,",
-    "DROP TABLE / TRUNCATE TABLE, computer_use), you must describe the action",
-    "you are about to take and explicitly state that you are pausing for human",
-    "approval. Do not proceed with the action in the same response.",
-    "--- END CONSTRAINTS ---",
-  ].join("\n");
 }
 
 export type ToolLoggingMode = "off" | "impactful" | "all";
