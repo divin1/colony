@@ -9,7 +9,7 @@ Ants can maintain software projects, write blog posts, process data, or do anyth
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ndv/colony/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
 ```
 
 Downloads a standalone binary to `~/.local/bin/colony`. No dependencies required.
