@@ -33,7 +33,7 @@ export const ColonyConfigSchema = z.object({
       discord: z
         .object({
           token: EnvString,
-          guild: z.string(),
+          guild: EnvString,
         })
         .optional(),
       github: z
