@@ -279,7 +279,24 @@ logging:
 
 The `impactful` default keeps the Discord channel focused on what the ant **did** (wrote files, ran commands, made commits) while silencing what it **looked at** (reading files, searching code).
 
-> **Gemini ants:** this setting applies to the `bash` tool that the Gemini engine exposes. Text output from the model is always sent to Discord.
+### LM text output routing
+
+Controls where the ant's LLM text (narration, reasoning, responses) is sent.
+
+```yaml
+logging:
+  lm_output: discord   # "discord" (default) | "console" | "both"
+```
+
+| Value | Behaviour |
+|---|---|
+| `discord` | LLM text is posted to Discord as the ant produces it. **Default.** |
+| `console` | LLM text is printed to the terminal only. Discord receives no narration. |
+| `both` | LLM text goes to both the terminal and Discord. |
+
+**Gemini ants only:** when `lm_output: "console"` is set, a Gemini ant can still post to Discord explicitly via the `notify_discord` tool. This lets instructions dictate exactly which milestone messages reach Discord (task picked, PR opened, blocked, etc.) while keeping all narration off the channel.
+
+> **Claude ants — known limitation:** the Claude Agent SDK does not support injecting custom tools into the `claude_code` preset, so there is no `notify_discord` equivalent for Claude ants. With `lm_output: "console"`, a Claude ant has no way to post to Discord at all. With `lm_output: "discord"` (default), all LLM text reaches Discord. A unified solution is planned — see PLAN.md.
 
 ### State persistence
 
