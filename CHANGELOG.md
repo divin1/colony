@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.3] — 2026-03-23
+
+### Added
+
+- **Console logging for ant lifecycle events**: `colony run` now prints timestamped log lines to the terminal for all key events — ant starting, each session start, session completed, max-turns restart, rate limits, crashes, blocking errors (auth/billing/budget), and pause/resume. Previously all status output went only to Discord, making local debugging difficult.
+- **Env auto-load confirmation**: a `Loaded env from <path>` line is printed when `.env` is auto-loaded from the colony directory.
+- **`Makefile` for local development**: `make build` compiles the colony CLI binary for the current platform using `bun build --compile`; `make install` additionally copies it to `~/.local/bin/colony`; `make clean` removes the local build artifact. Platform and architecture are auto-detected.
+- **Reaction fallback for confirmation flow**: `waitForReaction` now also resolves when the human sends a plain-text ✅ or ❌ message in the same channel, in case the Discord gateway misses the reaction event. Requires passing `channelId` in the options (done automatically by `requestConfirmation`).
+
+---
+
 ## [0.3.2] — 2026-03-23
 
 ### Added
