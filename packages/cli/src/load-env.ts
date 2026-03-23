@@ -30,6 +30,7 @@ export function tryLoadEnvFile(envPath: string): void {
   if (!existsSync(envPath)) return;
   try {
     parseAndApply(readFileSync(envPath, "utf8"));
+    console.log(`Loaded env from ${envPath}`);
   } catch {
     // Ignore unreadable file on auto-load.
   }
