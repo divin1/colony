@@ -1,6 +1,6 @@
 # Colony — Project Plan
 
-_Last updated: 2026-03-20_
+_Last updated: 2026-03-23_
 
 ---
 
@@ -36,7 +36,7 @@ The core framework is **production-ready**. All primary roadmap items are comple
 - **Core:** Full coverage — runner, ant, hooks, config, state, gemini, errors
 - **CLI:** `init`, `validate`, and `run` all have integration tests
 - **Integrations:** Discord and GitHub fully tested
-- All 198 tests pass (`bun test`)
+- All 201 tests pass (`bun test`)
 
 ---
 
@@ -73,6 +73,9 @@ Integration tests added for both commands. Spawn uses `process.execPath` to find
 - **Risk:** Persistent sessions accumulate tokens and may hit limits; need a truncation strategy.
 - **Files:** `packages/core/src/ant.ts`
 
+#### Prevent leaks
+- Determine which file contents are sensitive and do no log those actions to discord.
+- Minimize logging to the minimum necessary
 ---
 
 ### Medium priority
