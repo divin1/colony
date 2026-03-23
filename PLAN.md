@@ -1,6 +1,6 @@
 # Colony — Project Plan
 
-_Last updated: 2026-03-23_
+_Last updated: 2026-03-23_ (0.3.4)
 
 ---
 
@@ -60,6 +60,18 @@ These are unresolved architectural questions that need a decision before impleme
 Ordered by priority / impact.
 
 ### High priority
+
+#### `notify_discord` for Claude ants — unify Discord output control across engines
+
+- **Problem:** Gemini ants with `lm_output: "console"` can still post intentional milestone messages to Discord via the `notify_discord` tool. Claude ants have no equivalent — with `lm_output: "console"` they go completely silent on Discord; with `lm_output: "discord"` (default) all LLM narration floods the channel. Flooding Discord is unacceptable for production ants.
+- **Root cause:** The Claude Agent SDK `query()` uses the `claude_code` preset; there is no API to inject custom tools into it.
+- **Proposed approaches (pick one):**
+  1. **Bash hook interception** — intercept a sentinel bash command (e.g. `colony notify "message"`) in a PostToolUse hook and forward it to Discord. No SDK change needed; Claude can call `bash` with this command. Instructions tell Claude to use this instead of producing text output.
+  2. **Local HTTP endpoint** — runner exposes a `POST /notify` endpoint; Claude calls it via `curl`. More robust but requires binding a port.
+  3. **Wait for Agent SDK custom tool support** — if the SDK gains a way to register custom tools alongside the preset, use the same `notify_discord` approach as Gemini.
+- **Recommendation:** Option 1 (bash hook) — zero infrastructure, works today, easy to document.
+- **Files:** `packages/core/src/hooks.ts` (new PostToolUse handler or dedicated hook); `packages/core/src/ant.ts` (wire up the hook); docs.
+- **Acceptance criteria:** A Claude ant with `lm_output: "console"` can post structured Discord messages by running `colony notify "message"` in bash, matching the Gemini `notify_discord` UX.
 
 #### ~~PostToolUse logging — make opt-in~~ — done
 `logging.tool_calls: "off" | "impactful" | "all"` implemented (default `"impactful"`). Read-only tools (`Read`, `Grep`, `Glob`, `LS`, `WebSearch`, `WebFetch`, `TodoRead`) are skipped by default; `"all"` restores previous verbose behaviour; `"off"` disables the hook entirely.
