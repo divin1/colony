@@ -68,7 +68,7 @@ export class DiscordIntegration implements MessagingIntegration {
 
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.client.once("ready", () => {
+      this.client.once("clientReady", () => {
         this.client.on("messageCreate", (message) => {
           if (message.author.bot) return;
           const payload: DiscordCommandPayload = {
