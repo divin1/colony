@@ -17,14 +17,18 @@ const CLI_ROOT = join(import.meta.dir, "../../../..");
 
 function spawnRun(
   dir: string,
-  env?: Record<string, string | undefined>
+  env?: Record<string, string | undefined>,
+  extraArgs: string[] = []
 ): ReturnType<typeof Bun.spawn> {
-  return Bun.spawn([process.execPath, "run", "packages/cli/src/index.ts", "run", dir], {
-    cwd: CLI_ROOT,
-    env: { ...process.env, ...env },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  return Bun.spawn(
+    [process.execPath, "run", "packages/cli/src/index.ts", "run", ...extraArgs, dir],
+    {
+      cwd: CLI_ROOT,
+      env: { ...process.env, ...env },
+      stdout: "pipe",
+      stderr: "pipe",
+    }
+  );
 }
 
 describe("colony run", () => {
@@ -85,6 +89,78 @@ describe("colony run", () => {
     writeFileSync(join(dir, "ants", "bad.yaml"), "name: bad\n"); // missing required fields
 
     const proc = spawnRun(dir, { DISCORD_TOKEN: "fake-token" });
+    const stderr = await new Response(proc.stderr).text();
+    const exitCode = await proc.exited;
+
+    expect(exitCode).not.toBe(0);
+    expect(stderr).toContain("Error:");
+  });
+
+  it("auto-loads .env from the colony directory when --env is not given", async () => {
+    const dir = join(tempDir, "auto-env");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "colony.yaml"),
+      "name: auto-env-test\nintegrations:\n  discord:\n    token: ${DISCORD_TOKEN}\n    guild: g\n"
+    );
+    mkdirSync(join(dir, "ants"), { recursive: true });
+    writeFileSync(
+      join(dir, "ants", "worker.yaml"),
+      "name: worker\ndescription: Test\ninstructions: Work.\nintegrations:\n  discord:\n    channel: ch\n"
+    );
+    // Place .env in the colony dir — no --env flag needed.
+    writeFileSync(join(dir, ".env"), "DISCORD_TOKEN=auto-loaded-token\n");
+
+    const env: Record<string, string | undefined> = { ...process.env, DISCORD_TOKEN: undefined };
+    const proc = spawnRun(dir, env);
+
+    const timeout = setTimeout(() => proc.kill(), 5000);
+    const stderr = await new Response(proc.stderr).text();
+    const stdout = await new Response(proc.stdout).text();
+    clearTimeout(timeout);
+
+    const output = stdout + stderr;
+    expect(output.includes("auto-env-test") || output.includes("Fatal:")).toBe(true);
+    expect(output).not.toContain("Missing env var");
+  });
+
+  it("--env loads variables from the file before config validation", async () => {
+    const dir = join(tempDir, "env-flag");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "colony.yaml"),
+      "name: env-test\nintegrations:\n  discord:\n    token: ${DISCORD_TOKEN}\n    guild: g\n"
+    );
+    mkdirSync(join(dir, "ants"), { recursive: true });
+    writeFileSync(
+      join(dir, "ants", "worker.yaml"),
+      "name: worker\ndescription: Test\ninstructions: Work.\nintegrations:\n  discord:\n    channel: ch\n"
+    );
+    const envFile = join(dir, ".env");
+    writeFileSync(envFile, "DISCORD_TOKEN=fake-token\n");
+
+    // Pass --env but strip DISCORD_TOKEN from the process env so only the file supplies it.
+    const env: Record<string, string | undefined> = { ...process.env, DISCORD_TOKEN: undefined };
+    const proc = spawnRun(dir, env, ["--env", envFile]);
+
+    const timeout = setTimeout(() => proc.kill(), 5000);
+    const stderr = await new Response(proc.stderr).text();
+    const stdout = await new Response(proc.stdout).text();
+    clearTimeout(timeout);
+
+    // Config validation passed if we see the colony name or hit the Discord connection step.
+    const output = stdout + stderr;
+    expect(output.includes("env-test") || output.includes("Fatal:")).toBe(true);
+    // Must not fail on a missing env var.
+    expect(output).not.toContain("Missing env var");
+  });
+
+  it("--env reports an error for a missing file", async () => {
+    const dir = join(tempDir, "bad-env");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "colony.yaml"), "name: test\n");
+
+    const proc = spawnRun(dir, {}, ["--env", join(dir, "nonexistent.env")]);
     const stderr = await new Response(proc.stderr).text();
     const exitCode = await proc.exited;
 

@@ -2,11 +2,20 @@ import { Command } from "@commander-js/extra-typings";
 import { loadConfig, runColony } from "@colony/core";
 import { DiscordIntegration } from "@colony/discord";
 import { GitHubIntegration } from "@colony/github";
+import { join } from "node:path";
+import { loadEnvFile, tryLoadEnvFile } from "../load-env";
 
 export const runCommand = new Command("run")
   .description("Connect to Discord and launch all configured ants")
   .argument("[dir]", "Path to the colony config directory", process.cwd())
-  .action(async (dir) => {
+  .option("--env <file>", "Path to a .env file to load before starting")
+  .action(async (dir, opts) => {
+    if (opts.env) {
+      loadEnvFile(opts.env);
+    } else {
+      tryLoadEnvFile(join(dir, ".env"));
+    }
+
     // --- Load and validate config ---
     let config;
     try {
