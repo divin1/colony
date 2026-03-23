@@ -16,7 +16,7 @@ This downloads the correct pre-built binary for your OS and architecture to `~/.
 
 ```bash
 # Install a specific version
-COLONY_VERSION=v0.3.0 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
+COLONY_VERSION=v0.3.2 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
 
 # Install to a custom directory
 COLONY_INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
@@ -98,8 +98,9 @@ Edit `colony.yaml` to set your Discord guild name, then edit or replace `ants/wo
 Parses and validates all config files without starting anything. Resolves `${ENV_VAR}` references — missing variables are reported as errors.
 
 ```bash
-colony validate .          # validates the current directory
+colony validate .                      # validates the current directory
 colony validate ./my-colony
+colony validate . --env .env           # load .env before validating
 ```
 
 **Successful output:**
@@ -134,9 +135,16 @@ Exit code is `0` on success, `1` on any error.
 Connects to Discord and launches all configured ants. Runs until you press Ctrl+C or send SIGTERM.
 
 ```bash
-colony run .           # run the colony in the current directory
+colony run .                     # run the colony in the current directory
 colony run ./my-colony
+colony run . --env .env          # load .env before starting
 ```
+
+**Options:**
+
+| Flag | Description |
+|---|---|
+| `--env <file>` | Path to a `.env` file to load before config validation and startup. Values are set into `process.env` and are available for `${VAR}` interpolation in YAML. |
 
 **What happens on startup:**
 
@@ -165,7 +173,21 @@ The runner disconnects from Discord before exiting. In-progress ant sessions are
 
 ## Environment variables
 
-All three commands read environment variables for secret resolution. Set them in your shell or in a `.env` file (loaded automatically by Bun when present).
+All three commands read environment variables for secret resolution. The recommended approach is to keep a `.env` file in your colony directory — it is loaded automatically:
+
+```bash
+cd ~/.colony/my-colony
+colony run .          # auto-loads .env if present
+colony validate .     # same
+```
+
+You can also point to an env file explicitly with `--env`:
+
+```bash
+colony run . --env /path/to/other.env
+```
+
+If `--env` is not given and no `.env` exists in the colony directory, only variables already in the shell environment are used.
 
 | Variable | Required | Purpose |
 |---|---|---|
