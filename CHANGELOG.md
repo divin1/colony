@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.4] — 2026-03-23
+
+### Added
+
+- **`logging.lm_output` config field**: controls where LLM text output is routed per ant. `"discord"` (default, backward compat) posts text to Discord as before; `"console"` suppresses Discord output and prints to the terminal only; `"both"` routes to both. Enables keeping Discord clean while maintaining full verbosity locally.
+- **`notify_discord` Gemini tool**: Gemini ants now have a `notify_discord(message)` function they can call to post intentional key-milestone messages to Discord. This is the only Discord output path when `lm_output: "console"` is set, giving the ant full control over what reaches Discord.
+- **Fine-grained confirmation overrides**: persistent per-ant rules to auto-approve or auto-deny dangerous actions without prompting Discord.
+  - React **🔁** on any confirmation prompt to save an always-allow rule for that exact command.
+  - `/auto-approve <pattern>` — store a regex pattern that auto-approves matching actions.
+  - `/auto-deny <pattern>` — store a regex pattern that auto-denies matching actions.
+  - `/confirmations` — list all current overrides for this ant.
+  - `/reset-confirmations` — clear all overrides for this ant.
+  - Rules are checked before any Discord prompt is sent; matching rules short-circuit immediately.
+  - Stored in the same backend as the ant state (`memory` or `sqlite`).
+- **Improved confirmation message format**: the confirmation message now uses a code block for the command and shows all three reaction options inline: `✅ approve · ❌ deny · 🔁 always allow`.
+
+### Changed
+
+- `/help` response updated to list the four new confirmation override commands.
+
+---
+
 ## [0.3.3] — 2026-03-23
 
 ### Added
