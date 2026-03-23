@@ -24,6 +24,11 @@ export interface RunnerGitHub {
   ): Promise<Array<{ number: number; title: string; body: string | null }>>;
 }
 
+function log(antName: string, msg: string): void {
+  const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
+  console.log(`[${ts}] [${antName}] ${msg}`);
+}
+
 const BASE_RESTART_DELAY_MS = 10_000;
 const MAX_RESTART_DELAY_MS = 5 * 60 * 1000; // 5 min cap
 const GITHUB_POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -205,6 +210,7 @@ async function runAntWithSupervision(
     ant.state?.path
   );
 
+  log(ant.name, "starting");
   await discord.send(channelId, `🐜 Ant **${ant.name}** is starting.`);
 
   const defaultPrompt = `You are ${ant.name}. ${ant.description}. Begin your work session now.`;
@@ -448,6 +454,7 @@ async function runAntWithSupervision(
       });
       sessionsCompleted++;
       consecutiveCrashes = 0;
+      log(ant.name, "session completed");
       await discord
         .send(channelId, `✅ **${ant.name}** completed its work session.`)
         .catch(() => {});
@@ -465,6 +472,7 @@ async function runAntWithSupervision(
             const waitMs =
               err.retryAfterMs ?? backoffDelayMs(consecutiveCrashes);
             const waitSec = Math.round(waitMs / 1000);
+            log(ant.name, `rate limited — resuming in ${waitSec}s`);
             await discord
               .send(
                 channelId,
@@ -477,6 +485,7 @@ async function runAntWithSupervision(
 
           case "billing":
             consecutiveCrashes = 0;
+            log(ant.name, "billing error — pausing until resumed");
             await discord
               .send(
                 channelId,
@@ -489,6 +498,7 @@ async function runAntWithSupervision(
 
           case "auth":
             consecutiveCrashes = 0;
+            log(ant.name, "authentication failed — pausing until resumed");
             await discord
               .send(
                 channelId,
@@ -501,6 +511,7 @@ async function runAntWithSupervision(
 
           case "budget":
             consecutiveCrashes = 0;
+            log(ant.name, "USD budget cap exceeded — pausing until resumed");
             await discord
               .send(
                 channelId,
@@ -514,6 +525,7 @@ async function runAntWithSupervision(
           case "permanent": {
             consecutiveCrashes++;
             const delay = backoffDelayMs(consecutiveCrashes);
+            log(ant.name, `permanent error: ${err.message} — restarting in ${delay / 1000}s`);
             await discord
               .send(
                 channelId,
@@ -528,6 +540,7 @@ async function runAntWithSupervision(
             // 'transient'
             consecutiveCrashes++;
             const delay = backoffDelayMs(consecutiveCrashes);
+            log(ant.name, `crashed: ${err.message} — restarting in ${delay / 1000}s`);
             await discord
               .send(
                 channelId,
@@ -542,6 +555,7 @@ async function runAntWithSupervision(
         consecutiveCrashes++;
         const delay = backoffDelayMs(consecutiveCrashes);
         const message = err instanceof Error ? err.message : String(err);
+        log(ant.name, `crashed: ${message} — restarting in ${delay / 1000}s`);
         await discord
           .send(
             channelId,
