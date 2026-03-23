@@ -20,21 +20,11 @@ const BASH_TOOL = {
   },
 };
 
-const NOTIFY_DISCORD_TOOL = {
-  name: "notify_discord",
-  description:
-    "Post a message to the Discord channel. Use only for key milestones: task picked, PR opened, blocked, needs testing, nothing to do.",
-  parameters: {
-    type: "object",
-    properties: {
-      message: {
-        type: "string",
-        description: "The message to post. Keep under 1500 chars.",
-      },
-    },
-    required: ["message"],
-  },
-};
+// notify_discord is NOT a separate function tool — the model uses bash to call it:
+//   notify_discord "message content"
+// We intercept this in the bash execution loop below and post to Discord.
+// This is more reliable than a custom function tool, which Gemini-2.5-flash
+// tends to output as text syntax rather than an actual function call.
 
 export interface GeminiRunOptions {
   config: AntConfig;
@@ -85,7 +75,7 @@ export async function runAntWithGemini(
         model,
         config: systemInstruction ? { systemInstruction } : undefined,
         contents,
-        tools: [{ functionDeclarations: [BASH_TOOL, NOTIFY_DISCORD_TOOL] }],
+        tools: [{ functionDeclarations: [BASH_TOOL] }],
       })) as AsyncIterable<GeminiChunk>;
     } catch (err) {
       throw classifyGeminiError(err);
@@ -93,6 +83,7 @@ export async function runAntWithGemini(
 
     const functionCalls: Array<{ name: string; args: unknown }> = [];
     let textBuf = "";
+    let fullText = ""; // accumulates entire turn for notify_discord pattern extraction
 
     try {
       for await (const chunk of stream) {
@@ -100,6 +91,7 @@ export async function runAntWithGemini(
         for (const part of parts) {
           if (part.text) {
             textBuf += part.text;
+            fullText += part.text;
             // Flush on newline boundaries or when buffer reaches 200 chars.
             const nlIdx = textBuf.lastIndexOf("\n");
             if (nlIdx !== -1 || textBuf.length >= 200) {
@@ -137,6 +129,25 @@ export async function runAntWithGemini(
       }
     }
 
+    // Extract notify_discord "..." patterns from text output and post to Discord.
+    // The model writes these as text rather than bash function calls; this catches both cases.
+    const NOTIFY_RE = /notify_discord\s+"((?:[^"\\]|\\.)*)"/gs;
+    let nm: RegExpExecArray | null;
+    while ((nm = NOTIFY_RE.exec(fullText)) !== null) {
+      const msg = nm[1]
+        .replace(/\\n/g, "\n")
+        .replace(/\\t/g, "\t")
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, "\\")
+        // Expand $VAR and ${VAR} references using process.env.
+        .replace(/\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g, (_, braced, plain) =>
+          process.env[braced ?? plain] ?? ""
+        );
+      if (msg.trim()) {
+        await opts.channel.send(opts.channelId, msg).catch(() => {});
+      }
+    }
+
     // No function calls → session complete.
     if (functionCalls.length === 0) {
       return;
@@ -152,25 +163,36 @@ export async function runAntWithGemini(
     const functionResponses: unknown[] = [];
 
     for (const call of functionCalls) {
-      // Handle notify_discord tool — always allowed, never subject to autonomy policy.
-      if (call.name === "notify_discord") {
-        const message =
-          typeof call.args === "object" && call.args !== null
-            ? ((call.args as Record<string, unknown>).message as string | undefined) ?? ""
-            : "";
-        await opts.channel.send(opts.channelId, message).catch(() => {});
-        functionResponses.push({
-          functionResponse: { name: "notify_discord", response: { result: "Message sent." } },
-        });
-        continue;
-      }
-
       const args = call.args;
       const command =
         typeof args === "object" && args !== null
           ? ((args as Record<string, unknown>).command as string | undefined) ??
             ""
           : "";
+
+      // Intercept: notify_discord "message" — post to Discord, skip bash execution.
+      const notifyMatch = command.match(/^notify_discord\s+([\s\S]+)$/);
+      if (notifyMatch) {
+        let message = notifyMatch[1].trim();
+        // Strip outer matching quotes if present (single or double).
+        if (
+          message.length >= 2 &&
+          ((message[0] === '"' && message[message.length - 1] === '"') ||
+            (message[0] === "'" && message[message.length - 1] === "'"))
+        ) {
+          message = message.slice(1, -1);
+        }
+        // Unescape \n sequences written literally in the string.
+        message = message.replace(/\\n/g, "\n");
+        await opts.channel.send(opts.channelId, message).catch(() => {});
+        functionResponses.push({
+          functionResponse: {
+            name: call.name,
+            response: { output: "Message posted to Discord." },
+          },
+        });
+        continue;
+      }
       const description =
         command || `${call.name}(${safeStringify(args)})`;
 

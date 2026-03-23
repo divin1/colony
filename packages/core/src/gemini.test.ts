@@ -326,6 +326,46 @@ describe("runAntWithGemini", () => {
     ).rejects.toMatchObject({ category: "transient" });
   });
 
+  it("posts notify_discord text-output patterns to Discord regardless of lm_output", async () => {
+    const channel = makeChannel();
+    // Model writes notify_discord "..." as plain text (not a bash function call)
+    const genAI = makeFakeGenAI([
+      [{ text: `notify_discord "📋 Task list\\n1. Fix bug"` }],
+    ]);
+
+    await runAntWithGemini("do some work", {
+      config: makeAntConfig({ logging: { tool_calls: "off", lm_output: "console" } }),
+      channel,
+      channelId: "ch-1",
+      confirmationTimeoutMs: 30_000,
+      _genAI: genAI,
+    });
+
+    // The notify_discord pattern should have been extracted and posted to Discord
+    expect(channel.messages.some((m) => m.includes("📋 Task list"))).toBe(true);
+    expect(channel.messages.some((m) => m.includes("1. Fix bug"))).toBe(true);
+  });
+
+  it("handles notify_discord with escaped newlines in text output", async () => {
+    const channel = makeChannel();
+    const genAI = makeFakeGenAI([
+      [{ text: `notify_discord "line one\\nline two\\nline three"` }],
+    ]);
+
+    await runAntWithGemini("do some work", {
+      config: makeAntConfig({ logging: { tool_calls: "off", lm_output: "console" } }),
+      channel,
+      channelId: "ch-1",
+      confirmationTimeoutMs: 30_000,
+      _genAI: genAI,
+    });
+
+    const sent = channel.messages.find((m) => m.includes("line one"));
+    expect(sent).toBeDefined();
+    expect(sent).toContain("line two");
+    expect(sent).toContain("line three");
+  });
+
   it("throws AntSessionError(max_turns) when loop hits max_turns limit", async () => {
     const channel = makeChannel();
     // Always return a function call → loop never exits normally
