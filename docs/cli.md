@@ -16,7 +16,7 @@ This downloads the correct pre-built binary for your OS and architecture to `~/.
 
 ```bash
 # Install a specific version
-COLONY_VERSION=v0.3.2 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
+COLONY_VERSION=v0.3.3 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
 
 # Install to a custom directory
 COLONY_INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
