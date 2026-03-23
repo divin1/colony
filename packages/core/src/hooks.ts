@@ -75,7 +75,7 @@ export interface ConfirmationChannel {
   addReaction(messageId: string, emoji: string): Promise<void>;
   waitForReaction(
     messageId: string,
-    options: { timeout: number; allowedEmojis: string[] }
+    options: { timeout: number; allowedEmojis: string[]; channelId?: string }
   ): Promise<string | null>;
 }
 
@@ -117,6 +117,7 @@ export async function requestConfirmation(
   const reaction = await channel.waitForReaction(sent.id, {
     timeout: timeoutMs,
     allowedEmojis: ["✅", "❌"],
+    channelId,
   });
 
   if (reaction === "✅") return { approved: true };

@@ -292,6 +292,7 @@ async function runAntWithSupervision(
       case "/stop":
         if (!paused) {
           paused = true;
+          log(ant.name, "pausing after current session");
           discord
             .send(
               channelId,
@@ -307,6 +308,7 @@ async function runAntWithSupervision(
           paused = false;
           resumeResolve?.();
           resumeResolve = null;
+          log(ant.name, "resumed");
           discord
             .send(channelId, `▶️ **${ant.name}** resuming.`)
             .catch(() => {});
@@ -359,6 +361,7 @@ async function runAntWithSupervision(
     if (cmd === "pause" || cmd === "stop") {
       if (!paused) {
         paused = true;
+        log(ant.name, "pausing after current session");
         discord
           .send(
             channelId,
@@ -371,6 +374,7 @@ async function runAntWithSupervision(
         paused = false;
         resumeResolve?.();
         resumeResolve = null;
+        log(ant.name, "resumed");
         discord
           .send(channelId, `▶️ **${ant.name}** resuming.`)
           .catch(() => {});
@@ -444,6 +448,7 @@ async function runAntWithSupervision(
       await waitForResume();
     }
     const prompt = await queue.next();
+    log(ant.name, "session starting");
     try {
       await runAnt(prompt, {
         config: ant,
@@ -463,8 +468,9 @@ async function runAntWithSupervision(
       if (err instanceof AntSessionError) {
         switch (err.category) {
           case "max_turns":
-            // Normal turn-limit completion — silent restart, no penalty.
+            // Normal turn-limit completion — restart immediately, no penalty.
             consecutiveCrashes = 0;
+            log(ant.name, "max turns reached — restarting");
             break;
 
           case "rate_limit": {

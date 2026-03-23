@@ -33,7 +33,7 @@ export interface MessagingIntegration {
   addReaction(messageId: string, emoji: string): Promise<void>;
   waitForReaction(
     messageId: string,
-    options: { timeout: number; allowedEmojis: string[] }
+    options: { timeout: number; allowedEmojis: string[]; channelId?: string }
   ): Promise<string | null>;
 }
 
@@ -125,15 +125,22 @@ export class DiscordIntegration implements MessagingIntegration {
 
   waitForReaction(
     messageId: string,
-    options: { timeout: number; allowedEmojis: string[] }
+    options: { timeout: number; allowedEmojis: string[]; channelId?: string }
   ): Promise<string | null> {
     return new Promise((resolve) => {
+      const cleanup = () => {
+        this.client.off("messageReactionAdd", reactionHandler);
+        if (options.channelId) {
+          this.client.off("messageCreate", messageHandler);
+        }
+      };
+
       const timer = setTimeout(() => {
-        this.client.off("messageReactionAdd", handler);
+        cleanup();
         resolve(null);
       }, options.timeout);
 
-      const handler = (
+      const reactionHandler = (
         reaction: MessageReaction | PartialMessageReaction,
         user: User | PartialUser,
         _details: MessageReactionEventDetails
@@ -143,11 +150,26 @@ export class DiscordIntegration implements MessagingIntegration {
         const emojiName = reaction.emoji.name;
         if (!emojiName || !options.allowedEmojis.includes(emojiName)) return;
         clearTimeout(timer);
-        this.client.off("messageReactionAdd", handler);
+        cleanup();
         resolve(emojiName);
       };
 
-      this.client.on("messageReactionAdd", handler);
+      // Fallback: also accept a plain-text message containing just the emoji
+      // in the same channel, in case the reaction event is missed by the gateway.
+      const messageHandler = (message: Message) => {
+        if (message.author.bot) return;
+        if (message.channelId !== options.channelId) return;
+        const text = message.content.trim();
+        if (!options.allowedEmojis.includes(text)) return;
+        clearTimeout(timer);
+        cleanup();
+        resolve(text);
+      };
+
+      this.client.on("messageReactionAdd", reactionHandler);
+      if (options.channelId) {
+        this.client.on("messageCreate", messageHandler);
+      }
     });
   }
 
