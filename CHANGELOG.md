@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.2] — 2026-03-23
+
+### Added
+
+- **Auto-load `.env` from the colony directory**: `colony run` and `colony validate` now automatically load a `.env` file from the colony directory if one exists, so `${VAR}` references resolve without needing to pre-export variables in the shell.
+- **`--env <file>` flag**: explicit override to load a `.env` file from a custom path. Example: `colony run . --env /path/to/secrets.env`.
+
+---
+
 ## [0.3.1] — 2026-03-20
 
 ### Fixed
