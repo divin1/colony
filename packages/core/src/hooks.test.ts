@@ -186,7 +186,7 @@ describe("createConfirmationHook", () => {
 
     expect(channel.waitForReaction).toHaveBeenCalledWith(
       "msg-1",
-      expect.objectContaining({ timeout: 5_000, allowedEmojis: ["✅", "❌"] })
+      expect.objectContaining({ timeout: 5_000, allowedEmojis: ["✅", "❌", "🔁"] })
     );
   });
 });
@@ -302,7 +302,7 @@ describe("requestConfirmation", () => {
 
     expect(channel.send).toHaveBeenCalledTimes(1);
     const [, content] = (channel.send as ReturnType<typeof mock>).mock.calls[0] as [string, string];
-    expect(content).toContain("Confirmation required");
+    expect(content).toContain("Approval required");
     expect(content).toContain("git push");
   });
 

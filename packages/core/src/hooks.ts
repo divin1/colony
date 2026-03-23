@@ -4,6 +4,7 @@ import type {
   PreToolUseHookInput,
   PostToolUseHookInput,
 } from "@anthropic-ai/claude-agent-sdk";
+import type { AntState } from "./state.js";
 
 // --- Per-ant confirmation configuration ---
 
@@ -94,7 +95,9 @@ export async function requestConfirmation(
   channelId: string,
   timeoutMs: number,
   description: string,
-  autonomy: "human" | "strict"
+  autonomy: "human" | "strict",
+  state?: AntState,
+  antName?: string,
 ): Promise<{ approved: boolean; reason?: string }> {
   if (autonomy === "strict") {
     return {
@@ -103,22 +106,48 @@ export async function requestConfirmation(
     };
   }
 
+  // Check stored overrides before posting to Discord.
+  if (state && antName) {
+    for (const override of state.getConfirmationOverrides(antName)) {
+      try {
+        if (new RegExp(override.pattern).test(description)) {
+          return {
+            approved: override.decision === "approve",
+            reason: `Auto-${override.decision}d by stored rule: ${override.pattern}`,
+          };
+        }
+      } catch {
+        // Ignore invalid regex patterns stored in overrides.
+      }
+    }
+  }
+
   // human: forward to Discord and wait for a reaction.
   const timeoutSec = Math.round(timeoutMs / 1000);
 
   const sent = await channel.send(
     channelId,
-    `⚙️ **[Confirmation required]**\n\`\`\`\n${description}\n\`\`\`\nReact ✅ to proceed or ❌ to skip (timeout: ${timeoutSec}s).`
+    `⚙️ **Approval required**\n\`\`\`\n${description}\n\`\`\`\n✅ approve · ❌ deny · 🔁 always allow  _(timeout ${timeoutSec}s → denied)_`
   );
 
   await channel.addReaction(sent.id, "✅");
   await channel.addReaction(sent.id, "❌");
+  await channel.addReaction(sent.id, "🔁");
 
   const reaction = await channel.waitForReaction(sent.id, {
     timeout: timeoutMs,
-    allowedEmojis: ["✅", "❌"],
+    allowedEmojis: ["✅", "❌", "🔁"],
     channelId,
   });
+
+  if (reaction === "🔁") {
+    // Store an always-allow override for this exact description, then approve.
+    if (state && antName) {
+      const escaped = description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      state.addConfirmationOverride(antName, escaped, "approve");
+    }
+    return { approved: true, reason: "Approved and saved as always-allow rule." };
+  }
 
   if (reaction === "✅") return { approved: true };
 
@@ -146,7 +175,9 @@ export function createConfirmationHook(
   channelId: string,
   timeoutMs: number,
   antConfig?: AntConfirmationConfig,
-  autonomy: "human" | "strict" = "human"
+  autonomy: "human" | "strict" = "human",
+  state?: AntState,
+  antName?: string,
 ): HookCallback {
   return async (input): Promise<HookJSONOutput> => {
     // This hook is registered under PreToolUse, but guard defensively.
@@ -156,7 +187,7 @@ export function createConfirmationHook(
     if (!isDangerous(preInput, antConfig)) return { decision: "approve" };
 
     const description = formatToolDescription(preInput.tool_name, preInput.tool_input);
-    const result = await requestConfirmation(channel, channelId, timeoutMs, description, autonomy);
+    const result = await requestConfirmation(channel, channelId, timeoutMs, description, autonomy, state, antName);
 
     if (result.approved) return { decision: "approve" };
     return { decision: "block", reason: result.reason };

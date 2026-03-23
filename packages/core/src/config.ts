@@ -126,6 +126,11 @@ export const AntConfigSchema = z.object({
   logging: z
     .object({
       tool_calls: z.enum(["off", "impactful", "all"]).default("impactful"),
+      // Where the ant's LLM text output is routed.
+      //   "discord" — posted to Discord (default, backward compat)
+      //   "console" — printed to terminal only (keeps Discord clean)
+      //   "both"    — printed to terminal AND posted to Discord
+      lm_output: z.enum(["discord", "console", "both"]).default("discord"),
     })
     .optional(),
   // Which agent engine to use for this ant. Defaults to "claude".

@@ -16,6 +16,8 @@ import {
   classifyAssistantError,
   classifyResultError,
 } from "./errors";
+import type { AntState } from "./state";
+import { log } from "./log";
 
 export interface AntRunOptions {
   config: AntConfig;
@@ -28,6 +30,8 @@ export interface AntRunOptions {
   cwd?: string;
   /** Colony-level conventions (PLAN.md tracking, git identity) appended to the system prompt. */
   commonInstructions?: string;
+  /** Ant state for confirmation overrides. */
+  state?: AntState;
 }
 
 export async function runAnt(
@@ -42,11 +46,13 @@ export async function runAnt(
       confirmationTimeoutMs: opts.confirmationTimeoutMs,
       cwd: opts.cwd,
       commonInstructions: opts.commonInstructions,
+      state: opts.state,
     });
   }
 
   const autonomy = opts.config.autonomy;
   const loggingMode = opts.config.logging?.tool_calls ?? "impactful";
+  const lmOutput = opts.config.logging?.lm_output ?? "discord";
 
   // For full autonomy, skip the PreToolUse hook entirely — zero overhead,
   // no dangerous-action checks, Discord is never contacted for approvals.
@@ -62,7 +68,9 @@ export async function runAnt(
                   opts.channelId,
                   opts.confirmationTimeoutMs,
                   opts.config.confirmation ?? undefined,
-                  autonomy
+                  autonomy,
+                  opts.state,
+                  opts.config.name,
                 ),
               ],
             },
@@ -101,14 +109,16 @@ export async function runAnt(
       },
     },
   })) {
-    await handleMessage(msg, opts.channel, opts.channelId);
+    await handleMessage(msg, opts.config.name, opts.channel, opts.channelId, lmOutput);
   }
 }
 
 async function handleMessage(
   msg: SDKMessage,
+  antName: string,
   channel: ConfirmationChannel,
-  channelId: string
+  channelId: string,
+  lmOutput: "discord" | "console" | "both" = "discord",
 ): Promise<void> {
   if (msg.type === "assistant") {
     if (msg.error) {
@@ -117,8 +127,13 @@ async function handleMessage(
     }
     const text = extractText(msg);
     if (text) {
-      for (const chunk of chunkText(text)) {
-        await channel.send(channelId, chunk).catch(() => {});
+      if (lmOutput === "console" || lmOutput === "both") {
+        log(antName, text);
+      }
+      if (lmOutput === "discord" || lmOutput === "both") {
+        for (const chunk of chunkText(text)) {
+          await channel.send(channelId, chunk).catch(() => {});
+        }
       }
     }
   } else if (msg.type === "rate_limit_event") {

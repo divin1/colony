@@ -7,6 +7,8 @@ import {
 } from "./hooks";
 import { AntSessionError } from "./errors";
 import { chunkText } from "./ant";
+import type { AntState } from "./state";
+import { log } from "./log";
 
 const BASH_TOOL = {
   name: "bash",
@@ -15,6 +17,22 @@ const BASH_TOOL = {
     type: "object",
     properties: { command: { type: "string" } },
     required: ["command"],
+  },
+};
+
+const NOTIFY_DISCORD_TOOL = {
+  name: "notify_discord",
+  description:
+    "Post a message to the Discord channel. Use only for key milestones: task picked, PR opened, blocked, needs testing, nothing to do.",
+  parameters: {
+    type: "object",
+    properties: {
+      message: {
+        type: "string",
+        description: "The message to post. Keep under 1500 chars.",
+      },
+    },
+    required: ["message"],
   },
 };
 
@@ -27,6 +45,8 @@ export interface GeminiRunOptions {
   cwd?: string;
   /** Colony-level conventions (PLAN.md tracking, git identity) appended to the system prompt. */
   commonInstructions?: string;
+  /** Ant state for confirmation overrides. */
+  state?: AntState;
   /** Override GoogleGenAI client for testing. */
   _genAI?: GoogleGenAI;
 }
@@ -42,6 +62,7 @@ export async function runAntWithGemini(
   const maxTurns = opts.config.gemini?.max_turns ?? 100;
   const autonomy = opts.config.autonomy;
   const cwd = opts.cwd ?? process.cwd();
+  const lmOutput = opts.config.logging?.lm_output ?? "discord";
 
   const systemInstruction = [opts.config.instructions, opts.commonInstructions]
     .filter(Boolean)
@@ -64,7 +85,7 @@ export async function runAntWithGemini(
         model,
         config: systemInstruction ? { systemInstruction } : undefined,
         contents,
-        tools: [{ functionDeclarations: [BASH_TOOL] }],
+        tools: [{ functionDeclarations: [BASH_TOOL, NOTIFY_DISCORD_TOOL] }],
       })) as AsyncIterable<GeminiChunk>;
     } catch (err) {
       throw classifyGeminiError(err);
@@ -84,8 +105,13 @@ export async function runAntWithGemini(
             if (nlIdx !== -1 || textBuf.length >= 200) {
               const toSend =
                 nlIdx !== -1 ? textBuf.slice(0, nlIdx + 1) : textBuf;
-              for (const c of chunkText(toSend)) {
-                await opts.channel.send(opts.channelId, c).catch(() => {});
+              if (lmOutput === "console" || lmOutput === "both") {
+                log(opts.config.name, toSend.trimEnd());
+              }
+              if (lmOutput === "discord" || lmOutput === "both") {
+                for (const c of chunkText(toSend)) {
+                  await opts.channel.send(opts.channelId, c).catch(() => {});
+                }
               }
               textBuf = nlIdx !== -1 ? textBuf.slice(nlIdx + 1) : "";
             }
@@ -101,8 +127,13 @@ export async function runAntWithGemini(
 
     // Flush any remaining text.
     if (textBuf.trim()) {
-      for (const c of chunkText(textBuf)) {
-        await opts.channel.send(opts.channelId, c).catch(() => {});
+      if (lmOutput === "console" || lmOutput === "both") {
+        log(opts.config.name, textBuf.trimEnd());
+      }
+      if (lmOutput === "discord" || lmOutput === "both") {
+        for (const c of chunkText(textBuf)) {
+          await opts.channel.send(opts.channelId, c).catch(() => {});
+        }
       }
     }
 
@@ -121,6 +152,19 @@ export async function runAntWithGemini(
     const functionResponses: unknown[] = [];
 
     for (const call of functionCalls) {
+      // Handle notify_discord tool — always allowed, never subject to autonomy policy.
+      if (call.name === "notify_discord") {
+        const message =
+          typeof call.args === "object" && call.args !== null
+            ? ((call.args as Record<string, unknown>).message as string | undefined) ?? ""
+            : "";
+        await opts.channel.send(opts.channelId, message).catch(() => {});
+        functionResponses.push({
+          functionResponse: { name: "notify_discord", response: { result: "Message sent." } },
+        });
+        continue;
+      }
+
       const args = call.args;
       const command =
         typeof args === "object" && args !== null
@@ -140,7 +184,9 @@ export async function runAntWithGemini(
           opts.channelId,
           opts.confirmationTimeoutMs,
           description,
-          autonomy
+          autonomy,
+          opts.state,
+          opts.config.name,
         );
         if (!result.approved) {
           functionResponses.push({

@@ -184,7 +184,7 @@ describe("runAntWithGemini", () => {
     });
 
     // Discord should NOT have received a confirmation message
-    expect(channel.messages.every((m) => !m.includes("Confirmation required"))).toBe(true);
+    expect(channel.messages.every((m) => !m.includes("Approval required"))).toBe(true);
 
     // The function response should indicate an error/denial
     const secondCallContents = capturedContents[1] as Array<{
@@ -224,7 +224,7 @@ describe("runAntWithGemini", () => {
     });
 
     // Confirmation message should have been sent
-    expect(channel.messages.some((m) => m.includes("Confirmation required"))).toBe(true);
+    expect(channel.messages.some((m) => m.includes("Approval required"))).toBe(true);
 
     // The function response should contain output (not an error), because ✅ was received
     const secondCallContents = capturedContents[1] as Array<{
