@@ -577,6 +577,15 @@ async function runAntWithSupervision(
   }
 }
 
+// Maps engine names to the CLI binary they spawn.
+// Used for pre-flight availability checks at startup.
+const ENGINE_BINARIES: Record<string, string> = {
+  "claude-cli": "claude",
+  "gemini-cli": "gemini",
+  "codex": "codex",
+  "opencode": "opencode",
+};
+
 // Connects to Discord, launches all ants concurrently, and runs until the process is killed.
 // Each ant has its own supervisor loop — a crash in one ant does not affect others.
 export async function runColony(
@@ -584,6 +593,21 @@ export async function runColony(
   discord: RunnerDiscord,
   github?: RunnerGitHub
 ): Promise<void> {
+  // Pre-flight: verify all required CLI binaries are on PATH before starting anything.
+  const missing: string[] = [];
+  for (const ant of config.ants) {
+    const binaryName =
+      ant.engine === "cli" ? ant.cli?.binary : ENGINE_BINARIES[ant.engine];
+    if (binaryName && !Bun.which(binaryName)) {
+      missing.push(`  • ant "${ant.name}" (engine: ${ant.engine}) requires "${binaryName}"`);
+    }
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      `Colony startup failed — required CLI binaries not found on PATH:\n${missing.join("\n")}\n\nInstall the missing tools and try again.`
+    );
+  }
+
   await discord.connect();
   console.log(
     `Colony "${config.colony.name}" online — ${config.ants.length} ant(s) starting.`
