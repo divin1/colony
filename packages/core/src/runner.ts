@@ -1,8 +1,10 @@
 import { Cron } from "croner";
+import { join } from "path";
 import { runAnt } from "./ant";
 import type { ConfirmationChannel } from "./hooks";
 import type { LoadedConfig, AntConfig, ColonyConfig } from "./config";
 import { createState } from "./state";
+import { loadSkill } from "./skill";
 import { ColonyState } from "./colony-state";
 import { createDashboardHandler } from "./dashboard";
 import { AntSessionError } from "./errors";
@@ -219,6 +221,7 @@ interface DiscordCommandPayload {
 async function runAntWithSupervision(
   ant: AntConfig,
   colony: ColonyConfig,
+  configDir: string,
   discord: RunnerDiscord,
   colonyState: ColonyState,
   github?: RunnerGitHub
@@ -494,11 +497,24 @@ async function runAntWithSupervision(
     log(ant.name, "session starting");
     colonyState.setState(ant.name, "running");
     try {
+      // Load skill files fresh each session (task-snapshot pattern).
+      const skillTexts: string[] = [];
+      for (const relPath of ant.skills ?? []) {
+        try {
+          skillTexts.push(loadSkill(join(configDir, relPath)));
+        } catch (err) {
+          log(ant.name, `skill load warning: ${(err as Error).message}`);
+        }
+      }
+      const commonInstructions = [buildCommonInstructions(colony), ...skillTexts]
+        .filter(Boolean)
+        .join("\n\n");
+
       const result = await runAnt(workItem.prompt, {
         config: ant,
         channel: teeChannel,
         channelId,
-        commonInstructions: buildCommonInstructions(colony),
+        commonInstructions,
       });
       sessionsCompleted++;
       consecutiveCrashes = 0;
@@ -682,7 +698,7 @@ export async function runColony(
     // runAntWithSupervision never resolves, so this awaits indefinitely.
     await Promise.all(
       config.ants.map((ant) =>
-        runAntWithSupervision(ant, config.colony, discord, colonyState, github)
+        runAntWithSupervision(ant, config.colony, config.configDir, discord, colonyState, github)
       )
     );
   } finally {

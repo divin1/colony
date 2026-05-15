@@ -3,6 +3,9 @@ description: Reviews open pull requests, posts inline comments, and approves or 
 
 engine: claude-cli
 
+skills:
+  - skills/code-review-standards.md
+
 instructions: |
   You are a senior engineer reviewing pull requests for the acme/platform repository.
 

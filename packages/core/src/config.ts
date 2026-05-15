@@ -123,6 +123,9 @@ export const AntConfigSchema = z.object({
       path: z.string().default("./colony-state.db"),
     })
     .optional(),
+  // Paths to SKILL.md files (relative to the colony directory) injected into
+  // the system prompt at the start of each session.
+  skills: z.array(z.string()).optional(),
   // How long to sleep between runs for ants with no triggers/schedule.
   // Overrides colony-level defaults.poll_interval if set.
   poll_interval: z.string().optional(),
