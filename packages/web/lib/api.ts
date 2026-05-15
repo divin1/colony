@@ -22,7 +22,8 @@ async function del(path: string): Promise<void> {
   if (!res.ok && res.status !== 404) throw new Error(`${res.status} ${res.statusText}`);
 }
 
-async function put(path: string, body: unknown): Promise<void> {
+
+async function put(path: string, body: unknown): Promise<{ restartRequired: boolean }> {
   const res = await fetch(BASE + path, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -32,6 +33,29 @@ async function put(path: string, body: unknown): Promise<void> {
     const text = await res.text().catch(() => res.statusText);
     throw new Error(`${res.status}: ${text}`);
   }
+  return { restartRequired: res.headers.get("x-colony-restart-required") === "true" };
+}
+
+async function postJson<T = void>(path: string, body: unknown): Promise<T & { restartRequired: boolean }> {
+  const res = await fetch(BASE + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`${res.status}: ${text}`);
+  }
+  return { ...(await res.json() as T), restartRequired: res.headers.get("x-colony-restart-required") === "true" };
+}
+
+async function deleteReq(path: string): Promise<{ restartRequired: boolean }> {
+  const res = await fetch(BASE + path, { method: "DELETE" });
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`${res.status}: ${text}`);
+  }
+  return { restartRequired: res.headers.get("x-colony-restart-required") === "true" };
 }
 
 export const api = {
@@ -56,8 +80,12 @@ export const api = {
   workCancel: (id: string) => del(`/api/work/${id}`),
 
   configGet: () => get<RawColonyConfig>("/api/config"),
+  configUpdate: (config: RawColonyConfig) => put("/api/config", config),
+
   configAntsGet: () => get<RawAntConfig[]>("/api/config/ants"),
   configAntGet: (name: string) => get<RawAntConfig>(`/api/config/ants/${encodeURIComponent(name)}`),
   configAntUpdate: (name: string, config: RawAntConfig) =>
     put(`/api/config/ants/${encodeURIComponent(name)}`, config),
+  configAntCreate: (config: RawAntConfig) => postJson("/api/config/ants", config),
+  configAntDelete: (name: string) => deleteReq(`/api/config/ants/${encodeURIComponent(name)}`),
 };
