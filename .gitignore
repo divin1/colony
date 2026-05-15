@@ -8,4 +8,8 @@ coverage/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
 
+# Next.js
+packages/web/.next/
+packages/web/next-env.d.ts
+
 colony
