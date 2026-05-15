@@ -1,164 +1,138 @@
 # Colony — Project Plan
 
-_Last updated: 2026-03-23_ (0.3.4)
+_Last updated: 2026-05-15_ (0.4.0)
 
 ---
 
 ## Current State
 
-The core framework is **production-ready**. All primary roadmap items are complete and tested. Remaining work is feature expansion (additional integrations, backlog management, polish).
+The v0.4.0 architecture rework is complete. Colony has migrated from in-process SDK engines to a CLI-spawn plugin registry, aligning with Multica's daemon pattern. The remaining roadmap focuses on making Discord optional, adding a local web dashboard as the primary control plane, and deepening GitHub Issues integration.
 
 ### What is fully implemented
 
 | Area | Status | Notes |
 |---|---|---|
-| Colony runner | ✅ | Ant lifecycle, supervisor loop, restart on crash, cron, GitHub polling |
-| Ant session (Claude) | ✅ | Full Agent SDK `query()` integration, hooks wired |
-| Ant session (Gemini) | ✅ | In-process `@google/genai` SDK loop, full hook interception (same as Claude) |
-| Confirmation flow | ✅ | PreToolUse hooks, Discord ✅/❌ reactions, timeout → deny |
-| PostToolUse logging | ✅ | Configurable: `"off"`, `"impactful"` (default), `"all"` |
+| Colony runner | ✅ | Ant lifecycle, supervisor loop, typed error classification, backoff |
+| Engine registry | ✅ | Plugin system — registerEngine / getEngine |
+| `claude-cli` engine | ✅ | Spawns `claude` binary, NDJSON parsing, structured error classification |
+| `gemini-cli` engine | ✅ | Spawns `gemini --yolo` (CLI subprocess, no tool interception) |
+| `codex` / `opencode` / `cli` engines | ✅ | Generic CLI runner, streams stdout to Discord |
 | Discord integration | ✅ | send, addReaction, waitForReaction, resolveChannelId |
-| Human → Ant commands | ✅ | pause/stop, resume/start, work instructions; all ants always listen |
+| Human → Ant commands | ✅ | Slash commands (/help, /status, /stats, /pause, /resume, /clear) |
 | GitHub integration | ✅ | listIssues (with label filter), createIssueComment |
 | Config validation | ✅ | Zod schemas, env interpolation, fail-fast on missing vars |
 | State persistence | ✅ | memory and SQLite backends; issue deduplication |
 | PLAN.md convention | ✅ | Injected into every ant's system prompt |
 | Git identity | ✅ | Injected into every ant's system prompt from colony.yaml defaults |
-| CLI: init | ✅ | Scaffolds colony directory with example configs |
-| CLI: validate | ✅ | Validates all YAML and environment variable resolution |
-| CLI: run | ✅ | Wires integrations and starts the colony runner |
-| Docker deployment | ✅ | Dockerfile + docker-compose, volume mounting, env file |
+| CLI: init / validate / run / update | ✅ | Full CLI surface, including self-update |
+| Docker deployment | ✅ | Dockerfile + docker-compose; no SDK deps required |
 | CLI binary distribution | ✅ | `bun build --compile`, GitHub Actions release workflow, install.sh |
-| Documentation | ✅ | getting-started, configuration, cli, docker |
+| Documentation | ✅ | getting-started, configuration, cli, docker, supervisor |
+
+### What was removed in v0.4.0
+
+| Removed | Reason |
+|---|---|
+| `@anthropic-ai/claude-agent-sdk` | Replaced by `claude` CLI subprocess |
+| `@google/genai` | Replaced by `gemini` CLI subprocess |
+| `autonomy` config field | CLI engines cannot intercept tool calls mid-session |
+| `confirmation` config field | Same reason |
+| `confirmation_timeout` colony config | No confirmation flow to time out |
+| Pre-action Discord ✅/❌ confirmation | Removed with autonomy |
+| PostToolUse logging | Removed with SDK hooks |
+| `notify_discord` Gemini tool | Gemini is now CLI-only, no custom tools |
 
 ### Test coverage
 
-- **Core:** Full coverage — runner, ant, hooks, config, state, gemini, errors
-- **CLI:** `init`, `validate`, and `run` all have integration tests
+- **Core:** runner helpers, config, errors, state, claude-cli engine, hooks (structural)
+- **CLI:** `init`, `validate`, `run` commands
 - **Integrations:** Discord and GitHub fully tested
-- All 201 tests pass (`bun test`)
+- 144 tests pass (`bun test`)
+
+---
+
+## Roadmap
+
+### Phase 0 — Bug fixes ✅ (complete)
+
+- [x] Fix `init.ts` scaffold: remove `confirmation_timeout` from generated `colony.yaml`
+- [x] Wrap engine spawns in try-catch; classify binary-not-found as `permanent` AntSessionError
+- [x] Pre-flight binary check in `runColony()` — fail fast before supervisor loops start
+- [x] Update PLAN.md to v0.4.0
+
+### Phase 1 — Make Discord optional
+
+Discord is currently required to start the colony runner. The goal is to decouple it so the runner works without Discord (outputting to console), with Discord becoming an opt-in notification webhook.
+
+- [ ] Make `discord` optional in `runColony()` — output to console when absent
+- [ ] Add `discord_webhook` config to `colony.yaml` (webhook URL, no bot setup required)
+- [ ] Remove `addReaction` / `waitForReaction` from `ConfirmationChannel` interface (unused)
+- [ ] Update `commands/run.ts` to not require Discord config
+
+### Phase 2 — Local web dashboard (primary control plane)
+
+Replaces Discord as the main human interface. Embedded HTTP server, opt-in via `monitoring.port`.
+
+- [ ] `Bun.serve()` HTTP server embedded in runner
+- [ ] REST API: GET /api/status, POST /api/ants/:name/{pause,resume,prompt,clear}
+- [ ] Server-Sent Events stream of live session output per ant
+- [ ] Minimal single-page HTML dashboard (ant cards, live output, control buttons)
+- [ ] `ColonyState` object tracking per-ant status for the HTTP layer
+
+### Phase 3 — GitHub Issues bidirectional
+
+Agents consume GitHub Issues (already done via trigger) and comment back on them.
+
+- [ ] Inject issue context into session prompt when triggered by `github_issue`
+- [ ] Post summary comment on the triggering issue after a successful session
+- [ ] Add `issueContext` to `EngineRunOptions`
+
+### Phase 4 — SKILL.md support
+
+Adopt Anthropic Agent Skills standard. Composable instruction files injected at dispatch time.
+
+- [ ] `skills: [path/to/skill.md]` field in ant config
+- [ ] `packages/core/src/skill.ts` — load and strip YAML frontmatter
+- [ ] Inject skill content into `commonInstructions` at session start
+- [ ] Example skill files in `config/examples/skills/`
+
+### Phase 5 — Agent memory
+
+SQLite-backed cross-session context. Ants remember what they did last time.
+
+- [ ] `getLastSessionSummary` / `setSessionSummary` on `AntState` interface
+- [ ] `session_summaries` table in SQLiteState
+- [ ] Capture last assistant text block from engine output
+- [ ] Prepend previous summary to session prompt
+
+### Phase 6 — MCP server
+
+Expose colony control as MCP tools for Claude Desktop and other MCP hosts.
+
+- [ ] `packages/integrations/mcp/` workspace package
+- [ ] Tools: colony_status, colony_prompt, colony_pause, colony_resume
 
 ---
 
 ## Open Decisions
 
-These are unresolved architectural questions that need a decision before implementing certain features:
+### Discord long-term
 
-### ~~1. Container isolation strategy~~ — resolved
-**Decision:** Keep one container per colony. See [DECISIONS.md](./DECISIONS.md#decision-1-container-isolation-strategy).
+Discord remains available as an optional integration but is no longer the primary control plane. The web dashboard (Phase 2) is the target control plane. Long-term, Discord may be replaced by a simple webhook notifier (Phase 1 introduces this). No decision yet on whether to deprecate the full Discord integration.
 
-### ~~2. Ant session memory / state persistence~~ — resolved
-**Decision:** Add `MEMORY.md` convention (preference memory per ant, engine-agnostic). Keep `persistSession: false`; session resume stays a future backlog item. See [DECISIONS.md](./DECISIONS.md#decision-2-ant-session-memory-and-preference-persistence).
+### Interrupting a running session
 
-### ~~3. PostToolUse logging verbosity~~ — resolved
-**Decision:** Add `logging.tool_calls: "off" | "impactful" | "all"` to ant config, default `"impactful"`. See [DECISIONS.md](./DECISIONS.md#decision-3-posttooluse-logging-verbosity).
+Human commands (pause, work instructions) currently only take effect after the current session finishes. Interrupting mid-session requires an AbortSignal passed to the engine runner. Not yet planned.
 
----
+### GitHub webhooks vs. polling
 
-## Backlog
-
-Ordered by priority / impact.
-
-### High priority
-
-#### `notify_discord` for Claude ants — unify Discord output control across engines
-
-- **Problem:** Gemini ants with `lm_output: "console"` can still post intentional milestone messages to Discord via the `notify_discord` tool. Claude ants have no equivalent — with `lm_output: "console"` they go completely silent on Discord; with `lm_output: "discord"` (default) all LLM narration floods the channel. Flooding Discord is unacceptable for production ants.
-- **Root cause:** The Claude Agent SDK `query()` uses the `claude_code` preset; there is no API to inject custom tools into it.
-- **Proposed approaches (pick one):**
-  1. **Bash hook interception** — intercept a sentinel bash command (e.g. `colony notify "message"`) in a PostToolUse hook and forward it to Discord. No SDK change needed; Claude can call `bash` with this command. Instructions tell Claude to use this instead of producing text output.
-  2. **Local HTTP endpoint** — runner exposes a `POST /notify` endpoint; Claude calls it via `curl`. More robust but requires binding a port.
-  3. **Wait for Agent SDK custom tool support** — if the SDK gains a way to register custom tools alongside the preset, use the same `notify_discord` approach as Gemini.
-- **Recommendation:** Option 1 (bash hook) — zero infrastructure, works today, easy to document.
-- **Files:** `packages/core/src/hooks.ts` (new PostToolUse handler or dedicated hook); `packages/core/src/ant.ts` (wire up the hook); docs.
-- **Acceptance criteria:** A Claude ant with `lm_output: "console"` can post structured Discord messages by running `colony notify "message"` in bash, matching the Gemini `notify_discord` UX.
-
-#### ~~PostToolUse logging — make opt-in~~ — done
-`logging.tool_calls: "off" | "impactful" | "all"` implemented (default `"impactful"`). Read-only tools (`Read`, `Grep`, `Glob`, `LS`, `WebSearch`, `WebFetch`, `TodoRead`) are skipped by default; `"all"` restores previous verbose behaviour; `"off"` disables the hook entirely.
-
-#### ~~CLI: tests for `validate` and `run` commands~~ — done
-Integration tests added for both commands. Spawn uses `process.execPath` to find `bun` reliably in any environment.
-
-#### `persistSession: true` investigation
-- **Problem:** The Agent SDK call uses `persistSession: false`, meaning each ant session has no memory of prior sessions.
-- **Proposal:** Evaluate `persistSession: true` with a named session ID derived from the ant name, allowing context carryover between runs.
-- **Risk:** Persistent sessions accumulate tokens and may hit limits; need a truncation strategy.
-- **Files:** `packages/core/src/ant.ts`
-
-#### Prevent leaks
-- Determine which file contents are sensitive and do no log those actions to discord.
-- Minimize logging to the minimum necessary
----
-
-### Medium priority
-
-#### GitHub webhooks (replace polling)
-- **Problem:** GitHub issues are polled every 5 minutes (`GITHUB_POLL_INTERVAL_MS = 5 * 60 * 1000`). New issues have a 5-minute response lag.
-- **Proposal:** Add webhook receiver (HTTP server) that receives GitHub push events; replace polling for ants with `triggers[].type: github_issue`.
-- **Considerations:** Requires exposing an HTTP endpoint; needs a secret for webhook validation; URL needs to be reachable from GitHub.
-- **Files:** New `packages/integrations/github/src/webhooks.ts`; update `runner.ts`
-
-#### Backlog management
-- **Problem:** No unified "backlog" abstraction. Ants discover work ad-hoc via cron, issue triggers, or Discord messages.
-- **Proposal:** Implement the `backlog` config block (already in the CLAUDE.md schema) that auto-discovers and queues work items from GitHub Issues. The ant processes one item per session.
-- **Config schema already defined:**
-  ```yaml
-  backlog:
-    source: github_issues
-    filter:
-      labels: [ant-ready]
-      assignee: string
-  ```
-- **Files:** New `packages/core/src/backlog.ts`; update `runner.ts`; update `config.ts` schema
-
-#### Interrupting a running session
-- **Problem:** Human commands (pause, work instructions) only take effect after the current session completes. There is no way to interrupt a session mid-execution.
-- **Proposal:** The Agent SDK `query()` returns an async iterator; passing an `AbortSignal` would allow interruption. Add `AbortController` to `runAnt()`; expose abort via the control command handler.
-- **Files:** `packages/core/src/ant.ts`, `packages/core/src/runner.ts`
+Issues are polled every 5 minutes. Real-time response requires exposing an HTTP webhook endpoint. Phase 2's HTTP server makes this feasible — add it then.
 
 ---
 
-### Low priority / future
+## Key invariants to preserve
 
-#### Slack integration
-- Discord works well; Slack is useful for teams already using it.
-- Implement `packages/integrations/slack/` with the same `MessagingIntegration` interface.
-- The `runner.ts` already uses the interface structurally — swapping Discord for Slack requires only wiring changes in `commands/run.ts`.
-
-#### Multi-colony management CLI
-- `colony status` — show running ants and their states (requires a running process or status file)
-- `colony restart <ant>` — gracefully restart a specific ant without stopping the colony
-- `colony logs <ant>` — tail Discord or stdout logs for a specific ant
-
-#### Colony-level event bus
-- Allow ants to communicate with each other via internal events, not just through Discord.
-- Useful for "coordinator ant" patterns where one ant dispatches work to specialists.
-
----
-
-## Implementation Notes
-
-### Adding a new integration (checklist)
-
-1. Create `packages/integrations/<name>/` with its own `package.json` and `src/index.ts`
-2. Implement the `MessagingIntegration` interface (if messaging) or a custom interface
-3. Add the integration to `colony.yaml` schema in `config.ts`
-4. Wire it up in `packages/cli/src/commands/run.ts`
-5. Document in `docs/configuration.md`
-6. Add example to `config/examples/`
-
-### Adding a new trigger type (checklist)
-
-1. Add the new type to `TriggerSchema` in `config.ts`
-2. Add detection logic in `runner.ts` (`runAntWithSupervision`)
-3. Wire up the listener / poller
-4. Update `hasAnyTrigger` if the trigger prevents autonomous looping
-5. Document in `docs/configuration.md` and `docs/getting-started.md`
-
-### Key invariants to preserve
-
-- `runAntWithSupervision` never resolves — it loops forever or throws; `runColony` relies on this
-- Ant crashes must not propagate to other ants — always catch in the supervisor loop
+- `runAntWithSupervision` never resolves — it loops forever; `runColony` relies on this
+- Ant crashes must never propagate to other ants — always catch in the supervisor loop
 - Discord token / GitHub token must never be logged or appear in error messages
-- `persistSession: false` is intentional until a memory strategy is decided
-- Every ant MUST have `integrations.discord.channel` — the runner validates this at startup
+- Engine binary must exist at startup — checked in `runColony()` pre-flight
