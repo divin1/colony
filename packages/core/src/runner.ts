@@ -3,6 +3,8 @@ import { runAnt } from "./ant";
 import type { ConfirmationChannel } from "./hooks";
 import type { LoadedConfig, AntConfig, ColonyConfig } from "./config";
 import { createState } from "./state";
+import { ColonyState } from "./colony-state";
+import { createDashboardHandler } from "./dashboard";
 import { AntSessionError } from "./errors";
 import { log } from "./log";
 
@@ -201,6 +203,7 @@ async function runAntWithSupervision(
   ant: AntConfig,
   colony: ColonyConfig,
   discord: RunnerDiscord,
+  colonyState: ColonyState,
   github?: RunnerGitHub
 ): Promise<never> {
   // Fall back to the ant name when no Discord channel is configured (e.g. ConsoleDiscord).
@@ -216,17 +219,8 @@ async function runAntWithSupervision(
   );
   // antState used for GitHub issue deduplication (hasSeenIssue / markIssueSeen).
 
-  log(ant.name, "starting");
-  await discord.send(channelId, `🐜 Ant **${ant.name}** is starting.`);
-
   const defaultPrompt = `You are ${ant.name}. ${ant.description}. Begin your work session now.`;
   const queue = new PromiseQueue<string>();
-
-  const triggers = ant.triggers ?? [];
-  const hasCron = !!ant.schedule?.cron;
-  const hasDiscordTrigger = triggers.some((t) => t.type === "discord_command");
-  const hasGithubTrigger = triggers.some((t) => t.type === "github_issue");
-  const hasAnyTrigger = hasCron || hasDiscordTrigger || hasGithubTrigger;
 
   // --- Pause / resume state ---
   let paused = false;
@@ -235,6 +229,60 @@ async function runAntWithSupervision(
     new Promise((resolve) => {
       resumeResolve = resolve;
     });
+
+  // --- Register with colony state for dashboard control ---
+  colonyState.register(ant.name, ant.engine, {
+    pause: () => {
+      if (!paused) {
+        paused = true;
+        broadcast(`⏸️ **${ant.name}** will pause after the current session.`);
+      }
+    },
+    resume: () => {
+      if (paused) {
+        paused = false;
+        resumeResolve?.();
+        resumeResolve = null;
+        broadcast(`▶️ **${ant.name}** resuming.`);
+        colonyState.setState(ant.name, "running");
+      }
+    },
+    pushPrompt: (prompt: string) => {
+      queue.push(prompt);
+      if (paused) {
+        paused = false;
+        resumeResolve?.();
+        resumeResolve = null;
+        colonyState.setState(ant.name, "running");
+      }
+    },
+    clearQueue: () => queue.clear(),
+    getQueueSize: () => queue.size,
+  });
+
+  // Sends to both Discord and the dashboard output stream.
+  const broadcast = (message: string): void => {
+    colonyState.pushOutput(ant.name, message);
+    discord.send(channelId, message).catch(() => {});
+  };
+
+  // Channel proxy so engine output also reaches the dashboard.
+  const teeChannel: ConfirmationChannel = {
+    send: async (chId: string, content: string) => {
+      colonyState.pushOutput(ant.name, content);
+      return discord.send(chId, content);
+    },
+  };
+
+  log(ant.name, "starting");
+  colonyState.setState(ant.name, "starting");
+  broadcast(`🐜 Ant **${ant.name}** is starting.`);
+
+  const triggers = ant.triggers ?? [];
+  const hasCron = !!ant.schedule?.cron;
+  const hasDiscordTrigger = triggers.some((t) => t.type === "discord_command");
+  const hasGithubTrigger = triggers.some((t) => t.type === "github_issue");
+  const hasAnyTrigger = hasCron || hasDiscordTrigger || hasGithubTrigger;
 
   // --- Session statistics ---
   const startedAt = Date.now();
@@ -298,39 +346,19 @@ async function runAntWithSupervision(
 
       case "/pause":
       case "/stop":
-        if (!paused) {
-          paused = true;
-          log(ant.name, "pausing after current session");
-          discord
-            .send(
-              channelId,
-              `⏸️ **${ant.name}** will pause after the current session.`
-            )
-            .catch(() => {});
-        }
+        log(ant.name, "pausing after current session");
+        colonyState.pause(ant.name);
         return true;
 
       case "/resume":
       case "/start":
-        if (paused) {
-          paused = false;
-          resumeResolve?.();
-          resumeResolve = null;
-          log(ant.name, "resumed");
-          discord
-            .send(channelId, `▶️ **${ant.name}** resuming.`)
-            .catch(() => {});
-        }
+        log(ant.name, "resumed");
+        colonyState.resume(ant.name);
         return true;
 
       case "/clear": {
-        const cleared = queue.clear();
-        discord
-          .send(
-            channelId,
-            `🗑️ **${ant.name}** work queue cleared (${cleared} item(s) discarded).`
-          )
-          .catch(() => {});
+        const cleared = colonyState.clearQueue(ant.name);
+        broadcast(`🗑️ **${ant.name}** work queue cleared (${cleared} item(s) discarded).`);
         return true;
       }
 
@@ -367,37 +395,17 @@ async function runAntWithSupervision(
     const cmd = text.toLowerCase();
 
     if (cmd === "pause" || cmd === "stop") {
-      if (!paused) {
-        paused = true;
-        log(ant.name, "pausing after current session");
-        discord
-          .send(
-            channelId,
-            `⏸️ **${ant.name}** will pause after the current session.`
-          )
-          .catch(() => {});
-      }
+      log(ant.name, "pausing after current session");
+      colonyState.pause(ant.name);
     } else if (cmd === "resume" || cmd === "start") {
-      if (paused) {
-        paused = false;
-        resumeResolve?.();
-        resumeResolve = null;
-        log(ant.name, "resumed");
-        discord
-          .send(channelId, `▶️ **${ant.name}** resuming.`)
-          .catch(() => {});
-      }
+      log(ant.name, "resumed");
+      colonyState.resume(ant.name);
     } else {
-      // Forward as work instruction. Auto-resumes if the ant is currently paused
-      // so the message is acted on immediately rather than queued indefinitely.
-      queue.push(
+      // Forward as work instruction. Auto-resumes if the ant is currently paused.
+      colonyState.pushPrompt(
+        ant.name,
         `You are ${ant.name}. A human operator (${payload.author}) sent you this message: "${text}"`
       );
-      if (paused) {
-        paused = false;
-        resumeResolve?.();
-        resumeResolve = null;
-      }
     }
   });
 
@@ -453,45 +461,41 @@ async function runAntWithSupervision(
   // eslint-disable-next-line no-constant-condition
   while (true) {
     if (paused) {
+      colonyState.setState(ant.name, "paused");
       await waitForResume();
     }
     const prompt = await queue.next();
     log(ant.name, "session starting");
+    colonyState.setState(ant.name, "running");
     try {
       await runAnt(prompt, {
         config: ant,
-        channel: discord,
+        channel: teeChannel,
         channelId,
         commonInstructions: buildCommonInstructions(colony),
       });
       sessionsCompleted++;
       consecutiveCrashes = 0;
+      colonyState.incrementSessions(ant.name, "completed");
       log(ant.name, "session completed");
-      await discord
-        .send(channelId, `✅ **${ant.name}** completed its work session.`)
-        .catch(() => {});
+      broadcast(`✅ **${ant.name}** completed its work session.`);
     } catch (err) {
       sessionsCrashed++;
+      colonyState.incrementSessions(ant.name, "crashed");
       if (err instanceof AntSessionError) {
         switch (err.category) {
           case "max_turns":
-            // Normal turn-limit completion — restart immediately, no penalty.
             consecutiveCrashes = 0;
             log(ant.name, "max turns reached — restarting");
             break;
 
           case "rate_limit": {
             consecutiveCrashes++;
-            const waitMs =
-              err.retryAfterMs ?? backoffDelayMs(consecutiveCrashes);
+            const waitMs = err.retryAfterMs ?? backoffDelayMs(consecutiveCrashes);
             const waitSec = Math.round(waitMs / 1000);
             log(ant.name, `rate limited — resuming in ${waitSec}s`);
-            await discord
-              .send(
-                channelId,
-                `⏳ **${ant.name}** is rate limited. Resuming in ${waitSec}s…`
-              )
-              .catch(() => {});
+            colonyState.setState(ant.name, "backoff");
+            broadcast(`⏳ **${ant.name}** is rate limited. Resuming in ${waitSec}s…`);
             await Bun.sleep(waitMs);
             break;
           }
@@ -499,12 +503,8 @@ async function runAntWithSupervision(
           case "billing":
             consecutiveCrashes = 0;
             log(ant.name, "billing error — pausing until resumed");
-            await discord
-              .send(
-                channelId,
-                `💳 **${ant.name}** has a billing error — check your Anthropic account. Pausing until resumed.`
-              )
-              .catch(() => {});
+            colonyState.setState(ant.name, "paused");
+            broadcast(`💳 **${ant.name}** has a billing error — check your Anthropic account. Pausing until resumed.`);
             paused = true;
             await waitForResume();
             break;
@@ -512,12 +512,8 @@ async function runAntWithSupervision(
           case "auth":
             consecutiveCrashes = 0;
             log(ant.name, "authentication failed — pausing until resumed");
-            await discord
-              .send(
-                channelId,
-                `🔐 **${ant.name}** failed to authenticate — check credentials. Pausing until resumed.`
-              )
-              .catch(() => {});
+            colonyState.setState(ant.name, "paused");
+            broadcast(`🔐 **${ant.name}** failed to authenticate — check credentials. Pausing until resumed.`);
             paused = true;
             await waitForResume();
             break;
@@ -525,12 +521,8 @@ async function runAntWithSupervision(
           case "budget":
             consecutiveCrashes = 0;
             log(ant.name, "USD budget cap exceeded — pausing until resumed");
-            await discord
-              .send(
-                channelId,
-                `💰 **${ant.name}** exceeded its USD budget cap. Pausing until resumed.`
-              )
-              .catch(() => {});
+            colonyState.setState(ant.name, "paused");
+            broadcast(`💰 **${ant.name}** exceeded its USD budget cap. Pausing until resumed.`);
             paused = true;
             await waitForResume();
             break;
@@ -539,12 +531,8 @@ async function runAntWithSupervision(
             consecutiveCrashes++;
             const delay = backoffDelayMs(consecutiveCrashes);
             log(ant.name, `permanent error: ${err.message} — restarting in ${delay / 1000}s`);
-            await discord
-              .send(
-                channelId,
-                `🚫 **${ant.name}** encountered a permanent error: ${err.message}\nRestarting in ${delay / 1000}s…`
-              )
-              .catch(() => {});
+            colonyState.setState(ant.name, "backoff");
+            broadcast(`🚫 **${ant.name}** encountered a permanent error: ${err.message}\nRestarting in ${delay / 1000}s…`);
             await Bun.sleep(delay);
             break;
           }
@@ -554,12 +542,8 @@ async function runAntWithSupervision(
             consecutiveCrashes++;
             const delay = backoffDelayMs(consecutiveCrashes);
             log(ant.name, `crashed: ${err.message} — restarting in ${delay / 1000}s`);
-            await discord
-              .send(
-                channelId,
-                `❌ **${ant.name}** crashed: ${err.message}\nRestarting in ${delay / 1000}s…`
-              )
-              .catch(() => {});
+            colonyState.setState(ant.name, "crashed");
+            broadcast(`❌ **${ant.name}** crashed: ${err.message}\nRestarting in ${delay / 1000}s…`);
             await Bun.sleep(delay);
           }
         }
@@ -569,12 +553,8 @@ async function runAntWithSupervision(
         const delay = backoffDelayMs(consecutiveCrashes);
         const message = err instanceof Error ? err.message : String(err);
         log(ant.name, `crashed: ${message} — restarting in ${delay / 1000}s`);
-        await discord
-          .send(
-            channelId,
-            `❌ **${ant.name}** crashed: ${message}\nRestarting in ${delay / 1000}s…`
-          )
-          .catch(() => {});
+        colonyState.setState(ant.name, "crashed");
+        broadcast(`❌ **${ant.name}** crashed: ${message}\nRestarting in ${delay / 1000}s…`);
         await Bun.sleep(delay);
       }
     }
@@ -646,14 +626,29 @@ export async function runColony(
     return;
   }
 
+  // Create shared colony state for the dashboard.
+  const colonyState = new ColonyState(config.colony.name);
+
+  // Start the optional HTTP dashboard.
+  let dashboardServer: ReturnType<typeof Bun.serve> | undefined;
+  const monitorPort = config.colony.monitoring?.port;
+  if (monitorPort) {
+    dashboardServer = Bun.serve({
+      port: monitorPort,
+      fetch: createDashboardHandler(colonyState),
+    });
+    console.log(`Dashboard: http://localhost:${monitorPort}`);
+  }
+
   try {
     // runAntWithSupervision never resolves, so this awaits indefinitely.
     await Promise.all(
       config.ants.map((ant) =>
-        runAntWithSupervision(ant, config.colony, discord, github)
+        runAntWithSupervision(ant, config.colony, discord, colonyState, github)
       )
     );
   } finally {
+    dashboardServer?.stop(true);
     await discord.disconnect();
   }
 }

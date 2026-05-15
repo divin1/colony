@@ -63,6 +63,12 @@ export const ColonyConfigSchema = z.object({
         .optional(),
     })
     .optional(),
+  // Local web dashboard. When set, an HTTP server is started on this port.
+  monitoring: z
+    .object({
+      port: z.number().int().min(1).max(65535),
+    })
+    .optional(),
 });
 
 export type ColonyConfig = z.infer<typeof ColonyConfigSchema>;
