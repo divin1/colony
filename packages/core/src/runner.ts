@@ -194,9 +194,6 @@ async function runAntWithSupervision(
   }
 
   const channelId = await discord.resolveChannelId(channelName);
-  const timeoutMs = parseTimeoutMs(
-    colony.defaults?.confirmation_timeout ?? "30m"
-  );
 
   const pollIntervalRaw = ant.poll_interval ?? colony.defaults?.poll_interval;
   const pollIntervalMs = pollIntervalRaw ? parseTimeoutMs(pollIntervalRaw) : 0;
@@ -205,6 +202,7 @@ async function runAntWithSupervision(
     ant.state?.backend ?? "memory",
     ant.state?.path
   );
+  // antState used for GitHub issue deduplication (hasSeenIssue / markIssueSeen).
 
   log(ant.name, "starting");
   await discord.send(channelId, `🐜 Ant **${ant.name}** is starting.`);
@@ -239,30 +237,6 @@ async function runAntWithSupervision(
     const trimmed = text.trim();
     const lower = trimmed.toLowerCase();
 
-    // /auto-approve <pattern>
-    if (lower.startsWith("/auto-approve ")) {
-      const pattern = trimmed.slice("/auto-approve ".length).trim();
-      if (pattern) {
-        antState.addConfirmationOverride(ant.name, pattern, "approve");
-        discord
-          .send(channelId, `✅ **${ant.name}** will auto-approve actions matching \`${pattern}\``)
-          .catch(() => {});
-      }
-      return true;
-    }
-
-    // /auto-deny <pattern>
-    if (lower.startsWith("/auto-deny ")) {
-      const pattern = trimmed.slice("/auto-deny ".length).trim();
-      if (pattern) {
-        antState.addConfirmationOverride(ant.name, pattern, "deny");
-        discord
-          .send(channelId, `🚫 **${ant.name}** will auto-deny actions matching \`${pattern}\``)
-          .catch(() => {});
-      }
-      return true;
-    }
-
     switch (lower) {
       case "/help":
         discord
@@ -276,10 +250,6 @@ async function runAntWithSupervision(
               `\`/pause\` (or \`/stop\`) — pause after the current session`,
               `\`/resume\` (or \`/start\`) — resume a paused ant`,
               `\`/clear\` — discard all queued work items`,
-              `\`/auto-approve <pattern>\` — always approve actions matching pattern`,
-              `\`/auto-deny <pattern>\` — always deny actions matching pattern`,
-              `\`/confirmations\` — list current auto-approve/deny rules`,
-              `\`/reset-confirmations\` — clear all auto-approve/deny rules`,
               `_Any other message is forwarded to the ant as a work instruction._`,
             ].join("\n")
           )
@@ -351,36 +321,6 @@ async function runAntWithSupervision(
           .catch(() => {});
         return true;
       }
-
-      case "/confirmations": {
-        const overrides = antState.getConfirmationOverrides(ant.name);
-        if (overrides.length === 0) {
-          discord
-            .send(channelId, `**${ant.name}** confirmation overrides: _(none)_`)
-            .catch(() => {});
-        } else {
-          const approveList = overrides
-            .filter((o) => o.decision === "approve")
-            .map((o) => `\`${o.pattern}\``)
-            .join(", ");
-          const denyList = overrides
-            .filter((o) => o.decision === "deny")
-            .map((o) => `\`${o.pattern}\``)
-            .join(", ");
-          const lines = [`**${ant.name}** confirmation overrides:`];
-          if (approveList) lines.push(`✅ auto-approve: ${approveList}`);
-          if (denyList) lines.push(`🚫 auto-deny: ${denyList}`);
-          discord.send(channelId, lines.join("\n")).catch(() => {});
-        }
-        return true;
-      }
-
-      case "/reset-confirmations":
-        antState.clearConfirmationOverrides(ant.name);
-        discord
-          .send(channelId, `🗑️ **${ant.name}** confirmation overrides cleared.`)
-          .catch(() => {});
-        return true;
 
       default:
         return false;
@@ -510,9 +450,7 @@ async function runAntWithSupervision(
         config: ant,
         channel: discord,
         channelId,
-        confirmationTimeoutMs: timeoutMs,
         commonInstructions: buildCommonInstructions(colony),
-        state: antState,
       });
       sessionsCompleted++;
       consecutiveCrashes = 0;

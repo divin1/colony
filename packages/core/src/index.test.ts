@@ -11,11 +11,6 @@ describe("@colony/core exports", () => {
     expect(core.buildCommonInstructions).toBeDefined();
   });
 
-  it("exports hooks", () => {
-    expect(core.isDangerousRaw).toBeDefined();
-    expect(core.createConfirmationHook).toBeDefined();
-  });
-
   it("exports ant runner", () => {
     expect(core.runAnt).toBeDefined();
   });

@@ -1,52 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { extractText, chunkText } from "./ant";
-import type { SDKAssistantMessage } from "@anthropic-ai/claude-agent-sdk";
-
-// Build a minimal SDKAssistantMessage for testing.
-function makeMsg(
-  content: Array<{ type: string; text?: string }>
-): SDKAssistantMessage {
-  return {
-    type: "assistant",
-    message: { content } as SDKAssistantMessage["message"],
-    parent_tool_use_id: null,
-    uuid: "test-uuid" as SDKAssistantMessage["uuid"],
-    session_id: "test-session",
-  };
-}
-
-describe("extractText", () => {
-  it("extracts text from a single text block", () => {
-    const msg = makeMsg([{ type: "text", text: "Hello world" }]);
-    expect(extractText(msg)).toBe("Hello world");
-  });
-
-  it("joins multiple text blocks with newlines", () => {
-    const msg = makeMsg([
-      { type: "text", text: "First" },
-      { type: "text", text: "Second" },
-    ]);
-    expect(extractText(msg)).toBe("First\nSecond");
-  });
-
-  it("skips non-text blocks (e.g. tool_use)", () => {
-    const msg = makeMsg([
-      { type: "tool_use" },
-      { type: "text", text: "After tool" },
-    ]);
-    expect(extractText(msg)).toBe("After tool");
-  });
-
-  it("returns empty string when no text blocks", () => {
-    const msg = makeMsg([{ type: "tool_use" }]);
-    expect(extractText(msg)).toBe("");
-  });
-
-  it("trims surrounding whitespace", () => {
-    const msg = makeMsg([{ type: "text", text: "  trimmed  " }]);
-    expect(extractText(msg)).toBe("trimmed");
-  });
-});
+import { chunkText } from "./ant";
 
 describe("chunkText", () => {
   it("returns a single chunk for short text", () => {

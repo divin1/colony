@@ -1,8 +1,3 @@
-import type {
-  SDKAssistantMessageError,
-  SDKResultError,
-} from "@anthropic-ai/claude-agent-sdk";
-
 export type AntErrorCategory =
   | "rate_limit" // transient, wait for resetsAt if available
   | "billing" // semi-permanent, alert and pause
@@ -23,8 +18,17 @@ export class AntSessionError extends Error {
   }
 }
 
+export type AssistantErrorString =
+  | "rate_limit"
+  | "billing_error"
+  | "authentication_failed"
+  | "server_error"
+  | "unknown"
+  | "invalid_request"
+  | "max_output_tokens";
+
 export function classifyAssistantError(
-  err: SDKAssistantMessageError
+  err: AssistantErrorString
 ): AntErrorCategory {
   switch (err) {
     case "rate_limit":
@@ -44,8 +48,14 @@ export function classifyAssistantError(
   }
 }
 
+export type ResultErrorSubtype =
+  | "error_during_execution"
+  | "error_max_turns"
+  | "error_max_budget_usd"
+  | "error_max_structured_output_retries";
+
 export function classifyResultError(
-  subtype: SDKResultError["subtype"]
+  subtype: ResultErrorSubtype
 ): AntErrorCategory {
   switch (subtype) {
     case "error_during_execution":

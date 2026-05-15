@@ -3,11 +3,11 @@ import {
   AntSessionError,
   classifyAssistantError,
   classifyResultError,
+  type AssistantErrorString,
 } from "./errors";
-import type { SDKAssistantMessageError } from "@anthropic-ai/claude-agent-sdk";
 
 describe("classifyAssistantError", () => {
-  const cases: Array<[SDKAssistantMessageError, string]> = [
+  const cases: Array<[AssistantErrorString, string]> = [
     ["rate_limit", "rate_limit"],
     ["billing_error", "billing"],
     ["authentication_failed", "auth"],

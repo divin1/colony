@@ -45,11 +45,9 @@ export const ColonyConfigSchema = z.object({
     .optional(),
   defaults: z
     .object({
-      confirmation_timeout: z.string().default("30m"),
       // Sleep between runs for ants with no triggers/schedule. Default: run immediately.
       poll_interval: z.string().optional(),
       // Git identity used for all commits made by ants in this colony.
-      // Ants are instructed to run `git config user.name/email` at session start.
       git: z
         .object({
           user_name: z.string().optional(),
@@ -70,6 +68,15 @@ const TriggerSchema = z.discriminatedUnion("type", [
     labels: z.array(z.string()).default([]),
   }),
   z.object({ type: z.literal("discord_command") }),
+]);
+
+// Supported engine names. "cli" uses a custom binary via the cli sub-config.
+const EngineEnum = z.enum([
+  "claude-cli",
+  "codex",
+  "gemini-cli",
+  "opencode",
+  "cli",
 ]);
 
 export const AntConfigSchema = z.object({
@@ -96,14 +103,6 @@ export const AntConfigSchema = z.object({
     })
     .optional(),
   triggers: z.array(TriggerSchema).optional(),
-  confirmation: z
-    .object({
-      // Tool names that always require human confirmation for this ant.
-      always_confirm_tools: z.array(z.string()).default([]),
-      // Additional bash command regex patterns that trigger confirmation.
-      dangerous_patterns: z.array(z.string()).default([]),
-    })
-    .optional(),
   state: z
     .object({
       // "memory" resets on restart; "sqlite" persists across restarts.
@@ -114,32 +113,37 @@ export const AntConfigSchema = z.object({
   // How long to sleep between runs for ants with no triggers/schedule.
   // Overrides colony-level defaults.poll_interval if set.
   poll_interval: z.string().optional(),
-  // Controls what Colony does when a dangerous action is detected.
-  //   "human"  — forward to Discord for approval (default)
-  //   "full"   — auto-approve everything, never contact Discord
-  //   "strict" — auto-deny everything flagged, never contact Discord
-  autonomy: z.enum(["human", "full", "strict"]).default("human"),
-  // Controls which PostToolUse events are forwarded to Discord.
-  //   "off"      — no tool-call logging
-  //   "impactful" — log everything except known read-only tools (default)
-  //   "all"      — log every tool call (original behaviour; useful for debugging)
+  // Where the ant's LLM text output is routed.
+  //   "discord" — posted to Discord (default)
+  //   "console" — printed to terminal only
+  //   "both"    — printed to terminal AND posted to Discord
   logging: z
     .object({
-      tool_calls: z.enum(["off", "impactful", "all"]).default("impactful"),
-      // Where the ant's LLM text output is routed.
-      //   "discord" — posted to Discord (default, backward compat)
-      //   "console" — printed to terminal only (keeps Discord clean)
-      //   "both"    — printed to terminal AND posted to Discord
       lm_output: z.enum(["discord", "console", "both"]).default("discord"),
     })
     .optional(),
-  // Which agent engine to use for this ant. Defaults to "claude".
-  engine: z.enum(["claude", "gemini"]).default("claude"),
-  // Gemini-specific options. Only used when engine is "gemini".
-  gemini: z
+  // Which agent CLI engine to use for this ant. Defaults to "claude-cli".
+  // Deprecated values "claude" and "gemini" are remapped automatically.
+  engine: z.preprocess((val) => {
+    if (val === "claude") {
+      console.warn(
+        '[colony] engine: "claude" is deprecated — use engine: "claude-cli" instead'
+      );
+      return "claude-cli";
+    }
+    if (val === "gemini") {
+      console.warn(
+        '[colony] engine: "gemini" is deprecated — use engine: "gemini-cli" instead'
+      );
+      return "gemini-cli";
+    }
+    return val;
+  }, EngineEnum).default("claude-cli"),
+  // Custom CLI sub-config. Only used when engine is "cli".
+  cli: z
     .object({
-      model: z.string().default("gemini-2.5-pro"),
-      max_turns: z.number().int().positive().default(100),
+      binary: z.string(),
+      args: z.array(z.string()).default([]),
     })
     .optional(),
 });
@@ -151,6 +155,8 @@ export type AntConfig = z.infer<typeof AntConfigSchema>;
 export interface LoadedConfig {
   colony: ColonyConfig;
   ants: AntConfig[];
+  /** Absolute path to the directory containing colony.yaml. */
+  configDir: string;
 }
 
 // --- Internals ---
@@ -208,5 +214,5 @@ export function loadConfig(dir: string): LoadedConfig {
     return antResult.data;
   });
 
-  return { colony: colonyResult.data, ants };
+  return { colony: colonyResult.data, ants, configDir: dir };
 }

@@ -41,14 +41,6 @@ describe("ColonyConfigSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("defaults confirmation_timeout to 30m", () => {
-    const result = ColonyConfigSchema.safeParse({ name: "test", defaults: {} });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.defaults?.confirmation_timeout).toBe("30m");
-    }
-  });
-
   it("parses colony-level poll_interval", () => {
     const result = ColonyConfigSchema.safeParse({
       name: "test",
@@ -134,37 +126,6 @@ describe("AntConfigSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("parses confirmation block with defaults", () => {
-    const result = AntConfigSchema.safeParse({
-      name: "worker",
-      description: "Does work",
-      instructions: "Do it.",
-      confirmation: {},
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.confirmation?.always_confirm_tools).toEqual([]);
-      expect(result.data.confirmation?.dangerous_patterns).toEqual([]);
-    }
-  });
-
-  it("parses confirmation block with explicit values", () => {
-    const result = AntConfigSchema.safeParse({
-      name: "worker",
-      description: "Does work",
-      instructions: "Do it.",
-      confirmation: {
-        always_confirm_tools: ["Write", "Edit"],
-        dangerous_patterns: ["\\bmy-deploy\\.sh\\b"],
-      },
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.confirmation?.always_confirm_tools).toEqual(["Write", "Edit"]);
-      expect(result.data.confirmation?.dangerous_patterns).toEqual(["\\bmy-deploy\\.sh\\b"]);
-    }
-  });
-
   it("parses state block with defaults", () => {
     const result = AntConfigSchema.safeParse({
       name: "worker",
@@ -216,7 +177,9 @@ describe("AntConfigSchema", () => {
     }
   });
 
-  it("defaults engine to claude", () => {
+  // --- engine ---
+
+  it("defaults engine to claude-cli", () => {
     const result = AntConfigSchema.safeParse({
       name: "worker",
       description: "Does work",
@@ -224,11 +187,24 @@ describe("AntConfigSchema", () => {
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.engine).toBe("claude");
+      expect(result.data.engine).toBe("claude-cli");
     }
   });
 
-  it("parses engine: gemini", () => {
+  it("remaps deprecated engine: claude to claude-cli", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      engine: "claude",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.engine).toBe("claude-cli");
+    }
+  });
+
+  it("remaps deprecated engine: gemini to gemini-cli", () => {
     const result = AntConfigSchema.safeParse({
       name: "worker",
       description: "Does work",
@@ -237,35 +213,63 @@ describe("AntConfigSchema", () => {
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.engine).toBe("gemini");
+      expect(result.data.engine).toBe("gemini-cli");
     }
   });
 
-  it("parses gemini block with model override", () => {
+  it("parses engine: codex", () => {
     const result = AntConfigSchema.safeParse({
       name: "worker",
       description: "Does work",
       instructions: "Do it.",
-      engine: "gemini",
-      gemini: { model: "gemini-2.0-flash" },
+      engine: "codex",
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.gemini?.model).toBe("gemini-2.0-flash");
+      expect(result.data.engine).toBe("codex");
     }
   });
 
-  it("defaults gemini model to gemini-2.5-pro", () => {
+  it("parses engine: opencode", () => {
     const result = AntConfigSchema.safeParse({
       name: "worker",
       description: "Does work",
       instructions: "Do it.",
-      engine: "gemini",
-      gemini: {},
+      engine: "opencode",
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.gemini?.model).toBe("gemini-2.5-pro");
+      expect(result.data.engine).toBe("opencode");
+    }
+  });
+
+  it("parses engine: cli with binary and args", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      engine: "cli",
+      cli: { binary: "my-agent", args: ["--mode", "auto"] },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.engine).toBe("cli");
+      expect(result.data.cli?.binary).toBe("my-agent");
+      expect(result.data.cli?.args).toEqual(["--mode", "auto"]);
+    }
+  });
+
+  it("defaults cli.args to [] when absent", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      engine: "cli",
+      cli: { binary: "my-agent" },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cli?.args).toEqual([]);
     }
   });
 
@@ -279,130 +283,7 @@ describe("AntConfigSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("parses gemini.max_turns", () => {
-    const result = AntConfigSchema.safeParse({
-      name: "worker",
-      description: "Does work",
-      instructions: "Do it.",
-      engine: "gemini",
-      gemini: { max_turns: 50 },
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.gemini?.max_turns).toBe(50);
-    }
-  });
-
-  it("defaults gemini.max_turns to 100", () => {
-    const result = AntConfigSchema.safeParse({
-      name: "worker",
-      description: "Does work",
-      instructions: "Do it.",
-      engine: "gemini",
-      gemini: {},
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.gemini?.max_turns).toBe(100);
-    }
-  });
-
-  it("defaults autonomy to human", () => {
-    const result = AntConfigSchema.safeParse({
-      name: "worker",
-      description: "Does work",
-      instructions: "Do it.",
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.autonomy).toBe("human");
-    }
-  });
-
-  it("parses autonomy: full", () => {
-    const result = AntConfigSchema.safeParse({
-      name: "worker",
-      description: "Does work",
-      instructions: "Do it.",
-      autonomy: "full",
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.autonomy).toBe("full");
-    }
-  });
-
-  it("parses autonomy: strict", () => {
-    const result = AntConfigSchema.safeParse({
-      name: "worker",
-      description: "Does work",
-      instructions: "Do it.",
-      autonomy: "strict",
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.autonomy).toBe("strict");
-    }
-  });
-
-  it("rejects an unknown autonomy value", () => {
-    const result = AntConfigSchema.safeParse({
-      name: "worker",
-      description: "Does work",
-      instructions: "Do it.",
-      autonomy: "yolo",
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it("defaults logging.tool_calls to impactful when logging block is present", () => {
-    const result = AntConfigSchema.safeParse({
-      name: "worker",
-      description: "Does work",
-      instructions: "Do it.",
-      logging: {},
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.logging?.tool_calls).toBe("impactful");
-    }
-  });
-
-  it("parses logging.tool_calls: off", () => {
-    const result = AntConfigSchema.safeParse({
-      name: "worker",
-      description: "Does work",
-      instructions: "Do it.",
-      logging: { tool_calls: "off" },
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.logging?.tool_calls).toBe("off");
-    }
-  });
-
-  it("parses logging.tool_calls: all", () => {
-    const result = AntConfigSchema.safeParse({
-      name: "worker",
-      description: "Does work",
-      instructions: "Do it.",
-      logging: { tool_calls: "all" },
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.logging?.tool_calls).toBe("all");
-    }
-  });
-
-  it("rejects an unknown logging.tool_calls value", () => {
-    const result = AntConfigSchema.safeParse({
-      name: "worker",
-      description: "Does work",
-      instructions: "Do it.",
-      logging: { tool_calls: "verbose" },
-    });
-    expect(result.success).toBe(false);
-  });
+  // --- logging ---
 
   it("logging block is optional — absent by default", () => {
     const result = AntConfigSchema.safeParse({
@@ -413,6 +294,45 @@ describe("AntConfigSchema", () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.logging).toBeUndefined();
+    }
+  });
+
+  it("defaults logging.lm_output to discord when logging block is present", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      logging: {},
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.logging?.lm_output).toBe("discord");
+    }
+  });
+
+  it("parses logging.lm_output: console", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      logging: { lm_output: "console" },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.logging?.lm_output).toBe("console");
+    }
+  });
+
+  it("parses logging.lm_output: both", () => {
+    const result = AntConfigSchema.safeParse({
+      name: "worker",
+      description: "Does work",
+      instructions: "Do it.",
+      logging: { lm_output: "both" },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.logging?.lm_output).toBe("both");
     }
   });
 });
@@ -435,6 +355,12 @@ describe("loadConfig", () => {
     expect(config.colony.name).toBe("test-colony");
     expect(config.ants).toHaveLength(1);
     expect(config.ants[0].name).toBe("worker");
+  });
+
+  it("returns configDir set to the loaded directory", () => {
+    writeFileSync(join(dir, "colony.yaml"), "name: test-colony\n");
+    const config = loadConfig(dir);
+    expect(config.configDir).toBe(dir);
   });
 
   it("returns an empty ants array when ants/ is absent", () => {
