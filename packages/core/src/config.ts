@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { parse } from "yaml";
-import { readFileSync, readdirSync } from "fs";
+import { parse, stringify } from "yaml";
+import { readFileSync, writeFileSync, unlinkSync, readdirSync } from "fs";
 import { join } from "path";
 
 // Replaces ${VAR_NAME} with the corresponding environment variable.
@@ -233,6 +233,34 @@ export function loadConfig(dir: string): LoadedConfig {
   return { colony: colonyResult.data, ants, configDir: dir };
 }
 
+// --- Raw colony config schema (no env interpolation) ---
+// Used when writing colony.yaml from the API — tokens stay as template strings.
+
+export const RawColonyConfigSchema = z.object({
+  name: z.string(),
+  integrations: z
+    .object({
+      discord: z.object({ token: z.string(), guild: z.string() }).optional(),
+      discord_webhook: z.object({ url: z.string() }).optional(),
+      github: z.object({ token: z.string() }).optional(),
+    })
+    .optional(),
+  defaults: z
+    .object({
+      poll_interval: z.string().optional(),
+      git: z
+        .object({
+          user_name: z.string().optional(),
+          user_email: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+  monitoring: z
+    .object({ port: z.number().int().min(1).max(65535) })
+    .optional(),
+});
+
 // --- Raw readers (no Zod validation, no env interpolation) ---
 // Used by the config API to return template values like ${DISCORD_TOKEN} as-is.
 
@@ -255,10 +283,121 @@ export function readRawAntYamls(dir: string): unknown[] {
 
 // Finds a single ant config by its `name` field (not filename).
 export function readRawAntYaml(dir: string, name: string): unknown | null {
-  for (const raw of readRawAntYamls(dir)) {
+  return findAntFileEntry(dir, name)?.raw ?? null;
+}
+
+// --- Config write utilities ---
+
+// Result type for write operations — callers map to HTTP status codes.
+export type ConfigWriteResult =
+  | { ok: true }
+  | { ok: false; type: "not_found" }
+  | { ok: false; type: "conflict" }
+  | { ok: false; type: "invalid"; error: string }
+  | { ok: false; type: "error"; error: string };
+
+// Returns the path to the ant's YAML file (matched by name field) and its raw content.
+function findAntFileEntry(dir: string, name: string): { path: string; raw: unknown } | null {
+  const antsDir = join(dir, "ants");
+  let files: string[];
+  try {
+    files = readdirSync(antsDir).filter(
+      (f) => f.endsWith(".yaml") || f.endsWith(".yml")
+    );
+  } catch {
+    return null;
+  }
+  for (const file of files) {
+    const filePath = join(antsDir, file);
+    const raw = readYaml(filePath);
     if (raw && typeof raw === "object" && (raw as Record<string, unknown>).name === name) {
-      return raw;
+      return { path: filePath, raw };
     }
   }
   return null;
+}
+
+// Sanitises an ant name to a safe filename: lowercase, non-alphanumeric runs → hyphens.
+function antFilename(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") + ".yaml";
+}
+
+function toYaml(data: unknown): string {
+  return stringify(data, { lineWidth: 0 });
+}
+
+// Updates an existing ant's YAML file (matched by name field).
+// Returns not_found if no file with that name field exists.
+// Returns invalid if the body fails AntConfigSchema validation.
+// The name in the body must match the name argument (renames are not allowed here).
+export function writeAntYaml(dir: string, name: string, body: unknown): ConfigWriteResult {
+  const result = AntConfigSchema.safeParse(body);
+  if (!result.success) {
+    return { ok: false, type: "invalid", error: formatZodError(result.error) };
+  }
+  if (result.data.name !== name) {
+    return {
+      ok: false,
+      type: "invalid",
+      error: `name in body ("${result.data.name}") must match URL parameter ("${name}")`,
+    };
+  }
+  const entry = findAntFileEntry(dir, name);
+  if (!entry) return { ok: false, type: "not_found" };
+  try {
+    writeFileSync(entry.path, toYaml(result.data), "utf-8");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, type: "error", error: (err as Error).message };
+  }
+}
+
+// Creates a new ant YAML file. Returns conflict if an ant with that name already exists.
+export function createAntYaml(dir: string, body: unknown): ConfigWriteResult {
+  const result = AntConfigSchema.safeParse(body);
+  if (!result.success) {
+    return { ok: false, type: "invalid", error: formatZodError(result.error) };
+  }
+  if (findAntFileEntry(dir, result.data.name)) {
+    return { ok: false, type: "conflict" };
+  }
+  const antsDir = join(dir, "ants");
+  try {
+    readdirSync(antsDir); // ensure directory exists — throws if not
+  } catch {
+    return { ok: false, type: "error", error: `ants/ directory not found in ${dir}` };
+  }
+  try {
+    writeFileSync(join(antsDir, antFilename(result.data.name)), toYaml(result.data), "utf-8");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, type: "error", error: (err as Error).message };
+  }
+}
+
+// Deletes the YAML file for the named ant. Returns not_found if no such file exists.
+export function deleteAntYaml(dir: string, name: string): ConfigWriteResult {
+  const entry = findAntFileEntry(dir, name);
+  if (!entry) return { ok: false, type: "not_found" };
+  try {
+    unlinkSync(entry.path);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, type: "error", error: (err as Error).message };
+  }
+}
+
+// Writes colony.yaml from a validated JSON body. Uses RawColonyConfigSchema
+// (plain strings) so token template values like ${DISCORD_TOKEN} are kept as-is.
+export function writeColonyYaml(dir: string, body: unknown): ConfigWriteResult {
+  const result = RawColonyConfigSchema.safeParse(body);
+  if (!result.success) {
+    return { ok: false, type: "invalid", error: formatZodError(result.error) };
+  }
+  try {
+    writeFileSync(join(dir, "colony.yaml"), toYaml(result.data), "utf-8");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, type: "error", error: (err as Error).message };
+  }
 }

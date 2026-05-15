@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { api } from "@/lib/api";
 import type { RawAntConfig, AntEngine } from "@/lib/types";
-import { Save, AlertCircle, CheckCircle2, Info } from "lucide-react";
+import { Save, AlertCircle, CheckCircle2, Info, RotateCcw, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Flat form state — mirrors RawAntConfig but flattened for easier binding.
@@ -154,6 +155,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export function AntConfigEditor({ antName }: { antName: string }) {
+  const router = useRouter();
   const queryClient = useQueryClient();
 
   const { data: config, isLoading, error: fetchError } = useQuery({
@@ -165,9 +167,9 @@ export function AntConfigEditor({ antName }: { antName: string }) {
 
   const [form, setForm] = useState<FormState | null>(null);
   const [dirty, setDirty] = useState(false);
-  const [saveResult, setSaveResult] = useState<
-    { ok: true } | { ok: false; message: string } | null
-  >(null);
+  const [restartRequired, setRestartRequired] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Initialise form when config loads.
   useEffect(() => {
@@ -177,24 +179,28 @@ export function AntConfigEditor({ antName }: { antName: string }) {
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
     setDirty(true);
-    setSaveResult(null);
+    setSaveError(null);
   };
 
   const saveMutation = useMutation({
     mutationFn: () => api.configAntUpdate(antName, toRawConfig(antName, form!)),
-    onSuccess: () => {
+    onSuccess: ({ restartRequired: needsRestart }) => {
       setDirty(false);
-      setSaveResult({ ok: true });
+      setSaveError(null);
+      if (needsRestart) setRestartRequired(true);
       queryClient.invalidateQueries({ queryKey: ["config", "ant", antName] });
     },
     onError: (err: Error) => {
-      const is404 = err.message.startsWith("404");
-      setSaveResult({
-        ok: false,
-        message: is404
-          ? "Config writes are not yet enabled — coming in Step 3."
-          : err.message,
-      });
+      setSaveError(err.message);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api.configAntDelete(antName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["config"] });
+      queryClient.invalidateQueries({ queryKey: ["status"] });
+      router.push("/ants");
     },
   });
 
@@ -229,6 +235,22 @@ export function AntConfigEditor({ antName }: { antName: string }) {
 
   return (
     <div className="flex flex-col gap-6 max-w-2xl">
+      {/* Restart required banner */}
+      {restartRequired && (
+        <div className="flex items-center gap-3 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3">
+          <RotateCcw className="size-4 text-warning shrink-0" />
+          <p className="text-sm text-warning flex-1">
+            Config saved — restart the colony runner to apply changes.
+          </p>
+          <button
+            onClick={() => setRestartRequired(false)}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Identity (read-only) */}
       <Section title="Identity">
         <Field label="Name" hint="Changing the ant name requires deleting and recreating it.">
@@ -459,9 +481,7 @@ export function AntConfigEditor({ antName }: { antName: string }) {
       <div
         className={cn(
           "flex items-center gap-3 rounded-lg border p-4 transition-colors",
-          saveResult?.ok
-            ? "border-success/30 bg-success/5"
-            : saveResult
+          saveError
             ? "border-danger/30 bg-danger/5"
             : "border-border bg-secondary/20"
         )}
@@ -469,32 +489,78 @@ export function AntConfigEditor({ antName }: { antName: string }) {
         <Button
           onClick={() => saveMutation.mutate()}
           disabled={saveMutation.isPending || !dirty}
-          className="gap-2"
         >
           <Save className="size-3.5" />
           {saveMutation.isPending ? "Saving…" : "Save changes"}
         </Button>
 
-        {!dirty && !saveResult && (
+        {!dirty && !saveError && (
           <p className="text-xs text-muted-foreground">No unsaved changes.</p>
         )}
-        {dirty && !saveResult && (
+        {dirty && !saveError && (
           <p className="text-xs text-warning">Unsaved changes</p>
         )}
-
-        {saveResult?.ok && (
+        {!dirty && !saveError && saveMutation.isSuccess && (
           <span className="flex items-center gap-1.5 text-xs text-success">
             <CheckCircle2 className="size-3.5" />
-            Saved. Restart the runner to apply changes.
+            Saved.
           </span>
         )}
-        {saveResult && !saveResult.ok && (
+        {saveError && (
           <span className="flex items-center gap-1.5 text-xs text-danger">
             <AlertCircle className="size-3.5" />
-            {saveResult.message}
+            {saveError}
           </span>
         )}
       </div>
+
+      {/* Danger zone */}
+      <Separator />
+      <Section title="Danger zone">
+        {!confirmDelete ? (
+          <div className="flex items-center justify-between rounded-lg border border-border p-4">
+            <div>
+              <p className="text-sm font-medium">Delete this ant</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Removes the YAML file permanently. The runner must be restarted.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-danger border-danger/30 hover:bg-danger/10 shrink-0"
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="size-3.5" />
+              Delete ant
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between rounded-lg border border-danger/40 bg-danger/5 p-4">
+            <p className="text-sm text-danger">
+              Delete <strong>{antName}</strong>? This cannot be undone.
+            </p>
+            <div className="flex gap-2 shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleteMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => deleteMutation.mutate()}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? "Deleting…" : "Yes, delete"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Section>
     </div>
   );
 }
