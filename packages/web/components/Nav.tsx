@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Bug, History } from "lucide-react";
+import { LayoutDashboard, Bug, History, Settings } from "lucide-react";
 
 const links = [
   { href: "/", label: "Board", icon: LayoutDashboard },
   { href: "/ants", label: "Ants", icon: Bug },
   { href: "/work", label: "History", icon: History },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Nav({ colonyName }: { colonyName?: string }) {
