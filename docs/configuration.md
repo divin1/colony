@@ -23,9 +23,17 @@ Top-level config shared across all ants.
 name: string                     # Required. Colony identifier used in logs.
 
 integrations:
+  # Full Discord bot — two-way: receives commands, sends status messages.
+  # Required if you want to control ants via Discord (pause/resume/work instructions).
   discord:
-    token: ${DISCORD_TOKEN}      # Required for colony run. Bot token from Discord developer portal.
-    guild: string                # Required. Discord server name or numeric ID.
+    token: ${DISCORD_TOKEN}      # Bot token from Discord developer portal.
+    guild: string                # Discord server name or numeric ID.
+
+  # Webhook-only Discord — send-only: status messages are POSTed to the webhook URL.
+  # No bot setup required. Ants cannot receive commands. Mutually exclusive with discord:.
+  discord_webhook:
+    url: ${DISCORD_WEBHOOK_URL}  # Incoming webhook URL from Discord server settings.
+
   github:
     token: ${GITHUB_TOKEN}       # Required only if any ant uses GitHub triggers or repos.
 
@@ -37,7 +45,15 @@ defaults:
     user_email: string           # Project owner's git email.
 ```
 
-### Minimal example
+If neither `discord` nor `discord_webhook` is configured, all output goes to the terminal. Ants still run, but there is no remote visibility or control.
+
+### Minimal example (console only — no messaging)
+
+```yaml
+name: my-colony
+```
+
+### With full Discord bot
 
 ```yaml
 name: my-colony
@@ -45,6 +61,15 @@ integrations:
   discord:
     token: ${DISCORD_TOKEN}
     guild: My Server
+```
+
+### With Discord webhook (notifications only, no commands)
+
+```yaml
+name: my-colony
+integrations:
+  discord_webhook:
+    url: ${DISCORD_WEBHOOK_URL}
 ```
 
 ### Full example

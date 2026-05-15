@@ -193,7 +193,8 @@ If `--env` is not given and no `.env` exists in the colony directory, only varia
 |---|---|---|
 | `ANTHROPIC_API_KEY` | For `claude-cli` ants (default) | Read by the `claude` CLI binary |
 | `GEMINI_API_KEY` | For `gemini-cli` ants | Read by the `gemini` CLI binary |
-| `DISCORD_TOKEN` | Yes (for `run`) | Discord bot token |
+| `DISCORD_TOKEN` | Optional | Discord bot token — for full two-way Discord integration |
+| `DISCORD_WEBHOOK_URL` | Optional | Discord incoming webhook URL — for send-only notifications |
 | `GITHUB_TOKEN` | When using GitHub | GitHub personal access token or app token |
 
 Variables referenced in YAML as `${VAR_NAME}` must be set before running `validate` or `run`.

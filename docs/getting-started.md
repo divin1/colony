@@ -4,13 +4,16 @@ Colony deploys autonomous LLM agents ("ants") that work continuously, react to e
 
 ## Prerequisites
 
-- **A Discord bot** — ants communicate through Discord. You need a bot token and a server where the bot has been invited with message + reaction permissions.
 - **An agent engine** — at least one of:
   - **Anthropic API key** (`ANTHROPIC_API_KEY`) — for Claude-powered ants (the default). Sign up at [console.anthropic.com](https://console.anthropic.com) and create a key under **API Keys**. This is a pay-per-token account separate from any Claude.ai or Claude Code subscription — a subscription does not grant API access.
   - **Gemini API key** (`GEMINI_API_KEY`) — for Gemini-powered ants. Get a free key at [aistudio.google.com](https://aistudio.google.com) under **Get API key**. Google AI Studio has a free tier, making this the zero-cost option to get started.
 - **A GitHub token** *(optional)* — needed only if you want ants that read issues or interact with GitHub repos.
+- **Discord** *(optional)* — for remote visibility and control. Three options, in order of setup effort:
+  - **Full Discord bot** (`DISCORD_TOKEN`) — two-way: ants post status updates, you send commands back. Requires bot setup (see below).
+  - **Webhook** (`DISCORD_WEBHOOK_URL`) — send-only notifications posted to a Discord channel. No bot needed — just create an Incoming Webhook in your server's channel settings.
+  - **None** — all output goes to the terminal. Use this to try Colony locally before setting up any messaging.
 
-### Setting up a Discord bot
+### Setting up a Discord bot *(optional — only for full two-way control)*
 
 1. Go to [discord.com/developers/applications](https://discord.com/developers/applications) and create a new application.
 2. Under **Bot**, enable **Message Content Intent** and **Server Members Intent**.
@@ -74,10 +77,11 @@ cd my-colony
 Open `.env` and fill in your tokens:
 
 ```env
-DISCORD_TOKEN=your-discord-bot-token
-GITHUB_TOKEN=your-github-personal-access-token   # optional
-ANTHROPIC_API_KEY=your-anthropic-api-key         # required for Claude ants (default)
-GEMINI_API_KEY=your-gemini-api-key               # required for Gemini ants
+ANTHROPIC_API_KEY=your-anthropic-api-key         # required for claude-cli ants (default engine)
+GEMINI_API_KEY=your-gemini-api-key               # required for gemini-cli ants
+DISCORD_TOKEN=your-discord-bot-token             # optional — for full Discord bot integration
+DISCORD_WEBHOOK_URL=https://discord.com/api/...  # optional — for webhook-only notifications
+GITHUB_TOKEN=your-github-personal-access-token   # optional — for GitHub triggers and repos
 ```
 
 > **Secrets stay in `.env` only.** YAML files never contain tokens — they reference environment variables with `${VAR_NAME}` syntax.
@@ -86,15 +90,27 @@ GEMINI_API_KEY=your-gemini-api-key               # required for Gemini ants
 
 ## Step 3 — Configure the colony
 
-Edit `colony.yaml`:
+Edit `colony.yaml`. The simplest possible config needs only a name:
+
+```yaml
+name: my-colony
+```
+
+Add integrations as needed:
 
 ```yaml
 name: my-colony
 
 integrations:
+  # Full Discord bot — two-way control (pause, resume, work instructions).
   discord:
     token: ${DISCORD_TOKEN}
     guild: My Server          # name or ID of your Discord server
+
+  # OR: webhook-only — send-only status notifications, no bot setup needed.
+  # discord_webhook:
+  #   url: ${DISCORD_WEBHOOK_URL}
+
   github:
     token: ${GITHUB_TOKEN}   # remove this block if you don't need GitHub
 
@@ -102,7 +118,7 @@ defaults:
   poll_interval: 5m          # pause between runs for ants with no triggers or schedule
 ```
 
-`name` is used in startup logs and Discord messages. `guild` must match the server name or numeric ID exactly.
+`name` is used in startup logs and Discord messages. When using the full Discord bot, `guild` must match the server name or numeric ID exactly.
 
 ---
 
