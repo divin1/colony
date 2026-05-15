@@ -9,6 +9,7 @@ import { LiveOutput } from "@/components/LiveOutput";
 import { WorkItemCard } from "@/components/WorkItemCard";
 import { WorkItemDrawer } from "@/components/WorkItemDrawer";
 import { AddWorkModal } from "@/components/AddWorkModal";
+import { AntConfigEditor } from "@/components/AntConfigEditor";
 import { StatusDot } from "@/components/StatusDot";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,11 +18,15 @@ import { Separator } from "@/components/ui/separator";
 import { formatUptime } from "@/lib/utils";
 import { api } from "@/lib/api";
 import type { PersistedWorkItem } from "@/lib/types";
-import { ChevronLeft, Pause, Play, Trash2, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ChevronLeft, Pause, Play, Trash2, Plus, Monitor, Settings2 } from "lucide-react";
+
+type Tab = "monitor" | "config";
 
 export default function AntDetailPage() {
   const params = useParams<{ name: string }>();
   const antName = decodeURIComponent(params.name);
+  const [tab, setTab] = useState<Tab>("monitor");
   const [selectedItem, setSelectedItem] = useState<PersistedWorkItem | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
@@ -64,6 +69,8 @@ export default function AntDetailPage() {
     <div className="min-h-screen flex flex-col">
       <Nav colonyName={status?.colony} />
       <main className="flex-1 p-5 max-w-5xl mx-auto w-full">
+
+        {/* Header */}
         <div className="mb-4">
           <Link
             href="/ants"
@@ -82,8 +89,9 @@ export default function AntDetailPage() {
           </div>
         </div>
 
+        {/* Stats + controls bar */}
         {ant && (
-          <div className="flex flex-wrap items-center gap-2 mb-6">
+          <div className="flex flex-wrap items-center gap-2 mb-5">
             <div className="flex items-center gap-3 text-sm text-muted-foreground mr-4">
               <span>Uptime: {formatUptime(ant.startedAt)}</span>
               <Separator orientation="vertical" className="h-4" />
@@ -140,47 +148,77 @@ export default function AntDetailPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Live output</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <LiveOutput antName={antName} initialLines={ant?.recentOutput ?? []} />
-              </CardContent>
-            </Card>
-          </div>
-
-          <div>
-            <Card>
-              <CardHeader className="pb-2 flex-row items-center justify-between">
-                <CardTitle className="text-sm">Recent work</CardTitle>
-                <Link
-                  href={`/work?ant=${encodeURIComponent(antName)}`}
-                  className="text-xs text-info hover:underline"
-                >
-                  View all
-                </Link>
-              </CardHeader>
-              <CardContent className="px-3 pb-3">
-                <div className="flex flex-col gap-2">
-                  {recentWork.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-2">No work history yet.</p>
-                  ) : (
-                    recentWork.map((item) => (
-                      <WorkItemCard
-                        key={item.id}
-                        item={item}
-                        onClick={() => setSelectedItem(item)}
-                      />
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+        {/* Tabs */}
+        <div className="flex gap-1 border-b border-border mb-5">
+          {(
+            [
+              { id: "monitor", label: "Monitor", icon: Monitor },
+              { id: "config", label: "Config", icon: Settings2 },
+            ] as { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[]
+          ).map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={cn(
+                "flex items-center gap-1.5 px-4 py-2 text-sm border-b-2 -mb-px transition-colors",
+                tab === id
+                  ? "border-primary text-foreground font-medium"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Icon className="size-3.5" />
+              {label}
+            </button>
+          ))}
         </div>
+
+        {/* Monitor tab */}
+        {tab === "monitor" && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div className="lg:col-span-2">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Live output</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <LiveOutput antName={antName} initialLines={ant?.recentOutput ?? []} />
+                </CardContent>
+              </Card>
+            </div>
+
+            <div>
+              <Card>
+                <CardHeader className="pb-2 flex-row items-center justify-between">
+                  <CardTitle className="text-sm">Recent work</CardTitle>
+                  <Link
+                    href={`/work?ant=${encodeURIComponent(antName)}`}
+                    className="text-xs text-info hover:underline"
+                  >
+                    View all
+                  </Link>
+                </CardHeader>
+                <CardContent className="px-3 pb-3">
+                  <div className="flex flex-col gap-2">
+                    {recentWork.length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-2">No work history yet.</p>
+                    ) : (
+                      recentWork.map((item) => (
+                        <WorkItemCard
+                          key={item.id}
+                          item={item}
+                          onClick={() => setSelectedItem(item)}
+                        />
+                      ))
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {/* Config tab */}
+        {tab === "config" && <AntConfigEditor antName={antName} />}
       </main>
 
       <WorkItemDrawer
