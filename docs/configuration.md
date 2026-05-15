@@ -47,6 +47,12 @@ defaults:
 
 If neither `discord` nor `discord_webhook` is configured, all output goes to the terminal. Ants still run, but there is no remote visibility or control.
 
+```yaml
+# Optional: local web dashboard
+monitoring:
+  port: 3000   # opens http://localhost:3000 with a live status dashboard
+```
+
 ### Minimal example (console only — no messaging)
 
 ```yaml

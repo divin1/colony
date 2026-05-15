@@ -69,15 +69,15 @@ Discord is currently required to start the colony runner. The goal is to decoupl
 - [ ] Remove `addReaction` / `waitForReaction` from `ConfirmationChannel` interface (unused)
 - [ ] Update `commands/run.ts` to not require Discord config
 
-### Phase 2 — Local web dashboard (primary control plane)
+### Phase 2 — Local web dashboard ✅ (complete)
 
 Replaces Discord as the main human interface. Embedded HTTP server, opt-in via `monitoring.port`.
 
-- [ ] `Bun.serve()` HTTP server embedded in runner
-- [ ] REST API: GET /api/status, POST /api/ants/:name/{pause,resume,prompt,clear}
-- [ ] Server-Sent Events stream of live session output per ant
-- [ ] Minimal single-page HTML dashboard (ant cards, live output, control buttons)
-- [ ] `ColonyState` object tracking per-ant status for the HTTP layer
+- [x] `Bun.serve()` HTTP server embedded in runner
+- [x] REST API: GET /api/status, POST /api/ants/:name/{pause,resume,prompt,clear}
+- [x] Server-Sent Events stream of live session output per ant
+- [x] Minimal single-page HTML dashboard (ant cards, live output, control buttons)
+- [x] `ColonyState` object tracking per-ant status for the HTTP layer
 
 ### Phase 3 — GitHub Issues bidirectional
 
