@@ -3,7 +3,7 @@ layout: home
 
 hero:
   name: Colony
-  tagline: Deploy autonomous LLM agents that work continuously, react to events, and check in with you before taking irreversible actions.
+  tagline: Deploy autonomous LLM agents that work continuously, react to events, and report back to you over Discord.
   actions:
     - theme: brand
       text: Get started
@@ -15,10 +15,10 @@ hero:
 features:
   - icon: 🐜
     title: Ant-based agents
-    details: Each ant is a fully autonomous agent session — Claude or Gemini — configured with a plain YAML file and a plain-English instruction set.
-  - icon: 🔒
-    title: Human-in-the-loop confirmations
-    details: Dangerous actions pause and post a Discord confirmation request. React ✅ to proceed or ❌ to skip. Timeout defaults to deny.
+    details: Each ant is a fully autonomous agent session — any CLI-based agent (claude, gemini, codex, opencode, or your own binary) — configured with a plain YAML file and a plain-English instruction set.
+  - icon: 💬
+    title: Discord control panel
+    details: Send work instructions, pause, resume, or query status from any ant's Discord channel. Slash commands are handled instantly — no LLM round-trip, no tokens consumed.
   - icon: ⚡
     title: Event-driven or scheduled
     details: Wake ants on GitHub issues, Discord commands, or cron schedules. Ants with no triggers run continuously, sleeping between sessions.
@@ -30,5 +30,5 @@ features:
     details: One container per colony. Mount your config directory as a volume, pass secrets via env file, and get 24/7 autonomous operation.
   - icon: 🔌
     title: Multi-engine support
-    details: Run ants on Claude (Agent SDK) or Gemini (Google Gen AI SDK). Set engine per ant — mix and match in the same colony.
+    details: Run ants on claude, gemini, codex, opencode, or any CLI tool that takes a prompt. Set engine per ant — mix and match in the same colony.
 ---

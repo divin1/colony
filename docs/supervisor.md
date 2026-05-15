@@ -6,7 +6,7 @@ Each ant runs inside an infinite supervisor loop. The loop starts a new agent se
 
 ## Error categories
 
-When a session ends with an error the supervisor maps it to one of seven categories before deciding how to respond. The mapping is implemented in `packages/core/src/errors.ts` and is derived directly from the Agent SDK's error types.
+When a session ends with an error the supervisor maps it to one of seven categories before deciding how to respond. The mapping is implemented in `packages/core/src/errors.ts`; for the `claude-cli` engine it is derived from the NDJSON stream (`assistant.error` and `result.subtype` fields). Other engines map a non-zero exit code to `transient`.
 
 ### Transient errors
 
@@ -83,7 +83,7 @@ When an ant posts a `💳`, `🔐`, or `💰` message:
      - Claude ants: [console.anthropic.com](https://console.anthropic.com)
      - Gemini ants: [aistudio.google.com](https://aistudio.google.com) or your Google Cloud billing account
    - **Auth** — rotate or replace the relevant API key in your `.env` file (`ANTHROPIC_API_KEY` for Claude ants, `GEMINI_API_KEY` for Gemini ants) and restart the colony runner (the runner reads the environment at startup, so a live reload requires a restart).
-   - **Budget** — raise the `maxBudgetUsd` limit in your ant config, or top up credits if the account-level cap was hit. (Claude ants only — Gemini does not enforce a per-session USD budget.)
+   - **Budget** — top up credits or raise the account-level budget cap at [console.anthropic.com](https://console.anthropic.com). This error is emitted by the `claude` CLI when the USD budget is exceeded.
 
 2. **Send `/resume`** (or just `resume`) in the ant's Discord channel.
 
@@ -107,4 +107,3 @@ Summary of all messages the supervisor posts to an ant's channel:
 | 💰 | Budget cap hit — ant paused, awaiting `/resume` |
 | ⏸️ | Ant will pause after current session (response to `/pause`) |
 | ▶️ | Ant resuming (response to `/resume`) |
-| ⚙️ | Confirmation required for a dangerous action |

@@ -30,8 +30,6 @@ integrations:
     token: ${GITHUB_TOKEN}       # Required only if any ant uses GitHub triggers or repos.
 
 defaults:
-  confirmation_timeout: string   # Duration: 30s | 5m | 1h. Default: "30m".
-                                 # How long to wait for a Discord reaction before denying an action.
   poll_interval: string          # Duration: 30s | 5m | 1h. No default (run immediately).
                                  # Sleep between runs for ants with no triggers or schedule.
   git:
@@ -60,7 +58,6 @@ integrations:
   github:
     token: ${GITHUB_TOKEN}
 defaults:
-  confirmation_timeout: 30m
   poll_interval: 10m
   git:
     user_name: Jane Smith
@@ -128,27 +125,31 @@ instructions: |       # The agent's primary directive. Appended to the agent's s
 ### Engine
 
 ```yaml
-engine: claude   # "claude" (default) or "gemini"
+engine: claude-cli   # default
 ```
 
-Controls which agent engine drives this ant.
+Controls which CLI tool drives this ant. Each engine spawns a child process and streams its output to Discord.
 
-| Value | Engine | Requirement |
+| Value | Binary spawned | Requirement |
 |---|---|---|
-| `claude` | Claude Agent SDK (Claude Code) | `ANTHROPIC_API_KEY` |
-| `gemini` | Google Gen AI SDK (`@google/genai`) | `GEMINI_API_KEY` |
+| `claude-cli` | `claude` | `ANTHROPIC_API_KEY` (read by the CLI) |
+| `gemini-cli` | `gemini --yolo` | `GEMINI_API_KEY` (read by the CLI) |
+| `codex` | `codex` | Whatever `codex` requires |
+| `opencode` | `opencode` | Whatever `opencode` requires |
+| `cli` | Configurable — see below | — |
 
-Both engines run in-process with full tool interception — `autonomy` and `confirmation` behave identically for both.
+Deprecated aliases `claude` and `gemini` are still accepted and remapped with a warning.
 
-### Gemini options
-
-Only used when `engine: gemini`.
+**Custom CLI (`engine: cli`):**
 
 ```yaml
-gemini:
-  model: gemini-2.5-pro   # Default. Any Gemini model name.
-  max_turns: 100          # Default. Maximum agentic loop iterations before stopping.
+engine: cli
+cli:
+  binary: my-agent          # path or name of the binary
+  args: [--model, gpt-4o]   # extra args prepended before the prompt (optional)
 ```
+
+The runner calls: `<binary> [args...] <prompt>`
 
 ### Integrations
 
@@ -162,7 +163,7 @@ integrations:
       - my-org/shared-libs
 ```
 
-Every ant must have `integrations.discord.channel` — the colony runner uses it to route messages and confirmations.
+Every ant must have `integrations.discord.channel` — the colony runner uses it to route messages and status updates.
 
 ### Schedule
 
@@ -215,73 +216,11 @@ worker: ▶️ **worker** resuming.
 worker: Starting on the auth module refactor…
 ```
 
-The ant's text output (what it says as it works) and confirmation requests all appear in the same channel.
-
-### Autonomy
-
-Controls what Colony does when a dangerous action is detected.
-
-```yaml
-autonomy: human    # default — forward to Discord, wait for ✅/❌ reaction
-autonomy: full     # auto-approve everything, Discord is never contacted
-autonomy: strict   # auto-deny everything flagged, Discord is never contacted
-```
-
-| Value | Behaviour |
-|---|---|
-| `human` | Dangerous actions pause and post a Discord confirmation request. The ant resumes after ✅, or is blocked after ❌ or timeout. This is the default. |
-| `full` | The confirmation hook is not registered at all. Every action proceeds immediately. Use for read-only ants or ants operating in safe sandboxed environments. |
-| `strict` | Dangerous actions are automatically denied without any Discord message. The ant receives a block response and can react accordingly (e.g. explain why it stopped). |
-
-All engines support full `autonomy` enforcement — tool calls are intercepted in-process for both `claude` and `gemini` ants.
-
-### Confirmation
-
-Controls *which* actions are considered dangerous. When an action matches, Colony applies the `autonomy` policy above. This block is orthogonal to `autonomy` — it defines the detection rules, not what happens when they fire.
-
-```yaml
-confirmation:
-  always_confirm_tools:        # Tool names that are always flagged.
-    - Write
-    - Edit
-  dangerous_patterns:          # Additional bash regex patterns that are flagged.
-    - "\\bdeploy\\.sh\\b"
-    - "\\bkubectl\\s+delete\\b"
-```
-
-**Built-in rules that always apply** (regardless of ant config):
-
-| Pattern | Matched commands |
-|---|---|
-| `git push` | `git push origin main`, `git push --force` |
-| `rm -r*` | `rm -rf /tmp/build`, `rm -fr dir/` |
-| `sudo` | `sudo apt install curl` |
-| pipe to shell | `curl … \| bash`, `wget … \| sh` |
-| `DROP TABLE` / `TRUNCATE TABLE` | SQL destructive statements |
-| `computer_use` tool | any use of the computer_use tool |
-
-`confirmation` has no effect when `autonomy: full` (nothing is ever flagged).
+The ant's text output (what it says as it works) and all status messages appear in the same channel.
 
 ### Logging
 
-Controls which tool-call results are forwarded to Discord after each tool use.
-
-```yaml
-logging:
-  tool_calls: impactful   # "off" | "impactful" (default) | "all"
-```
-
-| Value | Behaviour |
-|---|---|
-| `impactful` | Log everything except known read-only tools (`Read`, `Grep`, `Glob`, `LS`, `WebSearch`, `WebFetch`, `TodoRead`). Unknown and MCP tools are always logged. **This is the default.** |
-| `off` | No PostToolUse logging. The Discord channel receives only the ant's text output and confirmation requests. |
-| `all` | Log every tool call — original behaviour. Useful for debugging a misbehaving ant. |
-
-The `impactful` default keeps the Discord channel focused on what the ant **did** (wrote files, ran commands, made commits) while silencing what it **looked at** (reading files, searching code).
-
-### LM text output routing
-
-Controls where the ant's LLM text (narration, reasoning, responses) is sent.
+Controls where the ant's LLM text output (narration, reasoning, responses) is sent.
 
 ```yaml
 logging:
@@ -293,10 +232,6 @@ logging:
 | `discord` | LLM text is posted to Discord as the ant produces it. **Default.** |
 | `console` | LLM text is printed to the terminal only. Discord receives no narration. |
 | `both` | LLM text goes to both the terminal and Discord. |
-
-**Gemini ants only:** when `lm_output: "console"` is set, a Gemini ant can still post to Discord explicitly via the `notify_discord` tool. This lets instructions dictate exactly which milestone messages reach Discord (task picked, PR opened, blocked, etc.) while keeping all narration off the channel.
-
-> **Claude ants — known limitation:** the Claude Agent SDK does not support injecting custom tools into the `claude_code` preset, so there is no `notify_discord` equivalent for Claude ants. With `lm_output: "console"`, a Claude ant has no way to post to Discord at all. With `lm_output: "discord"` (default), all LLM text reaches Discord. A unified solution is planned — see PLAN.md.
 
 ### State persistence
 
@@ -324,16 +259,13 @@ Duration format: `30s`, `5m`, `1h`. Ants with at least one trigger or a cron sch
 
 ## Complete ant example — Gemini-powered researcher
 
-An ant that uses Gemini instead of Claude:
+An ant that uses the Gemini CLI instead of Claude:
 
 ```yaml
 name: researcher
 description: Answers research questions posted in Discord using Gemini
 
-engine: gemini
-gemini:
-  model: gemini-2.5-pro   # optional; this is the default
-  max_turns: 100          # optional; maximum loop iterations
+engine: gemini-cli
 
 instructions: |
   You are a research assistant. When given a question, search for current information,
@@ -346,8 +278,6 @@ integrations:
 triggers:
   - type: discord_command   # wake when someone posts a question in #research
 ```
-
-Gemini ants have full autonomy enforcement — dangerous tool calls are intercepted in-process, exactly like Claude ants. Set `autonomy: human` to forward dangerous actions to Discord for approval, `autonomy: strict` to auto-deny them, or `autonomy: full` to skip all checks.
 
 ---
 
@@ -422,12 +352,6 @@ integrations:
 
 schedule:
   cron: "0 2 * * 1"    # every Monday at 2 am
-
-autonomy: human        # forward git push and other dangerous actions to Discord for approval
-
-confirmation:
-  dangerous_patterns:
-    - "\\bgit\\s+push\\b"          # redundant with global rule, shown for illustration
 ```
 
 ## Complete ant example — continuous worker (no triggers)
@@ -468,7 +392,7 @@ state:
 
 ## Duration format
 
-All duration strings (`confirmation_timeout`, `poll_interval`) use the format:
+All duration strings (`poll_interval`) use the format:
 
 | Suffix | Unit |
 |---|---|

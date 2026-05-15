@@ -16,7 +16,7 @@ This downloads the correct pre-built binary for your OS and architecture to `~/.
 
 ```bash
 # Install a specific version
-COLONY_VERSION=v0.3.3 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
+COLONY_VERSION=v0.4.0 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
 
 # Install to a custom directory
 COLONY_INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
@@ -191,8 +191,8 @@ If `--env` is not given and no `.env` exists in the colony directory, only varia
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | For Claude ants (default) | Authenticates Claude Agent SDK calls |
-| `GEMINI_API_KEY` | For Gemini ants | Authenticates Google Gen AI SDK calls |
+| `ANTHROPIC_API_KEY` | For `claude-cli` ants (default) | Read by the `claude` CLI binary |
+| `GEMINI_API_KEY` | For `gemini-cli` ants | Read by the `gemini` CLI binary |
 | `DISCORD_TOKEN` | Yes (for `run`) | Discord bot token |
 | `GITHUB_TOKEN` | When using GitHub | GitHub personal access token or app token |
 

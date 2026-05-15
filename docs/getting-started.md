@@ -99,7 +99,6 @@ integrations:
     token: ${GITHUB_TOKEN}   # remove this block if you don't need GitHub
 
 defaults:
-  confirmation_timeout: 30m  # deny unacknowledged confirmations after 30 minutes
   poll_interval: 5m          # pause between runs for ants with no triggers or schedule
 ```
 
@@ -150,8 +149,7 @@ triggers:
 | `name` | Identifier used in Discord messages. Must be unique within the colony. |
 | `description` | One-line purpose, included in the agent's opening prompt. |
 | `instructions` | The agent's primary directive. Write it as if briefing a new engineer. Be specific. |
-| `engine` | `claude` (default) or `gemini`. Selects the agent engine for this ant. |
-| `autonomy` | `human` (default), `full`, or `strict`. Controls what happens when a dangerous action is detected. |
+| `engine` | `claude-cli` (default), `gemini-cli`, `codex`, `opencode`, or `cli`. Selects the CLI tool for this ant. |
 | `integrations.discord.channel` | Discord channel name where the ant posts and listens. **Required.** |
 | `integrations.github.repos` | Repos the ant may access. Format: `owner/repo`. |
 | `schedule.cron` | Standard cron expression. Omit for event-only ants. |
@@ -241,7 +239,7 @@ If something goes wrong, the supervisor posts a message and responds based on th
 | `🚫 **worker** encountered a permanent error: … Restarting in Xs…` | Invalid request or structured output failure | Restarts after backoff; check your ant's instructions or config |
 | `💳 **worker** has a billing error — check your Anthropic account. Pausing until resumed.` | Billing / payment issue | **Ant pauses indefinitely.** Fix the issue (refill credits, update payment), then type `/resume` in the channel. |
 | `🔐 **worker** failed to authenticate — check credentials. Pausing until resumed.` | Bad API key | **Ant pauses indefinitely.** Fix the credential (update `.env`, restart), then type `/resume`. |
-| `💰 **worker** exceeded its USD budget cap. Pausing until resumed.` | `maxBudgetUsd` cap reached | **Ant pauses indefinitely.** Raise the budget or top up, then type `/resume`. |
+| `💰 **worker** exceeded its USD budget cap. Pausing until resumed.` | USD budget cap hit | **Ant pauses indefinitely.** Top up credits or raise the budget cap, then type `/resume`. |
 
 Turn-limit completions (`error_max_turns`) are treated as normal sessions — no error message is posted and the ant restarts immediately.
 
@@ -271,28 +269,6 @@ worker: Starting on the failing tests…
 ```
 
 This works for all ants regardless of their `triggers` configuration. No special setup is required beyond the ant having a Discord channel.
-
----
-
-## How confirmations work
-
-Colony detects dangerous actions — `git push`, `rm -rf`, `sudo`, pipe-to-shell, SQL drops, `computer_use` — using built-in rules plus any extra patterns you configure in the `confirmation` block. What happens when one is detected depends on the ant's `autonomy` setting:
-
-| `autonomy` | What happens |
-|---|---|
-| `human` (default) | The ant pauses and posts a Discord message. React ✅ to allow, ❌ to skip. Timeout defaults to deny. |
-| `full` | Nothing — dangerous-action checks are skipped entirely. The ant runs without interruption. |
-| `strict` | The action is automatically denied. No Discord message is sent; the ant receives a block response. |
-
-Example confirmation message (`autonomy: human`):
-
-```
-⚙️ [Confirmation required]
-git push origin feature/my-fix
-React ✅ to proceed or ❌ to skip (timeout: 1800s).
-```
-
-See [configuration.md](./configuration.md#autonomy) for the full reference.
 
 ---
 
