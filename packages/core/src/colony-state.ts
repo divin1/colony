@@ -33,9 +33,15 @@ export class ColonyState {
   private readonly entries = new Map<string, AntEntry>();
   private readonly subscribers = new Map<string, Set<(line: string) => void>>();
   private readonly workStore: WorkStore | null;
+  private readonly _configDir: string | null;
 
-  constructor(public readonly colonyName: string, workStore?: WorkStore) {
+  constructor(public readonly colonyName: string, workStore?: WorkStore, configDir?: string) {
     this.workStore = workStore ?? null;
+    this._configDir = configDir ?? null;
+  }
+
+  getConfigDir(): string | null {
+    return this._configDir;
   }
 
   register(name: string, engine: string, controls: AntControlHandles): void {

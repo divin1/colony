@@ -726,7 +726,7 @@ export async function runColony(
   // Create shared colony state and optional work store for the dashboard.
   const monitorPort = config.colony.monitoring?.port;
   const workStore = monitorPort ? new WorkStore(config.configDir) : undefined;
-  const colonyState = new ColonyState(config.colony.name, workStore);
+  const colonyState = new ColonyState(config.colony.name, workStore, config.configDir);
 
   // Start the optional HTTP dashboard.
   let dashboardServer: ReturnType<typeof Bun.serve> | undefined;

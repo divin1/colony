@@ -232,3 +232,33 @@ export function loadConfig(dir: string): LoadedConfig {
 
   return { colony: colonyResult.data, ants, configDir: dir };
 }
+
+// --- Raw readers (no Zod validation, no env interpolation) ---
+// Used by the config API to return template values like ${DISCORD_TOKEN} as-is.
+
+export function readRawColonyYaml(dir: string): unknown {
+  return readYaml(join(dir, "colony.yaml"));
+}
+
+export function readRawAntYamls(dir: string): unknown[] {
+  const antsDir = join(dir, "ants");
+  let files: string[];
+  try {
+    files = readdirSync(antsDir).filter(
+      (f) => f.endsWith(".yaml") || f.endsWith(".yml")
+    );
+  } catch {
+    return [];
+  }
+  return files.map((file) => readYaml(join(antsDir, file)));
+}
+
+// Finds a single ant config by its `name` field (not filename).
+export function readRawAntYaml(dir: string, name: string): unknown | null {
+  for (const raw of readRawAntYamls(dir)) {
+    if (raw && typeof raw === "object" && (raw as Record<string, unknown>).name === name) {
+      return raw;
+    }
+  }
+  return null;
+}

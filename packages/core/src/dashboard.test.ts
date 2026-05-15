@@ -1,15 +1,19 @@
-import { describe, it, expect, mock } from "bun:test";
+import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { ColonyState } from "./colony-state";
 import { createDashboardHandler } from "./dashboard";
 
-function makeState() {
-  const s = new ColonyState("test-colony");
+function makeState(configDir?: string) {
+  const s = new ColonyState("test-colony", undefined, configDir);
   s.register("worker", "claude-cli", {
     pause: mock(() => {}),
     resume: mock(() => {}),
     pushPrompt: mock(() => {}),
     clearQueue: mock(() => 2),
     getQueueSize: mock(() => 0),
+    removeWorkItem: mock(() => false),
   });
   s.pushOutput("worker", "hello");
   s.pushOutput("worker", "world");
@@ -112,5 +116,88 @@ describe("createDashboardHandler", () => {
     const handler = createDashboardHandler(makeState());
     const res = await handler(req("GET", "/unknown"));
     expect(res.status).toBe(404);
+  });
+});
+
+// --- Config route tests ---
+
+describe("createDashboardHandler — config routes", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(`${tmpdir()}/colony-dashboard-test-`);
+    mkdirSync(join(dir, "ants"));
+    writeFileSync(
+      join(dir, "colony.yaml"),
+      "name: my-colony\nmonitoring:\n  port: 8080\n"
+    );
+    writeFileSync(
+      join(dir, "ants", "worker.yaml"),
+      "name: worker\ndescription: Does work\ninstructions: Work hard.\nengine: claude-cli\n"
+    );
+    writeFileSync(
+      join(dir, "ants", "reviewer.yaml"),
+      "name: reviewer\ndescription: Reviews PRs\ninstructions: Review carefully.\nengine: claude-cli\n"
+    );
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("GET /api/config returns colony.yaml as JSON", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const res = await handler(req("GET", "/api/config"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { name: string };
+    expect(body.name).toBe("my-colony");
+  });
+
+  it("GET /api/config returns env var templates uninterpolated", async () => {
+    writeFileSync(
+      join(dir, "colony.yaml"),
+      "name: my-colony\nintegrations:\n  discord:\n    token: ${DISCORD_TOKEN}\n    guild: my-guild\n"
+    );
+    const handler = createDashboardHandler(makeState(dir));
+    const res = await handler(req("GET", "/api/config"));
+    const body = (await res.json()) as { integrations: { discord: { token: string } } };
+    expect(body.integrations.discord.token).toBe("${DISCORD_TOKEN}");
+  });
+
+  it("GET /api/config returns 503 when configDir is not set", async () => {
+    const handler = createDashboardHandler(makeState());
+    const res = await handler(req("GET", "/api/config"));
+    expect(res.status).toBe(503);
+  });
+
+  it("GET /api/config/ants returns all ant configs as array", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const res = await handler(req("GET", "/api/config/ants"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as unknown[];
+    expect(body).toHaveLength(2);
+    const names = (body as { name: string }[]).map((a) => a.name).sort();
+    expect(names).toEqual(["reviewer", "worker"]);
+  });
+
+  it("GET /api/config/ants/:name returns the matching ant config", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const res = await handler(req("GET", "/api/config/ants/worker"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { name: string; description: string };
+    expect(body.name).toBe("worker");
+    expect(body.description).toBe("Does work");
+  });
+
+  it("GET /api/config/ants/:name returns 404 for unknown ant", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const res = await handler(req("GET", "/api/config/ants/ghost"));
+    expect(res.status).toBe(404);
+  });
+
+  it("GET /api/config/ants returns 503 when configDir is not set", async () => {
+    const handler = createDashboardHandler(makeState());
+    const res = await handler(req("GET", "/api/config/ants"));
+    expect(res.status).toBe(503);
   });
 });

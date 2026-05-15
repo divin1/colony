@@ -1,4 +1,4 @@
-import type { ColonyStatus, PersistedWorkItem, WorkItemStatus } from "./types";
+import type { ColonyStatus, PersistedWorkItem, WorkItemStatus, RawColonyConfig, RawAntConfig } from "./types";
 
 const BASE = "";
 
@@ -42,4 +42,8 @@ export const api = {
 
   workGet: (id: string) => get<PersistedWorkItem>(`/api/work/${id}`),
   workCancel: (id: string) => del(`/api/work/${id}`),
+
+  configGet: () => get<RawColonyConfig>("/api/config"),
+  configAntsGet: () => get<RawAntConfig[]>("/api/config/ants"),
+  configAntGet: (name: string) => get<RawAntConfig>(`/api/config/ants/${encodeURIComponent(name)}`),
 };

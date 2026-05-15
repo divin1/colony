@@ -1,4 +1,5 @@
 import type { ColonyState } from "./colony-state.js";
+import { readRawColonyYaml, readRawAntYamls, readRawAntYaml } from "./config.js";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -78,6 +79,43 @@ export function createDashboardHandler(
         if (result === "not_found") return textResponse("Not found", 404);
         if (result === "running") return textResponse("Item is currently running", 409);
         return jsonResponse({ ok: true });
+      }
+    }
+
+    // Config routes — read raw YAML (no env interpolation, no Zod) so the editor sees template values.
+    const configDir = state.getConfigDir();
+
+    // GET /api/config — full colony.yaml as JSON
+    if (path === "/api/config" && req.method === "GET") {
+      if (!configDir) return textResponse("Config directory not available", 503);
+      try {
+        return jsonResponse(readRawColonyYaml(configDir));
+      } catch (err) {
+        return textResponse(`Failed to read colony.yaml: ${(err as Error).message}`, 500);
+      }
+    }
+
+    // GET /api/config/ants — all ant configs as JSON array
+    if (path === "/api/config/ants" && req.method === "GET") {
+      if (!configDir) return textResponse("Config directory not available", 503);
+      try {
+        return jsonResponse(readRawAntYamls(configDir));
+      } catch (err) {
+        return textResponse(`Failed to read ant configs: ${(err as Error).message}`, 500);
+      }
+    }
+
+    // GET /api/config/ants/:name — single ant config matched by name field
+    const configAntRoute = path.match(/^\/api\/config\/ants\/([^/]+)$/);
+    if (configAntRoute && req.method === "GET") {
+      if (!configDir) return textResponse("Config directory not available", 503);
+      const name = decodeURIComponent(configAntRoute[1]);
+      try {
+        const raw = readRawAntYaml(configDir, name);
+        if (!raw) return textResponse("Ant not found", 404);
+        return jsonResponse(raw);
+      } catch (err) {
+        return textResponse(`Failed to read ant config: ${(err as Error).message}`, 500);
       }
     }
 
