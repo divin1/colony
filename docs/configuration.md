@@ -153,6 +153,32 @@ instructions: |       # The agent's primary directive. Appended to the agent's s
   ...
 ```
 
+### Skills
+
+Composable instruction files injected into the system prompt at the start of each session. Follows the [Anthropic Agent Skills](https://github.com/anthropics/agent-skills) open standard.
+
+```yaml
+skills:
+  - skills/code-review-standards.md   # path relative to the colony directory
+  - skills/git-conventions.md
+```
+
+**SKILL.md format:**
+
+```markdown
+---
+name: my-skill
+description: What this skill does
+---
+Skill instructions here. Plain markdown, injected verbatim into the system prompt.
+```
+
+Skills are loaded fresh at the start of each session (not cached at startup), so edits to a skill file take effect on the next session without restarting Colony.
+
+Multiple ants can reference the same skill file. Skills live in a `skills/` directory alongside your `colony.yaml` and `ants/` directory.
+
+See `config/examples/skills/` for examples.
+
 ### Engine
 
 ```yaml
