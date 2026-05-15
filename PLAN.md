@@ -79,13 +79,13 @@ Replaces Discord as the main human interface. Embedded HTTP server, opt-in via `
 - [x] Minimal single-page HTML dashboard (ant cards, live output, control buttons)
 - [x] `ColonyState` object tracking per-ant status for the HTTP layer
 
-### Phase 3 — GitHub Issues bidirectional
+### Phase 3 — GitHub Issues bidirectional ✅ (complete)
 
 Agents consume GitHub Issues (already done via trigger) and comment back on them.
 
-- [ ] Inject issue context into session prompt when triggered by `github_issue`
-- [ ] Post summary comment on the triggering issue after a successful session
-- [ ] Add `issueContext` to `EngineRunOptions`
+- [x] Inject issue context into session prompt when triggered by `github_issue` (repo, number, URL, body, summary instruction)
+- [x] Post summary comment on the triggering issue after a successful session via `github.createIssueComment()`
+- [x] `EngineResult.lastOutput` captures last assistant text block; returned from `runAnt()`
 
 ### Phase 4 — SKILL.md support
 
