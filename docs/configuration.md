@@ -292,7 +292,7 @@ logging:
 
 ### State persistence
 
-By default, state (e.g. which GitHub issues have already been processed) lives in memory and resets when the process restarts. To survive restarts use the `sqlite` backend:
+By default, state lives in memory and resets when the process restarts. To survive restarts use the `sqlite` backend:
 
 ```yaml
 state:
@@ -301,6 +301,27 @@ state:
 ```
 
 With `sqlite`, the first run creates the database; subsequent runs reuse it. The file lives in the colony directory and is preserved across container restarts when the directory is volume-mounted.
+
+The SQLite backend persists two things:
+
+| Table | Purpose |
+|---|---|
+| `seen_issues` | Tracks which GitHub issue numbers have already been processed, preventing duplicate work |
+| `session_summaries` | Stores the closing output from the last successful session; injected as context at the start of the next session so the ant resumes where it left off |
+
+Session memory works automatically — no extra config beyond setting `backend: sqlite`. At the start of each session, if a previous summary exists, it is prepended to the work prompt:
+
+```
+## Context from your previous session
+
+<closing summary from last session>
+
+---
+
+<current work item>
+```
+
+This means an ant with `backend: sqlite` accumulates working context across restarts, making it progressively more effective at long-running tasks like issue triage or dependency maintenance.
 
 ### Poll interval
 
