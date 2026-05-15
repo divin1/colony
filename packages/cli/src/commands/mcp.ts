@@ -11,6 +11,11 @@ export const mcpCommand = new Command("mcp")
     "Colony HTTP API base URL (monitoring.port must be configured in colony.yaml)",
     "http://localhost:8080"
   )
+  .option(
+    "--key <key>",
+    "API key for Colony's dashboard (COLONY_API_KEY env var is also accepted)"
+  )
   .action(async (opts) => {
-    await startMcpServer(opts.url);
+    const apiKey = opts.key ?? process.env.COLONY_API_KEY;
+    await startMcpServer(opts.url, apiKey);
   });

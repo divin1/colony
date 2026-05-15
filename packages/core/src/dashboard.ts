@@ -12,7 +12,7 @@ import {
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
 function withCors(res: Response): Response {
@@ -46,7 +46,8 @@ function writeOkResponse(data: unknown = { ok: true }, status = 200): Response {
 // --- HTTP route handler ---
 
 export function createDashboardHandler(
-  state: ColonyState
+  state: ColonyState,
+  apiKey?: string
 ): (req: Request) => Response | Promise<Response> {
   const workStore = state.getWorkStore();
 
@@ -54,9 +55,21 @@ export function createDashboardHandler(
     const url = new URL(req.url);
     const path = url.pathname;
 
-    // Handle CORS preflight.
+    // Handle CORS preflight — always allowed so browsers can probe the API.
     if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+
+    // Auth check — applies to all /api/* routes when a key is configured.
+    // HTML pages (/ and /dashboard) are exempt so the inline dashboard can load.
+    // SSE endpoints accept ?key= as an alternative because EventSource can't set headers.
+    if (apiKey && path.startsWith("/api/")) {
+      const auth = req.headers.get("Authorization");
+      const queryKey = url.searchParams.get("key");
+      const presented = auth ? auth.replace(/^Bearer /, "") : queryKey;
+      if (presented !== apiKey) {
+        return textResponse("Unauthorized", 401);
+      }
     }
 
     // GET /api/status — all ant statuses
@@ -346,6 +359,21 @@ button:disabled{opacity:.4;cursor:default}
 .prompt-input:focus{outline:none;border-color:#58a6ff}
 .empty{padding:40px;text-align:center;color:#6e7681;font-size:.9rem}
 .uptime{color:#8b949e}
+#auth-screen{display:none;position:fixed;inset:0;background:#0f1117;z-index:999;
+             align-items:center;justify-content:center}
+#auth-screen.visible{display:flex}
+.auth-box{background:#161b22;border:1px solid #21262d;border-radius:10px;padding:32px;
+          width:100%;max-width:340px;display:flex;flex-direction:column;gap:16px}
+.auth-box h2{font-size:1rem;font-weight:600}
+.auth-box p{font-size:.82rem;color:#8b949e}
+.auth-box input{width:100%;padding:6px 10px;background:#0d1117;border:1px solid #30363d;
+                border-radius:5px;color:#e1e4e8;font-size:.85rem}
+.auth-box input:focus{outline:none;border-color:#58a6ff}
+.auth-box .err{font-size:.78rem;color:#f85149;min-height:1em}
+.auth-btn{width:100%;padding:6px 10px;background:#238636;border:1px solid #2ea043;
+          border-radius:5px;color:#e1e4e8;font-size:.85rem;font-weight:500;cursor:pointer}
+.auth-btn:hover{background:#2ea043}
+.auth-btn:disabled{opacity:.5;cursor:default}
 </style>
 </head>
 <body>
@@ -356,10 +384,65 @@ button:disabled{opacity:.4;cursor:default}
 </header>
 <main id="main"><div class="empty">Connecting…</div></main>
 
+<div id="auth-screen">
+  <div class="auth-box">
+    <h2>Colony</h2>
+    <p>Enter the API key to access this colony.</p>
+    <input type="password" id="auth-input" placeholder="API key" autocomplete="current-password">
+    <div class="err" id="auth-err"></div>
+    <button class="auth-btn" id="auth-btn" onclick="submitAuth()">Connect</button>
+  </div>
+</div>
+
 <script>
 const main = document.getElementById('main');
 const colonyNameEl = document.getElementById('colony-name');
 const antCountEl = document.getElementById('ant-count');
+const authScreen = document.getElementById('auth-screen');
+const authInput = document.getElementById('auth-input');
+const authErr = document.getElementById('auth-err');
+const authBtn = document.getElementById('auth-btn');
+
+const STORAGE_KEY = 'colony_api_key';
+
+function getStoredKey() {
+  try { return sessionStorage.getItem(STORAGE_KEY); } catch { return null; }
+}
+function storeKey(k) {
+  try { sessionStorage.setItem(STORAGE_KEY, k); } catch {}
+}
+function authHeaders(extra) {
+  const key = getStoredKey();
+  const h = extra || {};
+  if (key) h['Authorization'] = 'Bearer ' + key;
+  return h;
+}
+
+function showAuth(errMsg) {
+  authErr.textContent = errMsg || '';
+  authScreen.classList.add('visible');
+  authInput.value = '';
+  authBtn.disabled = false;
+  setTimeout(() => authInput.focus(), 50);
+}
+
+async function submitAuth() {
+  const key = authInput.value.trim();
+  if (!key) return;
+  authBtn.disabled = true;
+  authErr.textContent = '';
+  storeKey(key);
+  try {
+    const res = await fetch('/api/status', { headers: { Authorization: 'Bearer ' + key } });
+    if (res.status === 401) { showAuth('Invalid API key. Try again.'); return; }
+    authScreen.classList.remove('visible');
+    refresh();
+  } catch {
+    showAuth('Connection failed. Try again.');
+  }
+}
+
+authInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitAuth(); });
 
 const sseMap = {};
 const knownAnts = new Set();
@@ -396,7 +479,9 @@ function appendLine(name, text) {
 
 function connectSSE(name) {
   if (sseMap[name]) sseMap[name].close();
-  const es = new EventSource('/api/ants/' + encodeURIComponent(name) + '/output');
+  const key = getStoredKey();
+  const qs = key ? '?key=' + encodeURIComponent(key) : '';
+  const es = new EventSource('/api/ants/' + encodeURIComponent(name) + '/output' + qs);
   sseMap[name] = es;
   es.onmessage = (e) => {
     try { appendLine(name, JSON.parse(e.data).text); } catch {}
@@ -411,9 +496,12 @@ function connectSSE(name) {
 async function doAction(name, action, body) {
   const url = '/api/ants/' + encodeURIComponent(name) + '/' + action;
   const opts = body
-    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-    : { method: 'POST' };
-  try { await fetch(url, opts); } catch {}
+    ? { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) }
+    : { method: 'POST', headers: authHeaders() };
+  try {
+    const res = await fetch(url, opts);
+    if (res.status === 401) { showAuth('Session expired. Re-enter API key.'); return; }
+  } catch {}
   refresh();
 }
 
@@ -490,7 +578,8 @@ let lastAnts = [];
 
 async function refresh() {
   try {
-    const res = await fetch('/api/status');
+    const res = await fetch('/api/status', { headers: authHeaders() });
+    if (res.status === 401) { showAuth(); return; }
     if (!res.ok) return;
     const data = await res.json();
 

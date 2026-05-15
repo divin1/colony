@@ -10,8 +10,8 @@ import { ColonyClient, formatStatus } from "./handlers.js";
 export { TOOLS } from "./tools.js";
 export { ColonyClient, formatStatus } from "./handlers.js";
 
-export async function startMcpServer(apiUrl: string): Promise<void> {
-  const client = new ColonyClient(apiUrl);
+export async function startMcpServer(apiUrl: string, apiKey?: string): Promise<void> {
+  const client = new ColonyClient(apiUrl, apiKey);
 
   const server = new Server(
     { name: "colony", version: "0.4.0" },

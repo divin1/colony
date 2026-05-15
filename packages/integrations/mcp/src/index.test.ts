@@ -69,6 +69,30 @@ const SAMPLE_STATUS: ColonyStatus = {
   ],
 };
 
+describe("ColonyClient auth", () => {
+  it("includes Authorization header when apiKey is provided", async () => {
+    let capturedAuth = "";
+    const mockFetch: typeof fetch = async (_url, init) => {
+      capturedAuth = (init?.headers as Record<string, string>)?.Authorization ?? "";
+      return new Response(JSON.stringify(SAMPLE_STATUS), { status: 200 });
+    };
+    const client = new ColonyClient(BASE, "my-secret", mockFetch);
+    await client.getStatus();
+    expect(capturedAuth).toBe("Bearer my-secret");
+  });
+
+  it("omits Authorization header when no apiKey is provided", async () => {
+    let capturedHeaders: Record<string, string> = {};
+    const mockFetch: typeof fetch = async (_url, init) => {
+      capturedHeaders = (init?.headers ?? {}) as Record<string, string>;
+      return new Response(JSON.stringify(SAMPLE_STATUS), { status: 200 });
+    };
+    const client = new ColonyClient(BASE, undefined, mockFetch);
+    await client.getStatus();
+    expect(capturedHeaders["Authorization"]).toBeUndefined();
+  });
+});
+
 describe("ColonyClient.getStatus", () => {
   it("calls GET /api/status and parses the response", async () => {
     let calledUrl = "";
@@ -76,7 +100,7 @@ describe("ColonyClient.getStatus", () => {
       calledUrl = String(url);
       return new Response(JSON.stringify(SAMPLE_STATUS), { status: 200 });
     };
-    const client = new ColonyClient(BASE, mockFetch);
+    const client = new ColonyClient(BASE, undefined, mockFetch);
     const status = await client.getStatus();
     expect(calledUrl).toBe(`${BASE}/api/status`);
     expect(status.colony).toBe("test");
@@ -85,12 +109,12 @@ describe("ColonyClient.getStatus", () => {
 
   it("throws a helpful error when the runner is unreachable", async () => {
     const mockFetch: typeof fetch = async () => { throw new TypeError("Failed to fetch"); };
-    const client = new ColonyClient(BASE, mockFetch);
+    const client = new ColonyClient(BASE, undefined, mockFetch);
     await expect(client.getStatus()).rejects.toThrow("not reachable");
   });
 
   it("throws when the API responds with a non-OK status", async () => {
-    const client = new ColonyClient(BASE, makeFetch({ status: 503, body: "service unavailable" }));
+    const client = new ColonyClient(BASE, undefined, makeFetch({ status: 503, body: "service unavailable" }));
     await expect(client.getStatus()).rejects.toThrow("503");
   });
 });
@@ -104,7 +128,7 @@ describe("ColonyClient.prompt", () => {
       calledBody = JSON.parse((init?.body as string) ?? "{}");
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     };
-    const client = new ColonyClient(BASE, mockFetch);
+    const client = new ColonyClient(BASE, undefined, mockFetch);
     await client.prompt("worker", "Fix the tests");
     expect(calledUrl).toBe(`${BASE}/api/ants/worker/prompt`);
     expect(calledBody).toEqual({ prompt: "Fix the tests" });
@@ -116,7 +140,7 @@ describe("ColonyClient.prompt", () => {
       calledUrl = String(url);
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     };
-    const client = new ColonyClient(BASE, mockFetch);
+    const client = new ColonyClient(BASE, undefined, mockFetch);
     await client.prompt("my ant", "hello");
     expect(calledUrl).toContain("my%20ant");
   });
@@ -131,7 +155,7 @@ describe("ColonyClient.pause / resume / clear", () => {
       calledMethod = init?.method ?? "GET";
       return new Response("{}", { status: 200 });
     };
-    await new ColonyClient(BASE, mockFetch).pause("worker");
+    await new ColonyClient(BASE, undefined, mockFetch).pause("worker");
     expect(calledUrl).toBe(`${BASE}/api/ants/worker/pause`);
     expect(calledMethod).toBe("POST");
   });
@@ -142,7 +166,7 @@ describe("ColonyClient.pause / resume / clear", () => {
       calledUrl = String(url);
       return new Response("{}", { status: 200 });
     };
-    await new ColonyClient(BASE, mockFetch).resume("worker");
+    await new ColonyClient(BASE, undefined, mockFetch).resume("worker");
     expect(calledUrl).toBe(`${BASE}/api/ants/worker/resume`);
   });
 
@@ -152,7 +176,7 @@ describe("ColonyClient.pause / resume / clear", () => {
       calledUrl = String(url);
       return new Response(JSON.stringify({ ok: true, cleared: 3 }), { status: 200 });
     };
-    const result = await new ColonyClient(BASE, mockFetch).clear("worker");
+    const result = await new ColonyClient(BASE, undefined, mockFetch).clear("worker");
     expect(calledUrl).toBe(`${BASE}/api/ants/worker/clear`);
     expect(result.cleared).toBe(3);
   });

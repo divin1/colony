@@ -117,7 +117,76 @@ describe("createDashboardHandler", () => {
     const res = await handler(req("GET", "/unknown"));
     expect(res.status).toBe(404);
   });
+});
 
+// --- Auth tests ---
+
+describe("createDashboardHandler — auth", () => {
+  it("allows all requests when no apiKey is configured", async () => {
+    const handler = createDashboardHandler(makeState());
+    const res = await handler(req("GET", "/api/status"));
+    expect(res.status).toBe(200);
+  });
+
+  it("returns 401 for /api/* when apiKey is set and no Authorization header", async () => {
+    const handler = createDashboardHandler(makeState(), "secret");
+    const res = await handler(req("GET", "/api/status"));
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 401 when the Authorization header has the wrong key", async () => {
+    const handler = createDashboardHandler(makeState(), "secret");
+    const res = await handler(
+      new Request("http://localhost/api/status", {
+        headers: { Authorization: "Bearer wrong" },
+      })
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("allows /api/* when the correct Bearer token is sent", async () => {
+    const handler = createDashboardHandler(makeState(), "secret");
+    const res = await handler(
+      new Request("http://localhost/api/status", {
+        headers: { Authorization: "Bearer secret" },
+      })
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("allows OPTIONS preflight without auth (CORS preflight)", async () => {
+    const handler = createDashboardHandler(makeState(), "secret");
+    const res = await handler(new Request("http://localhost/api/status", { method: "OPTIONS" }));
+    expect(res.status).toBe(204);
+  });
+
+  it("serves the HTML dashboard without auth even when apiKey is set", async () => {
+    const handler = createDashboardHandler(makeState(), "secret");
+    const res = await handler(req("GET", "/"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+  });
+
+  it("CORS headers include Authorization", async () => {
+    const handler = createDashboardHandler(makeState(), "secret");
+    const res = await handler(new Request("http://localhost/api/status", { method: "OPTIONS" }));
+    expect(res.headers.get("access-control-allow-headers")).toContain("Authorization");
+  });
+
+  it("allows /api/* when key is passed as ?key= query param (for SSE)", async () => {
+    const handler = createDashboardHandler(makeState(), "secret");
+    const res = await handler(new Request("http://localhost/api/status?key=secret"));
+    expect(res.status).toBe(200);
+  });
+
+  it("returns 401 when ?key= query param has the wrong value", async () => {
+    const handler = createDashboardHandler(makeState(), "secret");
+    const res = await handler(new Request("http://localhost/api/status?key=wrong"));
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("createDashboardHandler — reload", () => {
   it("POST /api/reload returns 500 when no reload callback is set", async () => {
     const handler = createDashboardHandler(makeState());
     const res = await handler(req("POST", "/api/reload"));

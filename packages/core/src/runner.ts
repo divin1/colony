@@ -845,7 +845,7 @@ export async function runColony(
   if (monitorPort) {
     dashboardServer = Bun.serve({
       port: monitorPort,
-      fetch: createDashboardHandler(colonyState),
+      fetch: createDashboardHandler(colonyState, process.env.COLONY_API_KEY),
     });
     console.log(`Dashboard: http://localhost:${monitorPort}`);
   }

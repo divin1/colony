@@ -17,15 +17,20 @@ export interface ColonyStatus {
 export class ColonyClient {
   constructor(
     private readonly baseUrl: string,
+    private readonly apiKey?: string,
     // Injectable for testing — defaults to the global fetch.
     private readonly _fetch: typeof fetch = globalThis.fetch
   ) {}
 
   private async request(path: string, options?: RequestInit): Promise<Response> {
     const url = `${this.baseUrl}${path}`;
+    const authHeader: Record<string, string> = this.apiKey
+      ? { Authorization: `Bearer ${this.apiKey}` }
+      : {};
+    const mergedHeaders = { ...authHeader, ...(options?.headers as Record<string, string> | undefined) };
     let res: Response;
     try {
-      res = await this._fetch(url, options);
+      res = await this._fetch(url, { ...options, headers: mergedHeaders });
     } catch (err) {
       throw new Error(
         `Colony runner is not reachable at ${this.baseUrl}. ` +
