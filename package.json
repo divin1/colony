@@ -7,6 +7,7 @@
     "packages/cli",
     "packages/integrations/discord",
     "packages/integrations/github",
+    "packages/integrations/mcp",
     "packages/web"
   ],
   "scripts": {

@@ -6,6 +6,7 @@ import { validateCommand } from "./commands/validate";
 import { initCommand } from "./commands/init";
 import { versionCommand } from "./commands/version";
 import { updateCommand } from "./commands/update";
+import { mcpCommand } from "./commands/mcp";
 
 const program = new Command()
   .name("colony")
@@ -17,5 +18,6 @@ program.addCommand(runCommand);
 program.addCommand(validateCommand);
 program.addCommand(versionCommand);
 program.addCommand(updateCommand);
+program.addCommand(mcpCommand);
 
 await program.parseAsync();
