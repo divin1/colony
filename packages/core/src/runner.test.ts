@@ -242,4 +242,42 @@ describe("PromiseQueue", () => {
     q.remove((x) => x === "x");
     expect(q.size).toBe(1);
   });
+
+  it("next(signal) rejects immediately if signal is already aborted", async () => {
+    const q = new PromiseQueue<string>();
+    const controller = new AbortController();
+    controller.abort();
+    const err = await q.next(controller.signal).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DOMException);
+    expect((err as DOMException).name).toBe("AbortError");
+  });
+
+  it("next(signal) rejects when signal is aborted while waiting", async () => {
+    const q = new PromiseQueue<string>();
+    const controller = new AbortController();
+    const promise = q.next(controller.signal);
+    controller.abort();
+    const err = await promise.catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DOMException);
+    expect((err as DOMException).name).toBe("AbortError");
+  });
+
+  it("next(signal) removes the waiter on abort so later pushes are not consumed", async () => {
+    const q = new PromiseQueue<string>();
+    const controller = new AbortController();
+    const promise = q.next(controller.signal).catch(() => "aborted");
+    controller.abort();
+    await promise;
+    // Queue should still have size 0; pushing an item should be buffered, not consumed.
+    q.push("hello");
+    expect(q.size).toBe(1);
+  });
+
+  it("next(signal) resolves normally when item arrives before abort", async () => {
+    const q = new PromiseQueue<string>();
+    const controller = new AbortController();
+    const promise = q.next(controller.signal);
+    q.push("world");
+    expect(await promise).toBe("world");
+  });
 });

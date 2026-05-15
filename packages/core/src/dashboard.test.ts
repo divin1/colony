@@ -117,6 +117,22 @@ describe("createDashboardHandler", () => {
     const res = await handler(req("GET", "/unknown"));
     expect(res.status).toBe(404);
   });
+
+  it("POST /api/reload returns 500 when no reload callback is set", async () => {
+    const handler = createDashboardHandler(makeState());
+    const res = await handler(req("POST", "/api/reload"));
+    expect(res.status).toBe(500);
+  });
+
+  it("POST /api/reload returns the callback result", async () => {
+    const state = makeState();
+    const reloadResult = { added: ["new-ant"], removed: [], updated: [] };
+    state.setReloadCallback(async () => reloadResult);
+    const handler = createDashboardHandler(state);
+    const res = await handler(req("POST", "/api/reload"));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(reloadResult);
+  });
 });
 
 // --- Config route tests ---

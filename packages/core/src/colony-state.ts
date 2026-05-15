@@ -1,5 +1,11 @@
 import type { WorkStore, WorkItemSource } from "./work-store.js";
 
+export interface ReloadResult {
+  added: string[];
+  removed: string[];
+  updated: string[];
+}
+
 export type AntRuntimeState = "starting" | "running" | "paused" | "crashed" | "backoff";
 
 export interface AntStatusEntry {
@@ -34,6 +40,7 @@ export class ColonyState {
   private readonly subscribers = new Map<string, Set<(line: string) => void>>();
   private readonly workStore: WorkStore | null;
   private readonly _configDir: string | null;
+  private reloadCallback: (() => Promise<ReloadResult>) | null = null;
 
   constructor(public readonly colonyName: string, workStore?: WorkStore, configDir?: string) {
     this.workStore = workStore ?? null;
@@ -42,6 +49,20 @@ export class ColonyState {
 
   getConfigDir(): string | null {
     return this._configDir;
+  }
+
+  setReloadCallback(fn: () => Promise<ReloadResult>): void {
+    this.reloadCallback = fn;
+  }
+
+  async triggerReload(): Promise<ReloadResult> {
+    if (!this.reloadCallback) throw new Error("Hot reload is not available");
+    return this.reloadCallback();
+  }
+
+  unregister(name: string): void {
+    this.entries.delete(name);
+    this.subscribers.delete(name);
   }
 
   register(name: string, engine: string, controls: AntControlHandles): void {

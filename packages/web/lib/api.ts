@@ -79,6 +79,15 @@ export const api = {
   workGet: (id: string) => get<PersistedWorkItem>(`/api/work/${id}`),
   workCancel: (id: string) => del(`/api/work/${id}`),
 
+  reload: async (): Promise<{ added: string[]; removed: string[]; updated: string[] }> => {
+    const res = await fetch("/api/reload", { method: "POST" });
+    if (!res.ok) {
+      const text = await res.text().catch(() => res.statusText);
+      throw new Error(text);
+    }
+    return res.json() as Promise<{ added: string[]; removed: string[]; updated: string[] }>;
+  },
+
   configGet: () => get<RawColonyConfig>("/api/config"),
   configUpdate: (config: RawColonyConfig) => put("/api/config", config),
 

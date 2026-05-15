@@ -148,4 +148,30 @@ describe("ColonyState", () => {
     controls._queue.push("x", "y");
     expect(s.getStatus().ants[0].queueSize).toBe(2);
   });
+
+  it("unregister() removes the ant from status and subscribers", () => {
+    const s = new ColonyState("c");
+    s.register("worker", "claude-cli", makeControls());
+    expect(s.getStatus().ants).toHaveLength(1);
+    const received: string[] = [];
+    s.subscribeOutput("worker", (line) => received.push(line));
+    s.unregister("worker");
+    expect(s.getStatus().ants).toHaveLength(0);
+    expect(s.getAntStatus("worker")).toBeUndefined();
+    // Pushing output after unregister should not notify the old subscriber.
+    s.pushOutput("worker", "ghost");
+    expect(received).toHaveLength(0);
+  });
+
+  it("triggerReload() throws when no callback is set", async () => {
+    const s = new ColonyState("c");
+    await expect(s.triggerReload()).rejects.toThrow("not available");
+  });
+
+  it("triggerReload() calls the registered callback and returns its result", async () => {
+    const s = new ColonyState("c");
+    const result = { added: ["new-ant"], removed: [], updated: [] };
+    s.setReloadCallback(async () => result);
+    expect(await s.triggerReload()).toEqual(result);
+  });
 });

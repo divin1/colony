@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { runAnt } from "./ant";
 import type { ConfirmationChannel } from "./hooks";
 import type { LoadedConfig, AntConfig, ColonyConfig } from "./config";
+import { loadConfig } from "./config";
 import { createState } from "./state";
 import { loadSkill } from "./skill";
 import { ColonyState } from "./colony-state";
@@ -75,6 +76,21 @@ function backoffDelayMs(consecutiveCrashes: number): number {
     BASE_RESTART_DELAY_MS * 2 ** consecutiveCrashes,
     MAX_RESTART_DELAY_MS
   );
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
+}
+
+function sleepInterruptible(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(new DOMException("Aborted", "AbortError")); return; }
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    }, { once: true });
+  });
 }
 
 /**
@@ -176,13 +192,22 @@ export class PromiseQueue<T> {
     }
   }
 
-  next(): Promise<T> {
+  next(signal?: AbortSignal): Promise<T> {
+    if (signal?.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"));
     const item = this.queue.shift();
-    if (item !== undefined) {
-      return Promise.resolve(item);
-    }
-    return new Promise((resolve) => {
-      this.waiters.push(resolve);
+    if (item !== undefined) return Promise.resolve(item);
+    return new Promise<T>((resolve, reject) => {
+      const wrapped = (value: T) => {
+        signal?.removeEventListener("abort", abortHandler);
+        resolve(value);
+      };
+      const abortHandler = () => {
+        const idx = this.waiters.indexOf(wrapped);
+        if (idx !== -1) this.waiters.splice(idx, 1);
+        reject(new DOMException("Aborted", "AbortError"));
+      };
+      if (signal) signal.addEventListener("abort", abortHandler, { once: true });
+      this.waiters.push(wrapped);
     });
   }
 
@@ -228,18 +253,20 @@ interface DiscordCommandPayload {
   author: string;
 }
 
-// Runs a single ant in an infinite supervisor loop.
-// On crash: logs to Discord and restarts after RESTART_DELAY_MS.
-// Never resolves — returns Promise<never> so Promise.all waits indefinitely.
+// Runs a single ant in a supervisor loop.
+// Resolves cleanly when controller.signal is aborted (hot reload / graceful stop).
+// On crash: logs to Discord and restarts after a backoff delay.
 async function runAntWithSupervision(
   ant: AntConfig,
   colony: ColonyConfig,
   configDir: string,
   discord: RunnerDiscord,
   colonyState: ColonyState,
+  controller: AbortController,
   github?: RunnerGitHub,
   workStore?: WorkStore
-): Promise<never> {
+): Promise<void> {
+  const { signal } = controller;
   // Fall back to the ant name when no Discord channel is configured (e.g. ConsoleDiscord).
   const channelName = ant.integrations?.discord?.channel ?? ant.name;
   const channelId = await discord.resolveChannelId(channelName);
@@ -260,8 +287,13 @@ async function runAntWithSupervision(
   let paused = false;
   let resumeResolve: (() => void) | null = null;
   const waitForResume = (): Promise<void> =>
-    new Promise((resolve) => {
+    new Promise((resolve, reject) => {
+      if (signal.aborted) { reject(new DOMException("Aborted", "AbortError")); return; }
       resumeResolve = resolve;
+      signal.addEventListener("abort", () => {
+        resumeResolve = null;
+        reject(new DOMException("Aborted", "AbortError"));
+      }, { once: true });
     });
 
   // --- Register with colony state for dashboard control ---
@@ -514,156 +546,170 @@ async function runAntWithSupervision(
     queue.push({ id: stored?.id ?? randomUUID(), prompt: defaultPrompt, source: "cron" });
   }
 
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    if (paused) {
-      colonyState.setState(ant.name, "paused");
-      await waitForResume();
-    }
-    const workItem = await queue.next();
-    log(ant.name, "session starting");
-    colonyState.setState(ant.name, "running");
-    workStore?.updateStatus(workItem.id, "running", { startedAt: Date.now() });
-    try {
-      // Load skill files fresh each session (task-snapshot pattern).
-      const skillTexts: string[] = [];
-      for (const relPath of ant.skills ?? []) {
-        try {
-          skillTexts.push(loadSkill(join(configDir, relPath)));
-        } catch (err) {
-          log(ant.name, `skill load warning: ${(err as Error).message}`);
-        }
-      }
-      const commonInstructions = [buildCommonInstructions(colony), ...skillTexts]
-        .filter(Boolean)
-        .join("\n\n");
-
-      // Prepend the previous session summary so the agent resumes with context.
-      const previousSummary = antState.getLastSessionSummary(ant.name);
-      const prompt = previousSummary
-        ? `## Context from your previous session\n\n${previousSummary}\n\n---\n\n${workItem.prompt}`
-        : workItem.prompt;
-
-      const result = await runAnt(prompt, {
-        config: ant,
-        channel: teeChannel,
-        channelId,
-        commonInstructions,
-      });
-      sessionsCompleted++;
-      consecutiveCrashes = 0;
-      colonyState.incrementSessions(ant.name, "completed");
-      log(ant.name, "session completed");
-      broadcast(`✅ **${ant.name}** completed its work session.`);
-
-      const completedAt = Date.now();
-      workStore?.updateStatus(workItem.id, "done", { completedAt });
-      if (result.lastOutput) {
-        workStore?.setOutput(workItem.id, result.lastOutput);
-        antState.setSessionSummary(ant.name, result.lastOutput);
+  try {
+    while (!signal.aborted) {
+      if (paused) {
+        colonyState.setState(ant.name, "paused");
+        await waitForResume(); // throws AbortError on abort
       }
 
-      // Post a summary comment on the triggering GitHub issue.
-      if (workItem.issueContext && result.lastOutput && github) {
-        const { owner, repo, number } = workItem.issueContext;
-        log(ant.name, `posting comment on ${workItem.issueContext.repoSlug}#${number}`);
-        await github
-          .createIssueComment(owner, repo, number, result.lastOutput)
-          .catch((err) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            broadcast(`⚠️ **${ant.name}** failed to post GitHub comment: ${msg}`);
-          });
-      }
-    } catch (err) {
-      sessionsCrashed++;
-      colonyState.incrementSessions(ant.name, "crashed");
-      workStore?.updateStatus(workItem.id, "failed", { completedAt: Date.now() });
-      if (err instanceof AntSessionError) {
-        switch (err.category) {
-          case "max_turns":
-            consecutiveCrashes = 0;
-            log(ant.name, "max turns reached — restarting");
-            break;
+      const workItem = await queue.next(signal); // throws AbortError on abort
+      log(ant.name, "session starting");
+      colonyState.setState(ant.name, "running");
+      workStore?.updateStatus(workItem.id, "running", { startedAt: Date.now() });
 
-          case "rate_limit": {
-            consecutiveCrashes++;
-            const waitMs = err.retryAfterMs ?? backoffDelayMs(consecutiveCrashes);
-            const waitSec = Math.round(waitMs / 1000);
-            log(ant.name, `rate limited — resuming in ${waitSec}s`);
-            colonyState.setState(ant.name, "backoff");
-            broadcast(`⏳ **${ant.name}** is rate limited. Resuming in ${waitSec}s…`);
-            await Bun.sleep(waitMs);
-            break;
-          }
-
-          case "billing":
-            consecutiveCrashes = 0;
-            log(ant.name, "billing error — pausing until resumed");
-            colonyState.setState(ant.name, "paused");
-            broadcast(`💳 **${ant.name}** has a billing error — check your Anthropic account. Pausing until resumed.`);
-            paused = true;
-            await waitForResume();
-            break;
-
-          case "auth":
-            consecutiveCrashes = 0;
-            log(ant.name, "authentication failed — pausing until resumed");
-            colonyState.setState(ant.name, "paused");
-            broadcast(`🔐 **${ant.name}** failed to authenticate — check credentials. Pausing until resumed.`);
-            paused = true;
-            await waitForResume();
-            break;
-
-          case "budget":
-            consecutiveCrashes = 0;
-            log(ant.name, "USD budget cap exceeded — pausing until resumed");
-            colonyState.setState(ant.name, "paused");
-            broadcast(`💰 **${ant.name}** exceeded its USD budget cap. Pausing until resumed.`);
-            paused = true;
-            await waitForResume();
-            break;
-
-          case "permanent": {
-            consecutiveCrashes++;
-            const delay = backoffDelayMs(consecutiveCrashes);
-            log(ant.name, `permanent error: ${err.message} — restarting in ${delay / 1000}s`);
-            colonyState.setState(ant.name, "backoff");
-            broadcast(`🚫 **${ant.name}** encountered a permanent error: ${err.message}\nRestarting in ${delay / 1000}s…`);
-            await Bun.sleep(delay);
-            break;
-          }
-
-          default: {
-            // 'transient'
-            consecutiveCrashes++;
-            const delay = backoffDelayMs(consecutiveCrashes);
-            log(ant.name, `crashed: ${err.message} — restarting in ${delay / 1000}s`);
-            colonyState.setState(ant.name, "crashed");
-            broadcast(`❌ **${ant.name}** crashed: ${err.message}\nRestarting in ${delay / 1000}s…`);
-            await Bun.sleep(delay);
+      try {
+        // Load skill files fresh each session (task-snapshot pattern).
+        const skillTexts: string[] = [];
+        for (const relPath of ant.skills ?? []) {
+          try {
+            skillTexts.push(loadSkill(join(configDir, relPath)));
+          } catch (err) {
+            log(ant.name, `skill load warning: ${(err as Error).message}`);
           }
         }
-      } else {
-        // Non-AntSessionError (e.g. unexpected JS error): treat as transient.
-        consecutiveCrashes++;
-        const delay = backoffDelayMs(consecutiveCrashes);
-        const message = err instanceof Error ? err.message : String(err);
-        log(ant.name, `crashed: ${message} — restarting in ${delay / 1000}s`);
-        colonyState.setState(ant.name, "crashed");
-        broadcast(`❌ **${ant.name}** crashed: ${message}\nRestarting in ${delay / 1000}s…`);
-        await Bun.sleep(delay);
+        const commonInstructions = [buildCommonInstructions(colony), ...skillTexts]
+          .filter(Boolean)
+          .join("\n\n");
+
+        // Prepend the previous session summary so the agent resumes with context.
+        const previousSummary = antState.getLastSessionSummary(ant.name);
+        const prompt = previousSummary
+          ? `## Context from your previous session\n\n${previousSummary}\n\n---\n\n${workItem.prompt}`
+          : workItem.prompt;
+
+        const result = await runAnt(prompt, {
+          config: ant,
+          channel: teeChannel,
+          channelId,
+          commonInstructions,
+        });
+        sessionsCompleted++;
+        consecutiveCrashes = 0;
+        colonyState.incrementSessions(ant.name, "completed");
+        log(ant.name, "session completed");
+        broadcast(`✅ **${ant.name}** completed its work session.`);
+
+        const completedAt = Date.now();
+        workStore?.updateStatus(workItem.id, "done", { completedAt });
+        if (result.lastOutput) {
+          workStore?.setOutput(workItem.id, result.lastOutput);
+          antState.setSessionSummary(ant.name, result.lastOutput);
+        }
+
+        // Post a summary comment on the triggering GitHub issue.
+        if (workItem.issueContext && result.lastOutput && github) {
+          const { owner, repo, number } = workItem.issueContext;
+          log(ant.name, `posting comment on ${workItem.issueContext.repoSlug}#${number}`);
+          await github
+            .createIssueComment(owner, repo, number, result.lastOutput)
+            .catch((err) => {
+              const msg = err instanceof Error ? err.message : String(err);
+              broadcast(`⚠️ **${ant.name}** failed to post GitHub comment: ${msg}`);
+            });
+        }
+      } catch (err) {
+        if (isAbortError(err)) throw err; // propagate abort through session error handler
+        sessionsCrashed++;
+        colonyState.incrementSessions(ant.name, "crashed");
+        workStore?.updateStatus(workItem.id, "failed", { completedAt: Date.now() });
+        if (err instanceof AntSessionError) {
+          switch (err.category) {
+            case "max_turns":
+              consecutiveCrashes = 0;
+              log(ant.name, "max turns reached — restarting");
+              break;
+
+            case "rate_limit": {
+              consecutiveCrashes++;
+              const waitMs = err.retryAfterMs ?? backoffDelayMs(consecutiveCrashes);
+              const waitSec = Math.round(waitMs / 1000);
+              log(ant.name, `rate limited — resuming in ${waitSec}s`);
+              colonyState.setState(ant.name, "backoff");
+              broadcast(`⏳ **${ant.name}** is rate limited. Resuming in ${waitSec}s…`);
+              await sleepInterruptible(waitMs, signal);
+              break;
+            }
+
+            case "billing":
+              consecutiveCrashes = 0;
+              log(ant.name, "billing error — pausing until resumed");
+              colonyState.setState(ant.name, "paused");
+              broadcast(`💳 **${ant.name}** has a billing error — check your Anthropic account. Pausing until resumed.`);
+              paused = true;
+              await waitForResume();
+              break;
+
+            case "auth":
+              consecutiveCrashes = 0;
+              log(ant.name, "authentication failed — pausing until resumed");
+              colonyState.setState(ant.name, "paused");
+              broadcast(`🔐 **${ant.name}** failed to authenticate — check credentials. Pausing until resumed.`);
+              paused = true;
+              await waitForResume();
+              break;
+
+            case "budget":
+              consecutiveCrashes = 0;
+              log(ant.name, "USD budget cap exceeded — pausing until resumed");
+              colonyState.setState(ant.name, "paused");
+              broadcast(`💰 **${ant.name}** exceeded its USD budget cap. Pausing until resumed.`);
+              paused = true;
+              await waitForResume();
+              break;
+
+            case "permanent": {
+              consecutiveCrashes++;
+              const delay = backoffDelayMs(consecutiveCrashes);
+              log(ant.name, `permanent error: ${err.message} — restarting in ${delay / 1000}s`);
+              colonyState.setState(ant.name, "backoff");
+              broadcast(`🚫 **${ant.name}** encountered a permanent error: ${err.message}\nRestarting in ${delay / 1000}s…`);
+              await sleepInterruptible(delay, signal);
+              break;
+            }
+
+            default: {
+              // 'transient'
+              consecutiveCrashes++;
+              const delay = backoffDelayMs(consecutiveCrashes);
+              log(ant.name, `crashed: ${err.message} — restarting in ${delay / 1000}s`);
+              colonyState.setState(ant.name, "crashed");
+              broadcast(`❌ **${ant.name}** crashed: ${err.message}\nRestarting in ${delay / 1000}s…`);
+              await sleepInterruptible(delay, signal);
+            }
+          }
+        } else {
+          // Non-AntSessionError (e.g. unexpected JS error): treat as transient.
+          consecutiveCrashes++;
+          const delay = backoffDelayMs(consecutiveCrashes);
+          const message = err instanceof Error ? err.message : String(err);
+          log(ant.name, `crashed: ${message} — restarting in ${delay / 1000}s`);
+          colonyState.setState(ant.name, "crashed");
+          broadcast(`❌ **${ant.name}** crashed: ${message}\nRestarting in ${delay / 1000}s…`);
+          await sleepInterruptible(delay, signal);
+        }
+      }
+
+      // If no triggers: sleep (if configured) then re-queue so the ant keeps running.
+      if (!hasAnyTrigger) {
+        if (pollIntervalMs > 0) {
+          await sleepInterruptible(pollIntervalMs, signal);
+        }
+        const stored = workStore?.create(ant.name, defaultPrompt, "cron");
+        queue.push({ id: stored?.id ?? randomUUID(), prompt: defaultPrompt, source: "cron" });
       }
     }
-
-    // If no triggers: sleep (if configured) then re-queue so the ant keeps running.
-    if (!hasAnyTrigger) {
-      if (pollIntervalMs > 0) {
-        await Bun.sleep(pollIntervalMs);
-      }
-      const stored = workStore?.create(ant.name, defaultPrompt, "cron");
-      queue.push({ id: stored?.id ?? randomUUID(), prompt: defaultPrompt, source: "cron" });
+  } catch (err) {
+    if (!isAbortError(err)) {
+      log(ant.name, `supervisor exited unexpectedly: ${(err as Error).message}`);
     }
   }
+
+  // Clean up: cancel any queued-but-not-yet-started work items and remove from state.
+  log(ant.name, "stopping");
+  queue.clear();
+  workStore?.cancelAllQueued(ant.name);
+  colonyState.unregister(ant.name);
 }
 
 // Maps engine names to the CLI binary they spawn.
@@ -675,31 +721,21 @@ const ENGINE_BINARIES: Record<string, string> = {
   "opencode": "opencode",
 };
 
-// Connects to Discord, launches all ants concurrently, and runs until the process is killed.
-// Each ant has its own supervisor loop — a crash in one ant does not affect others.
-export async function runColony(
-  config: LoadedConfig,
-  discord: RunnerDiscord,
-  github?: RunnerGitHub
-): Promise<void> {
-  // When full Discord is active, every ant must have a channel configured so
-  // the runner can route messages correctly.
-  if (config.colony.integrations?.discord) {
-    const noChannel = config.ants.filter(
-      (ant) => !ant.integrations?.discord?.channel
+function checkDiscordChannels(colony: LoadedConfig["colony"], ants: LoadedConfig["ants"]): void {
+  if (!colony.integrations?.discord) return;
+  const noChannel = ants.filter((ant) => !ant.integrations?.discord?.channel);
+  if (noChannel.length > 0) {
+    const names = noChannel.map((a) => `"${a.name}"`).join(", ");
+    throw new Error(
+      `Colony startup failed — the following ant(s) have no integrations.discord.channel configured: ${names}\n` +
+      `Every ant needs a Discord channel when the Discord integration is active.`
     );
-    if (noChannel.length > 0) {
-      const names = noChannel.map((a) => `"${a.name}"`).join(", ");
-      throw new Error(
-        `Colony startup failed — the following ant(s) have no integrations.discord.channel configured: ${names}\n` +
-        `Every ant needs a Discord channel when the Discord integration is active.`
-      );
-    }
   }
+}
 
-  // Pre-flight: verify all required CLI binaries are on PATH before starting anything.
+function checkBinaries(ants: LoadedConfig["ants"]): void {
   const missing: string[] = [];
-  for (const ant of config.ants) {
+  for (const ant of ants) {
     const binaryName =
       ant.engine === "cli" ? ant.cli?.binary : ENGINE_BINARIES[ant.engine];
     if (binaryName && !Bun.which(binaryName)) {
@@ -711,11 +747,20 @@ export async function runColony(
       `Colony startup failed — required CLI binaries not found on PATH:\n${missing.join("\n")}\n\nInstall the missing tools and try again.`
     );
   }
+}
+
+// Connects to Discord, launches all ants concurrently, and runs until the process is killed.
+// Supports hot reload via colonyState.triggerReload() — ants can be stopped/started without restart.
+export async function runColony(
+  config: LoadedConfig,
+  discord: RunnerDiscord,
+  github?: RunnerGitHub
+): Promise<void> {
+  checkDiscordChannels(config.colony, config.ants);
+  checkBinaries(config.ants);
 
   await discord.connect();
-  console.log(
-    `Colony "${config.colony.name}" online — ${config.ants.length} ant(s) starting.`
-  );
+  console.log(`Colony "${config.colony.name}" online — ${config.ants.length} ant(s) starting.`);
 
   if (config.ants.length === 0) {
     console.warn("No ants configured — nothing to run.");
@@ -728,6 +773,73 @@ export async function runColony(
   const workStore = monitorPort ? new WorkStore(config.configDir) : undefined;
   const colonyState = new ColonyState(config.colony.name, workStore, config.configDir);
 
+  // Track running ant supervisors so reload can stop/restart individual ants.
+  type AntHandle = { controller: AbortController; promise: Promise<void> };
+  const runningAnts = new Map<string, AntHandle>();
+  let currentConfig = config;
+
+  function startAnt(ant: AntConfig): void {
+    const controller = new AbortController();
+    const promise = runAntWithSupervision(
+      ant, currentConfig.colony, currentConfig.configDir,
+      discord, colonyState, controller, github, workStore
+    ).catch((err: Error) => log(ant.name, `supervisor exited: ${err.message}`));
+    runningAnts.set(ant.name, { controller, promise });
+  }
+
+  async function stopAnt(name: string): Promise<void> {
+    const handle = runningAnts.get(name);
+    if (!handle) return;
+    handle.controller.abort();
+    await handle.promise;
+    runningAnts.delete(name);
+  }
+
+  // Wire up the reload callback used by POST /api/reload.
+  colonyState.setReloadCallback(async () => {
+    const newConfig = loadConfig(currentConfig.configDir); // throws on invalid YAML
+    checkDiscordChannels(newConfig.colony, newConfig.ants);
+
+    const oldByName = new Map(currentConfig.ants.map((a) => [a.name, a]));
+    const newByName = new Map(newConfig.ants.map((a) => [a.name, a]));
+
+    const added: string[] = [];
+    const removed: string[] = [];
+    const updated: string[] = [];
+
+    // Stop ants that were removed or whose config changed.
+    for (const [name, oldAnt] of oldByName) {
+      const newAnt = newByName.get(name);
+      if (!newAnt) {
+        removed.push(name);
+        await stopAnt(name);
+      } else if (JSON.stringify(oldAnt) !== JSON.stringify(newAnt)) {
+        updated.push(name);
+        await stopAnt(name);
+      }
+    }
+
+    // Start new ants and changed ants (already stopped above).
+    currentConfig = newConfig;
+    for (const [name, newAnt] of newByName) {
+      if (!oldByName.has(name)) {
+        added.push(name);
+        startAnt(newAnt);
+      } else if (updated.includes(name)) {
+        startAnt(newAnt);
+      }
+    }
+
+    const summary = [
+      added.length > 0 ? `${added.length} added` : "",
+      removed.length > 0 ? `${removed.length} removed` : "",
+      updated.length > 0 ? `${updated.length} updated` : "",
+    ].filter(Boolean).join(", ");
+    console.log(`Colony reloaded — ${summary || "no changes"}`);
+
+    return { added, removed, updated };
+  });
+
   // Start the optional HTTP dashboard.
   let dashboardServer: ReturnType<typeof Bun.serve> | undefined;
   if (monitorPort) {
@@ -738,13 +850,11 @@ export async function runColony(
     console.log(`Dashboard: http://localhost:${monitorPort}`);
   }
 
+  for (const ant of config.ants) startAnt(ant);
+
   try {
-    // runAntWithSupervision never resolves, so this awaits indefinitely.
-    await Promise.all(
-      config.ants.map((ant) =>
-        runAntWithSupervision(ant, config.colony, config.configDir, discord, colonyState, github, workStore)
-      )
-    );
+    // Block indefinitely — Colony runs until the process is killed.
+    await new Promise<never>(() => {});
   } finally {
     dashboardServer?.stop(true);
     await discord.disconnect();

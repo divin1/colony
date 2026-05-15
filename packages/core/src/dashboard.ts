@@ -64,6 +64,16 @@ export function createDashboardHandler(
       return jsonResponse(state.getStatus());
     }
 
+    // POST /api/reload — hot reload config without restarting the runner
+    if (path === "/api/reload" && req.method === "POST") {
+      try {
+        const result = await state.triggerReload();
+        return jsonResponse(result);
+      } catch (err) {
+        return textResponse(`Reload failed: ${(err as Error).message}`, 500);
+      }
+    }
+
     // GET /api/work — list work items (filterable by status, ant, limit, offset)
     if (path === "/api/work" && req.method === "GET") {
       if (!workStore) return jsonResponse([]);

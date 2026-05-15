@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { api } from "@/lib/api";
 import type { RawColonyConfig } from "@/lib/types";
-import { Save, AlertCircle, RotateCcw, Info } from "lucide-react";
+import { RestartBanner } from "@/components/RestartBanner";
+import { Save, AlertCircle, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface FormState {
@@ -173,18 +174,7 @@ export function ColonyConfigEditor() {
   return (
     <div className="flex flex-col gap-6 max-w-2xl">
       {restartRequired && (
-        <div className="flex items-center gap-3 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3">
-          <RotateCcw className="size-4 text-warning shrink-0" />
-          <p className="text-sm text-warning flex-1">
-            Config saved — restart the colony runner to apply changes.
-          </p>
-          <button
-            onClick={() => setRestartRequired(false)}
-            className="text-xs text-muted-foreground hover:text-foreground"
-          >
-            Dismiss
-          </button>
-        </div>
+        <RestartBanner onDismiss={() => setRestartRequired(false)} />
       )}
 
       {/* Identity */}
