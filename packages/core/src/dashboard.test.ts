@@ -200,4 +200,114 @@ describe("createDashboardHandler — config routes", () => {
     const res = await handler(req("GET", "/api/config/ants"));
     expect(res.status).toBe(503);
   });
+
+  // --- Write routes ---
+
+  it("PUT /api/config/ants/:name updates the YAML file", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const updated = {
+      name: "worker",
+      description: "Updated description",
+      instructions: "New instructions.",
+      engine: "claude-cli",
+    };
+    const res = await handler(req("PUT", "/api/config/ants/worker", updated));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-colony-restart-required")).toBe("true");
+    const body = (await res.json()) as { ok: boolean };
+    expect(body.ok).toBe(true);
+    // Read back to verify
+    const verify = await handler(req("GET", "/api/config/ants/worker"));
+    const verifyBody = (await verify.json()) as { description: string };
+    expect(verifyBody.description).toBe("Updated description");
+  });
+
+  it("PUT /api/config/ants/:name returns 404 for unknown ant", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const res = await handler(req("PUT", "/api/config/ants/ghost", {
+      name: "ghost",
+      description: "Ghost ant",
+      instructions: "Haunt things.",
+      engine: "claude-cli",
+    }));
+    expect(res.status).toBe(404);
+  });
+
+  it("PUT /api/config/ants/:name returns 422 for invalid body", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const res = await handler(req("PUT", "/api/config/ants/worker", { name: "worker" }));
+    expect(res.status).toBe(422);
+  });
+
+  it("PUT /api/config/ants/:name returns 422 when name in body mismatches URL", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const res = await handler(req("PUT", "/api/config/ants/worker", {
+      name: "other-ant",
+      description: "x",
+      instructions: "y",
+    }));
+    expect(res.status).toBe(422);
+  });
+
+  it("POST /api/config/ants creates a new YAML file", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const newAnt = {
+      name: "tester",
+      description: "Runs tests",
+      instructions: "Run bun test.",
+      engine: "claude-cli",
+    };
+    const res = await handler(req("POST", "/api/config/ants", newAnt));
+    expect(res.status).toBe(201);
+    expect(res.headers.get("x-colony-restart-required")).toBe("true");
+    // Should now appear in list
+    const list = await handler(req("GET", "/api/config/ants"));
+    const names = ((await list.json()) as { name: string }[]).map((a) => a.name);
+    expect(names).toContain("tester");
+  });
+
+  it("POST /api/config/ants returns 409 when ant name already exists", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const res = await handler(req("POST", "/api/config/ants", {
+      name: "worker",
+      description: "Duplicate",
+      instructions: "Work.",
+      engine: "claude-cli",
+    }));
+    expect(res.status).toBe(409);
+  });
+
+  it("DELETE /api/config/ants/:name removes the YAML file", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const res = await handler(req("DELETE", "/api/config/ants/reviewer"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-colony-restart-required")).toBe("true");
+    // Should no longer appear in list
+    const list = await handler(req("GET", "/api/config/ants"));
+    const names = ((await list.json()) as { name: string }[]).map((a) => a.name);
+    expect(names).not.toContain("reviewer");
+  });
+
+  it("DELETE /api/config/ants/:name returns 404 for unknown ant", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const res = await handler(req("DELETE", "/api/config/ants/ghost"));
+    expect(res.status).toBe(404);
+  });
+
+  it("PUT /api/config updates colony.yaml", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const updated = { name: "renamed-colony", monitoring: { port: 9000 } };
+    const res = await handler(req("PUT", "/api/config", updated));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-colony-restart-required")).toBe("true");
+    const verify = await handler(req("GET", "/api/config"));
+    const verifyBody = (await verify.json()) as { name: string };
+    expect(verifyBody.name).toBe("renamed-colony");
+  });
+
+  it("PUT /api/config returns 422 for invalid body", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const res = await handler(req("PUT", "/api/config", {}));
+    expect(res.status).toBe(422);
+  });
 });

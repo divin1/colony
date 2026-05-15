@@ -1,9 +1,17 @@
 import type { ColonyState } from "./colony-state.js";
-import { readRawColonyYaml, readRawAntYamls, readRawAntYaml } from "./config.js";
+import {
+  readRawColonyYaml,
+  readRawAntYamls,
+  readRawAntYaml,
+  writeAntYaml,
+  createAntYaml,
+  deleteAntYaml,
+  writeColonyYaml,
+} from "./config.js";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, PATCH, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
@@ -22,6 +30,17 @@ function jsonResponse(data: unknown, status = 200): Response {
 
 function textResponse(text: string, status = 200): Response {
   return new Response(text, { status, headers: CORS_HEADERS });
+}
+
+function writeOkResponse(data: unknown = { ok: true }, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      ...CORS_HEADERS,
+      "Content-Type": "application/json",
+      "X-Colony-Restart-Required": "true",
+    },
+  });
 }
 
 // --- HTTP route handler ---
@@ -82,40 +101,89 @@ export function createDashboardHandler(
       }
     }
 
-    // Config routes — read raw YAML (no env interpolation, no Zod) so the editor sees template values.
+    // Config routes — raw YAML (no env interpolation) so the editor sees/writes template values.
     const configDir = state.getConfigDir();
 
-    // GET /api/config — full colony.yaml as JSON
-    if (path === "/api/config" && req.method === "GET") {
+    // /api/config — colony.yaml
+    if (path === "/api/config") {
       if (!configDir) return textResponse("Config directory not available", 503);
-      try {
-        return jsonResponse(readRawColonyYaml(configDir));
-      } catch (err) {
-        return textResponse(`Failed to read colony.yaml: ${(err as Error).message}`, 500);
+      if (req.method === "GET") {
+        try {
+          return jsonResponse(readRawColonyYaml(configDir));
+        } catch (err) {
+          return textResponse(`Failed to read colony.yaml: ${(err as Error).message}`, 500);
+        }
+      }
+      if (req.method === "PUT") {
+        let body: unknown;
+        try { body = await req.json(); } catch { return textResponse("Invalid JSON", 400); }
+        const result = writeColonyYaml(configDir, body);
+        if (!result.ok) {
+          if (result.type === "invalid") return textResponse(result.error, 422);
+          return textResponse(result.error, 500);
+        }
+        return writeOkResponse();
       }
     }
 
-    // GET /api/config/ants — all ant configs as JSON array
-    if (path === "/api/config/ants" && req.method === "GET") {
+    // /api/config/ants — ant list + create
+    if (path === "/api/config/ants") {
       if (!configDir) return textResponse("Config directory not available", 503);
-      try {
-        return jsonResponse(readRawAntYamls(configDir));
-      } catch (err) {
-        return textResponse(`Failed to read ant configs: ${(err as Error).message}`, 500);
+      if (req.method === "GET") {
+        try {
+          return jsonResponse(readRawAntYamls(configDir));
+        } catch (err) {
+          return textResponse(`Failed to read ant configs: ${(err as Error).message}`, 500);
+        }
+      }
+      if (req.method === "POST") {
+        let body: unknown;
+        try { body = await req.json(); } catch { return textResponse("Invalid JSON", 400); }
+        const result = createAntYaml(configDir, body);
+        if (!result.ok) {
+          if (result.type === "invalid") return textResponse(result.error, 422);
+          if (result.type === "conflict") return textResponse("An ant with that name already exists", 409);
+          return textResponse(result.error, 500);
+        }
+        return writeOkResponse({ ok: true }, 201);
       }
     }
 
-    // GET /api/config/ants/:name — single ant config matched by name field
+    // /api/config/ants/:name — single ant read / update / delete
     const configAntRoute = path.match(/^\/api\/config\/ants\/([^/]+)$/);
-    if (configAntRoute && req.method === "GET") {
+    if (configAntRoute) {
       if (!configDir) return textResponse("Config directory not available", 503);
       const name = decodeURIComponent(configAntRoute[1]);
-      try {
-        const raw = readRawAntYaml(configDir, name);
-        if (!raw) return textResponse("Ant not found", 404);
-        return jsonResponse(raw);
-      } catch (err) {
-        return textResponse(`Failed to read ant config: ${(err as Error).message}`, 500);
+
+      if (req.method === "GET") {
+        try {
+          const raw = readRawAntYaml(configDir, name);
+          if (!raw) return textResponse("Ant not found", 404);
+          return jsonResponse(raw);
+        } catch (err) {
+          return textResponse(`Failed to read ant config: ${(err as Error).message}`, 500);
+        }
+      }
+
+      if (req.method === "PUT") {
+        let body: unknown;
+        try { body = await req.json(); } catch { return textResponse("Invalid JSON", 400); }
+        const result = writeAntYaml(configDir, name, body);
+        if (!result.ok) {
+          if (result.type === "not_found") return textResponse("Ant not found", 404);
+          if (result.type === "invalid") return textResponse(result.error, 422);
+          return textResponse(result.error, 500);
+        }
+        return writeOkResponse();
+      }
+
+      if (req.method === "DELETE") {
+        const result = deleteAntYaml(configDir, name);
+        if (!result.ok) {
+          if (result.type === "not_found") return textResponse("Ant not found", 404);
+          return textResponse(result.error, 500);
+        }
+        return writeOkResponse();
       }
     }
 
