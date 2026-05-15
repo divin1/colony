@@ -44,22 +44,31 @@ describe("colony run", () => {
     expect(stderr).toContain("Error:");
   });
 
-  it("fails when colony.yaml has no discord integration", async () => {
+  it("starts without Discord config — uses console output", async () => {
     const dir = join(tempDir, "no-discord");
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "colony.yaml"), "name: test\n");
+    // No integrations block at all — no Discord, no GitHub.
+    writeFileSync(join(dir, "colony.yaml"), "name: no-discord-colony\n");
     mkdirSync(join(dir, "ants"), { recursive: true });
+    // Use engine: cli with a universally available binary so the pre-flight check passes.
     writeFileSync(
       join(dir, "ants", "worker.yaml"),
-      "name: w\ndescription: d\ninstructions: i\n"
+      "name: w\ndescription: d\ninstructions: i\nengine: cli\ncli:\n  binary: echo\n"
     );
 
     const proc = spawnRun(dir);
+    // Let it start briefly then kill — we only need to verify startup behaviour.
+    const timeout = setTimeout(() => proc.kill(), 3000);
+    const stdout = await new Response(proc.stdout).text();
     const stderr = await new Response(proc.stderr).text();
-    const exitCode = await proc.exited;
+    clearTimeout(timeout);
 
-    expect(exitCode).not.toBe(0);
-    expect(stderr).toContain("discord");
+    const output = stdout + stderr;
+    // Must not fail due to missing Discord config.
+    expect(output).not.toMatch(/integrations\.discord.*required/i);
+    expect(output).not.toMatch(/discord.*must be configured/i);
+    // Should acknowledge the console-only mode or print the colony name.
+    expect(output.toLowerCase()).toMatch(/console|no-discord-colony/);
   });
 
   it("fails when no ant configs exist", async () => {

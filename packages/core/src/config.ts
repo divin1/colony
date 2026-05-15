@@ -36,6 +36,13 @@ export const ColonyConfigSchema = z.object({
           guild: EnvString,
         })
         .optional(),
+      // Lightweight alternative to the full Discord bot: just a webhook URL.
+      // Supports send-only notifications; cannot receive commands from Discord.
+      discord_webhook: z
+        .object({
+          url: EnvString,
+        })
+        .optional(),
       github: z
         .object({
           token: EnvString,

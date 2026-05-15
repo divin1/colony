@@ -15,6 +15,21 @@ export interface RunnerDiscord extends ConfirmationChannel {
   on<T>(event: string, handler: (payload: T) => void): void;
 }
 
+// No-op Discord implementation used when no messaging integration is configured.
+// All status output goes to the console; ants cannot receive Discord commands.
+export class ConsoleDiscord implements RunnerDiscord {
+  async connect(): Promise<void> {}
+  async disconnect(): Promise<void> {}
+  async send(_channelId: string, content: string): Promise<{ id: string }> {
+    console.log(content);
+    return { id: `console-${Date.now()}` };
+  }
+  async resolveChannelId(nameOrId: string): Promise<string> {
+    return nameOrId;
+  }
+  on<T>(_event: string, _handler: (payload: T) => void): void {}
+}
+
 // Minimal GitHub interface the runner needs for issue polling.
 // GitHubIntegration satisfies this structurally — core does not depend on @colony/github.
 export interface RunnerGitHub {
@@ -188,11 +203,8 @@ async function runAntWithSupervision(
   discord: RunnerDiscord,
   github?: RunnerGitHub
 ): Promise<never> {
-  const channelName = ant.integrations?.discord?.channel;
-  if (!channelName) {
-    throw new Error(`Ant "${ant.name}" has no discord.channel configured`);
-  }
-
+  // Fall back to the ant name when no Discord channel is configured (e.g. ConsoleDiscord).
+  const channelName = ant.integrations?.discord?.channel ?? ant.name;
   const channelId = await discord.resolveChannelId(channelName);
 
   const pollIntervalRaw = ant.poll_interval ?? colony.defaults?.poll_interval;
@@ -593,6 +605,21 @@ export async function runColony(
   discord: RunnerDiscord,
   github?: RunnerGitHub
 ): Promise<void> {
+  // When full Discord is active, every ant must have a channel configured so
+  // the runner can route messages correctly.
+  if (config.colony.integrations?.discord) {
+    const noChannel = config.ants.filter(
+      (ant) => !ant.integrations?.discord?.channel
+    );
+    if (noChannel.length > 0) {
+      const names = noChannel.map((a) => `"${a.name}"`).join(", ");
+      throw new Error(
+        `Colony startup failed — the following ant(s) have no integrations.discord.channel configured: ${names}\n` +
+        `Every ant needs a Discord channel when the Discord integration is active.`
+      );
+    }
+  }
+
   // Pre-flight: verify all required CLI binaries are on PATH before starting anything.
   const missing: string[] = [];
   for (const ant of config.ants) {

@@ -10,8 +10,6 @@ function makeDiscord(overrides: Partial<RunnerDiscord> = {}): RunnerDiscord {
     connect: mock(async () => {}),
     disconnect: mock(async () => {}),
     send: mock(async () => ({ id: "msg-1" })),
-    addReaction: mock(async () => {}),
-    waitForReaction: mock(async () => null),
     resolveChannelId: mock(async () => "ch-1"),
     on: mock(() => {}),
     ...overrides,
@@ -22,6 +20,7 @@ function makeConfig(ants: LoadedConfig["ants"] = []): LoadedConfig {
   return {
     colony: { name: "test-colony" },
     ants,
+    configDir: "/tmp",
   };
 }
 
@@ -73,7 +72,7 @@ describe("buildCommonInstructions", () => {
   it("injects git config commands when user_name and user_email are set", () => {
     const result = buildCommonInstructions({
       name: "test",
-      defaults: { confirmation_timeout: "30m", git: { user_name: "Jane Smith", user_email: "jane@example.com" } },
+      defaults: { git: { user_name: "Jane Smith", user_email: "jane@example.com" } },
     });
     expect(result).toContain('git config user.name "Jane Smith"');
     expect(result).toContain('git config user.email "jane@example.com"');
@@ -82,7 +81,7 @@ describe("buildCommonInstructions", () => {
   it("injects only user_name when user_email is absent", () => {
     const result = buildCommonInstructions({
       name: "test",
-      defaults: { confirmation_timeout: "30m", git: { user_name: "Jane Smith" } },
+      defaults: { git: { user_name: "Jane Smith" } },
     });
     expect(result).toContain('git config user.name "Jane Smith"');
     expect(result).not.toContain("user.email");
