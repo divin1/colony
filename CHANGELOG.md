@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] — 2026-05-15
+
+### Changed
+
+- **Engine architecture reworked to CLI-spawn model**: agents now run as child processes rather than in-process SDK loops. The colony runner spawns the CLI binary, streams its stdout, and maps output to Discord. This mirrors the Multica daemon pattern and makes Colony vendor-neutral at the execution layer.
+- **New engine registry**: engines are named plugins registered via `registerEngine` / `getEngine` (`packages/core/src/engines/registry.ts`). Adding a new agent CLI requires only a single `registerEngine` call.
+- **`engine` config field updated**: values are now `claude-cli` (default), `codex`, `gemini-cli`, `opencode`, `cli`. Old values `claude` and `gemini` are still accepted with a deprecation warning and automatically remapped.
+- **`engine: gemini-cli` is now a CLI subprocess**: the previous in-process `@google/genai` SDK agentic loop has been replaced by spawning the `gemini --yolo` binary. This simplifies the dependency tree but removes in-process tool interception for Gemini.
+- **`engine: claude-cli` uses NDJSON stream**: spawns `claude --print --output-format stream-json`; parses `assistant`, `result`, and `rate_limit_event` message types for structured error classification.
+- **`engine: cli` added**: custom CLI binary support — specify `cli.binary` and optionally `cli.args` in the ant config.
+- **`autonomy` and `confirmation` config fields removed**: CLI-based engines do not support intercepting individual tool calls before they execute. Human-in-the-loop is now session-level (Discord commands: pause, resume, work instructions).
+- **`confirmation_timeout` removed from `colony.yaml`**: no longer applicable without per-action confirmation.
+- **`poll_interval` added** at colony (`defaults.poll_interval`) and ant level: configures how long trigger-less ants sleep between runs.
+- **`state` config added** to ant schema: `backend: memory | sqlite` and `path` for the SQLite file.
+
+### Removed
+
+- `@anthropic-ai/claude-agent-sdk` dependency from `@colony/core`
+- `@google/genai` dependency from `@colony/core`
+- `gemini.ts` / `gemini.test.ts` (in-process Gemini SDK engine)
+- `autonomy`, `confirmation`, `gemini` config fields from ant schema
+- `confirmation_timeout` from colony schema
+- Per-action confirmation slash commands (`/auto-approve`, `/auto-deny`, `/confirmations`, `/reset-confirmations`) — removed with the confirmation flow
+
+### Added
+
+- `packages/core/src/engines/` directory with `registry.ts`, `types.ts`, `index.ts`, `claude-cli.ts`, `generic-cli.ts`
+- `packages/core/src/engines/claude-cli.test.ts`
+- `packages/core/src/state.ts` with `MemoryState` and `SQLiteState` implementations (GitHub issue deduplication; foundation for future session memory)
+- `packages/core/src/log.ts` — shared timestamped console logger
+
+---
+
 ## [0.3.4] — 2026-03-23
 
 ### Added
