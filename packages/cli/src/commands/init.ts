@@ -4,12 +4,27 @@ import { join, resolve } from "path";
 
 const COLONY_YAML = `name: my-colony
 
-integrations:
-  discord:
-    token: \${DISCORD_TOKEN}
-    guild: my-server
-  github:
-    token: \${GITHUB_TOKEN}
+# monitoring.port exposes the REST API and web dashboard.
+monitoring:
+  port: 8080
+
+# All integrations are optional.
+#
+# Full Discord bot — lets humans send commands to ants from Discord channels.
+# integrations:
+#   discord:
+#     token: \${DISCORD_TOKEN}
+#     guild: my-server
+#
+# Webhook-only — send-only notifications, no bot setup required.
+# integrations:
+#   discord_webhook:
+#     url: \${DISCORD_WEBHOOK_URL}
+#
+# GitHub — enables issue polling and comment-back.
+# integrations:
+#   github:
+#     token: \${GITHUB_TOKEN}
 
 defaults:
   poll_interval: 5m
@@ -23,25 +38,30 @@ instructions: |
   Review open GitHub issues labelled 'ant-ready', implement fixes, and report back.
   Always run the test suite before opening a PR. Never force-push to main.
 
-integrations:
-  github:
-    repos:
-      - my-org/my-repo
-  discord:
-    channel: worker-logs
+# engine: claude-cli  # default; also supports: gemini-cli, codex, opencode, cli
 
-schedule:
-  cron: "0 9 * * 1-5"
+# Uncomment to link to a GitHub repo and a Discord channel:
+# integrations:
+#   github:
+#     repos:
+#       - my-org/my-repo
+#   discord:
+#     channel: worker-logs
 
-triggers:
-  - type: github_issue
-    labels: [ant-ready]
-  - type: discord_command
+# Uncomment to run on a schedule:
+# schedule:
+#   cron: "0 9 * * 1-5"
+
+# Uncomment to trigger on GitHub issues:
+# triggers:
+#   - type: github_issue
+#     labels: [ant-ready]
 `;
 
-const ENV = `# Fill in your tokens before running colony.
-DISCORD_TOKEN=your-discord-bot-token-here
-GITHUB_TOKEN=your-github-personal-access-token-here
+const ENV = `# Fill in any tokens you need.
+# DISCORD_TOKEN=your-discord-bot-token-here
+# DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+# GITHUB_TOKEN=your-github-personal-access-token-here
 `;
 
 export const initCommand = new Command("init")
@@ -65,8 +85,10 @@ export const initCommand = new Command("init")
     console.log("");
     console.log("Next steps:");
     console.log(`  1. cd ${dir}`);
-    console.log("  2. Edit .env and fill in your tokens");
-    console.log("  3. Edit colony.yaml and ants/worker.yaml to match your setup");
+    console.log("  2. Edit colony.yaml to add any integrations you need");
+    console.log("  3. Edit ants/worker.yaml to describe your ant's role");
     console.log("  4. colony validate .");
     console.log("  5. colony run .");
+    console.log("");
+    console.log("Dashboard will be available at http://localhost:8080 once running.");
   });
