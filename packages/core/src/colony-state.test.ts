@@ -9,6 +9,7 @@ function makeControls(overrides: Partial<Parameters<ColonyState["register"]>[2]>
     pushPrompt: mock((p: string) => { queue.push(p); }),
     clearQueue: mock(() => { const n = queue.length; queue.length = 0; return n; }),
     getQueueSize: mock(() => queue.length),
+    removeWorkItem: mock((_id: string) => false),
     _queue: queue,
     ...overrides,
   };
@@ -103,13 +104,21 @@ describe("ColonyState", () => {
     expect(controls.resume).toHaveBeenCalledTimes(1);
   });
 
-  it("pushPrompt() calls the control handle's pushPrompt()", () => {
+  it("pushPrompt() calls the control handle's pushPrompt() with default source", () => {
     const s = new ColonyState("c");
     const controls = makeControls();
     s.register("worker", "claude-cli", controls);
     const ok = s.pushPrompt("worker", "do the thing");
     expect(ok).toBe(true);
-    expect(controls.pushPrompt).toHaveBeenCalledWith("do the thing");
+    expect(controls.pushPrompt).toHaveBeenCalledWith("do the thing", "manual");
+  });
+
+  it("pushPrompt() passes explicit source through to the control handle", () => {
+    const s = new ColonyState("c");
+    const controls = makeControls();
+    s.register("worker", "claude-cli", controls);
+    s.pushPrompt("worker", "from discord", "discord");
+    expect(controls.pushPrompt).toHaveBeenCalledWith("from discord", "discord");
   });
 
   it("clearQueue() calls the control handle and returns count", () => {

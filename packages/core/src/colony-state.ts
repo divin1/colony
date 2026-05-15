@@ -1,3 +1,5 @@
+import type { WorkStore, WorkItemSource } from "./work-store.js";
+
 export type AntRuntimeState = "starting" | "running" | "paused" | "crashed" | "backoff";
 
 export interface AntStatusEntry {
@@ -14,9 +16,10 @@ export interface AntStatusEntry {
 export interface AntControlHandles {
   pause(): void;
   resume(): void;
-  pushPrompt(prompt: string): void;
+  pushPrompt(prompt: string, source?: WorkItemSource): void;
   clearQueue(): number;
   getQueueSize(): number;
+  removeWorkItem(id: string): boolean;
 }
 
 const MAX_RECENT_LINES = 150;
@@ -29,8 +32,11 @@ interface AntEntry {
 export class ColonyState {
   private readonly entries = new Map<string, AntEntry>();
   private readonly subscribers = new Map<string, Set<(line: string) => void>>();
+  private readonly workStore: WorkStore | null;
 
-  constructor(public readonly colonyName: string) {}
+  constructor(public readonly colonyName: string, workStore?: WorkStore) {
+    this.workStore = workStore ?? null;
+  }
 
   register(name: string, engine: string, controls: AntControlHandles): void {
     this.entries.set(name, {
@@ -107,10 +113,10 @@ export class ColonyState {
     return true;
   }
 
-  pushPrompt(name: string, prompt: string): boolean {
+  pushPrompt(name: string, prompt: string, source: WorkItemSource = "manual"): boolean {
     const entry = this.entries.get(name);
     if (!entry) return false;
-    entry.controls.pushPrompt(prompt);
+    entry.controls.pushPrompt(prompt, source);
     return true;
   }
 
@@ -118,6 +124,23 @@ export class ColonyState {
     const entry = this.entries.get(name);
     if (!entry) return 0;
     return entry.controls.clearQueue();
+  }
+
+  cancelWorkItem(id: string): "cancelled" | "running" | "not_found" {
+    if (!this.workStore) return "not_found";
+    const item = this.workStore.get(id);
+    if (!item) return "not_found";
+    if (item.status === "running") return "running";
+    if (item.status !== "queued") return "not_found";
+
+    const antEntry = this.entries.get(item.antName);
+    if (antEntry) antEntry.controls.removeWorkItem(id);
+    this.workStore.cancel(id);
+    return "cancelled";
+  }
+
+  getWorkStore(): WorkStore | null {
+    return this.workStore;
   }
 
   // Subscribe to live output lines for a named ant.

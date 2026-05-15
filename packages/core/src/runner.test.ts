@@ -218,4 +218,28 @@ describe("PromiseQueue", () => {
     const q = new PromiseQueue<string>();
     expect(q.clear()).toBe(0);
   });
+
+  it("remove() removes the first matching item and returns true", () => {
+    const q = new PromiseQueue<string>();
+    q.push("a");
+    q.push("b");
+    q.push("c");
+    expect(q.remove((x) => x === "b")).toBe(true);
+    expect(q.size).toBe(2);
+  });
+
+  it("remove() returns false when no item matches", () => {
+    const q = new PromiseQueue<string>();
+    q.push("a");
+    expect(q.remove((x) => x === "z")).toBe(false);
+    expect(q.size).toBe(1);
+  });
+
+  it("remove() only removes the first matching item", () => {
+    const q = new PromiseQueue<string>();
+    q.push("x");
+    q.push("x");
+    q.remove((x) => x === "x");
+    expect(q.size).toBe(1);
+  });
 });

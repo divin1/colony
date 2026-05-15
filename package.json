@@ -6,7 +6,8 @@
     "packages/core",
     "packages/cli",
     "packages/integrations/discord",
-    "packages/integrations/github"
+    "packages/integrations/github",
+    "packages/web"
   ],
   "scripts": {
     "test": "bun test --recursive",

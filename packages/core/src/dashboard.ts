@@ -1,17 +1,84 @@
 import type { ColonyState } from "./colony-state.js";
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, PATCH, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+function withCors(res: Response): Response {
+  const headers = new Headers(res.headers);
+  for (const [k, v] of Object.entries(CORS_HEADERS)) headers.set(k, v);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+function jsonResponse(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+  });
+}
+
+function textResponse(text: string, status = 200): Response {
+  return new Response(text, { status, headers: CORS_HEADERS });
+}
+
 // --- HTTP route handler ---
 
 export function createDashboardHandler(
   state: ColonyState
 ): (req: Request) => Response | Promise<Response> {
+  const workStore = state.getWorkStore();
+
   return async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
     const path = url.pathname;
 
+    // Handle CORS preflight.
+    if (req.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+
     // GET /api/status — all ant statuses
     if (path === "/api/status" && req.method === "GET") {
-      return Response.json(state.getStatus());
+      return jsonResponse(state.getStatus());
+    }
+
+    // GET /api/work — list work items (filterable by status, ant, limit, offset)
+    if (path === "/api/work" && req.method === "GET") {
+      if (!workStore) return jsonResponse([]);
+      const statusParam = url.searchParams.get("status");
+      const antName = url.searchParams.get("ant") ?? undefined;
+      const limit = parseInt(url.searchParams.get("limit") ?? "100", 10);
+      const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
+      const status = statusParam
+        ? (statusParam.split(",") as Parameters<typeof workStore.list>[0]["status"])
+        : undefined;
+      const items = workStore.list({ status, antName, limit, offset });
+      return jsonResponse(items);
+    }
+
+    // /api/work/:id
+    const workRoute = path.match(/^\/api\/work\/([^/]+)$/);
+    if (workRoute) {
+      const id = decodeURIComponent(workRoute[1]);
+
+      // GET /api/work/:id — single item
+      if (req.method === "GET") {
+        if (!workStore) return textResponse("Not found", 404);
+        const item = workStore.get(id);
+        if (!item) return textResponse("Not found", 404);
+        return jsonResponse(item);
+      }
+
+      // DELETE /api/work/:id — cancel a queued item
+      if (req.method === "DELETE") {
+        if (!workStore) return textResponse("Not found", 404);
+        const result = state.cancelWorkItem(id);
+        if (result === "not_found") return textResponse("Not found", 404);
+        if (result === "running") return textResponse("Item is currently running", 409);
+        return jsonResponse({ ok: true });
+      }
     }
 
     // /api/ants/:name/:action
@@ -55,6 +122,7 @@ export function createDashboardHandler(
 
         return new Response(stream, {
           headers: {
+            ...CORS_HEADERS,
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache",
             Connection: "keep-alive",
@@ -66,17 +134,13 @@ export function createDashboardHandler(
       // POST /api/ants/:name/pause
       if (action === "pause" && req.method === "POST") {
         const ok = state.pause(antName);
-        return ok
-          ? Response.json({ ok: true })
-          : new Response("Ant not found", { status: 404 });
+        return ok ? jsonResponse({ ok: true }) : textResponse("Ant not found", 404);
       }
 
       // POST /api/ants/:name/resume
       if (action === "resume" && req.method === "POST") {
         const ok = state.resume(antName);
-        return ok
-          ? Response.json({ ok: true })
-          : new Response("Ant not found", { status: 404 });
+        return ok ? jsonResponse({ ok: true }) : textResponse("Ant not found", 404);
       }
 
       // POST /api/ants/:name/prompt — { "prompt": "..." }
@@ -85,32 +149,32 @@ export function createDashboardHandler(
         try {
           body = (await req.json()) as { prompt?: string };
         } catch {
-          return new Response("Invalid JSON", { status: 400 });
+          return textResponse("Invalid JSON", 400);
         }
         if (typeof body.prompt !== "string" || !body.prompt.trim()) {
-          return new Response("prompt is required", { status: 400 });
+          return textResponse("prompt is required", 400);
         }
-        const ok = state.pushPrompt(antName, body.prompt.trim());
-        return ok
-          ? Response.json({ ok: true })
-          : new Response("Ant not found", { status: 404 });
+        const ok = state.pushPrompt(antName, body.prompt.trim(), "manual");
+        return ok ? jsonResponse({ ok: true }) : textResponse("Ant not found", 404);
       }
 
       // POST /api/ants/:name/clear
       if (action === "clear" && req.method === "POST") {
         const cleared = state.clearQueue(antName);
-        return Response.json({ ok: true, cleared });
+        return jsonResponse({ ok: true, cleared });
       }
     }
 
     // GET / — dashboard HTML
     if ((path === "/" || path === "/dashboard") && req.method === "GET") {
-      return new Response(DASHBOARD_HTML, {
-        headers: { "Content-Type": "text/html; charset=utf-8" },
-      });
+      return withCors(
+        new Response(DASHBOARD_HTML, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        })
+      );
     }
 
-    return new Response("Not found", { status: 404 });
+    return textResponse("Not found", 404);
   };
 }
 
@@ -181,7 +245,7 @@ const main = document.getElementById('main');
 const colonyNameEl = document.getElementById('colony-name');
 const antCountEl = document.getElementById('ant-count');
 
-const sseMap = {};      // name → EventSource
+const sseMap = {};
 const knownAnts = new Set();
 
 function uptime(startedAt) {
@@ -209,7 +273,6 @@ function appendLine(name, text) {
   div.textContent = text;
   el.appendChild(div);
   while (el.children.length > 300) el.removeChild(el.firstChild);
-  // Auto-scroll only if already at bottom.
   if (el.scrollHeight - el.scrollTop - el.clientHeight < 40) {
     el.scrollTop = el.scrollHeight;
   }

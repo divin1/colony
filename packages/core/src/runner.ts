@@ -1,5 +1,6 @@
 import { Cron } from "croner";
 import { join } from "path";
+import { randomUUID } from "crypto";
 import { runAnt } from "./ant";
 import type { ConfirmationChannel } from "./hooks";
 import type { LoadedConfig, AntConfig, ColonyConfig } from "./config";
@@ -9,6 +10,8 @@ import { ColonyState } from "./colony-state";
 import { createDashboardHandler } from "./dashboard";
 import { AntSessionError } from "./errors";
 import { log } from "./log";
+import { WorkStore } from "./work-store.js";
+import type { WorkItemSource } from "./work-store.js";
 
 // Extended interface the runner needs beyond ConfirmationChannel.
 // DiscordIntegration satisfies this structurally — core does not depend on @colony/discord.
@@ -52,7 +55,9 @@ export interface RunnerGitHub {
 
 // A unit of work queued for an ant. May carry issue context when triggered by GitHub.
 interface WorkItem {
+  id: string;
   prompt: string;
+  source: WorkItemSource;
   issueContext?: {
     owner: string;
     repo: string;
@@ -191,6 +196,14 @@ export class PromiseQueue<T> {
     this.queue = [];
     return count;
   }
+
+  // Removes the first item matching the predicate. Returns true if an item was removed.
+  remove(predicate: (item: T) => boolean): boolean {
+    const idx = this.queue.findIndex(predicate);
+    if (idx === -1) return false;
+    this.queue.splice(idx, 1);
+    return true;
+  }
 }
 
 // Formats a millisecond duration as a human-readable string, e.g. "2d 3h 15m" or "45s".
@@ -224,7 +237,8 @@ async function runAntWithSupervision(
   configDir: string,
   discord: RunnerDiscord,
   colonyState: ColonyState,
-  github?: RunnerGitHub
+  github?: RunnerGitHub,
+  workStore?: WorkStore
 ): Promise<never> {
   // Fall back to the ant name when no Discord channel is configured (e.g. ConsoleDiscord).
   const channelName = ant.integrations?.discord?.channel ?? ant.name;
@@ -267,8 +281,10 @@ async function runAntWithSupervision(
         colonyState.setState(ant.name, "running");
       }
     },
-    pushPrompt: (prompt: string) => {
-      queue.push({ prompt }); // no issueContext for manually injected prompts
+    pushPrompt: (prompt: string, source: WorkItemSource = "manual") => {
+      const stored = workStore?.create(ant.name, prompt, source);
+      const id = stored?.id ?? randomUUID();
+      queue.push({ id, prompt, source });
       if (paused) {
         paused = false;
         resumeResolve?.();
@@ -276,8 +292,13 @@ async function runAntWithSupervision(
         colonyState.setState(ant.name, "running");
       }
     },
-    clearQueue: () => queue.clear(),
+    clearQueue: () => {
+      const count = queue.clear();
+      workStore?.cancelAllQueued(ant.name);
+      return count;
+    },
     getQueueSize: () => queue.size,
+    removeWorkItem: (id: string) => queue.remove((item) => item.id === id),
   });
 
   // Sends to both Discord and the dashboard output stream.
@@ -424,7 +445,8 @@ async function runAntWithSupervision(
       // Forward as work instruction. Auto-resumes if the ant is currently paused.
       colonyState.pushPrompt(
         ant.name,
-        `You are ${ant.name}. A human operator (${payload.author}) sent you this message: "${text}"`
+        `You are ${ant.name}. A human operator (${payload.author}) sent you this message: "${text}"`,
+        "discord"
       );
     }
   });
@@ -432,7 +454,8 @@ async function runAntWithSupervision(
   // --- Cron trigger ---
   if (hasCron) {
     new Cron(ant.schedule!.cron, () => {
-      queue.push({ prompt: defaultPrompt });
+      const stored = workStore?.create(ant.name, defaultPrompt, "cron");
+      queue.push({ id: stored?.id ?? randomUUID(), prompt: defaultPrompt, source: "cron" });
     });
   }
 
@@ -454,19 +477,22 @@ async function runAntWithSupervision(
           for (const issue of issues) {
             if (antState.hasSeenIssue(ant.name, issue.number)) continue;
             antState.markIssueSeen(ant.name, issue.number);
-            queue.push(
-              {
-                prompt:
-                  `You are ${ant.name}. A GitHub issue has been assigned:\n\n` +
-                  `Repository: ${repoSlug}\n` +
-                  `Issue #${issue.number}: ${issue.title}\n` +
-                  `URL: https://github.com/${owner}/${repo}/issues/${issue.number}\n\n` +
-                  `${issue.body ?? "(no description provided)"}\n\n` +
-                  `Work through this issue. When done, end your session with a concise summary ` +
-                  `of what you completed — it will be posted as a comment on the issue.`,
-                issueContext: { owner, repo, number: issue.number, repoSlug },
-              }
-            );
+            const issuePrompt =
+              `You are ${ant.name}. A GitHub issue has been assigned:\n\n` +
+              `Repository: ${repoSlug}\n` +
+              `Issue #${issue.number}: ${issue.title}\n` +
+              `URL: https://github.com/${owner}/${repo}/issues/${issue.number}\n\n` +
+              `${issue.body ?? "(no description provided)"}\n\n` +
+              `Work through this issue. When done, end your session with a concise summary ` +
+              `of what you completed — it will be posted as a comment on the issue.`;
+            const issueContext = { owner, repo, number: issue.number, repoSlug };
+            const stored = workStore?.create(ant.name, issuePrompt, "github_issue", issueContext);
+            queue.push({
+              id: stored?.id ?? randomUUID(),
+              prompt: issuePrompt,
+              source: "github_issue",
+              issueContext,
+            });
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -484,7 +510,8 @@ async function runAntWithSupervision(
 
   // If no triggers configured: run once immediately, then re-queue after each run.
   if (!hasAnyTrigger) {
-    queue.push({ prompt: defaultPrompt });
+    const stored = workStore?.create(ant.name, defaultPrompt, "cron");
+    queue.push({ id: stored?.id ?? randomUUID(), prompt: defaultPrompt, source: "cron" });
   }
 
   // eslint-disable-next-line no-constant-condition
@@ -496,6 +523,7 @@ async function runAntWithSupervision(
     const workItem = await queue.next();
     log(ant.name, "session starting");
     colonyState.setState(ant.name, "running");
+    workStore?.updateStatus(workItem.id, "running", { startedAt: Date.now() });
     try {
       // Load skill files fresh each session (task-snapshot pattern).
       const skillTexts: string[] = [];
@@ -528,8 +556,10 @@ async function runAntWithSupervision(
       log(ant.name, "session completed");
       broadcast(`✅ **${ant.name}** completed its work session.`);
 
-      // Persist the agent's closing output as context for the next session.
+      const completedAt = Date.now();
+      workStore?.updateStatus(workItem.id, "done", { completedAt });
       if (result.lastOutput) {
+        workStore?.setOutput(workItem.id, result.lastOutput);
         antState.setSessionSummary(ant.name, result.lastOutput);
       }
 
@@ -547,6 +577,7 @@ async function runAntWithSupervision(
     } catch (err) {
       sessionsCrashed++;
       colonyState.incrementSessions(ant.name, "crashed");
+      workStore?.updateStatus(workItem.id, "failed", { completedAt: Date.now() });
       if (err instanceof AntSessionError) {
         switch (err.category) {
           case "max_turns":
@@ -629,7 +660,8 @@ async function runAntWithSupervision(
       if (pollIntervalMs > 0) {
         await Bun.sleep(pollIntervalMs);
       }
-      queue.push({ prompt: defaultPrompt });
+      const stored = workStore?.create(ant.name, defaultPrompt, "cron");
+      queue.push({ id: stored?.id ?? randomUUID(), prompt: defaultPrompt, source: "cron" });
     }
   }
 }
@@ -691,12 +723,13 @@ export async function runColony(
     return;
   }
 
-  // Create shared colony state for the dashboard.
-  const colonyState = new ColonyState(config.colony.name);
+  // Create shared colony state and optional work store for the dashboard.
+  const monitorPort = config.colony.monitoring?.port;
+  const workStore = monitorPort ? new WorkStore(config.configDir) : undefined;
+  const colonyState = new ColonyState(config.colony.name, workStore);
 
   // Start the optional HTTP dashboard.
   let dashboardServer: ReturnType<typeof Bun.serve> | undefined;
-  const monitorPort = config.colony.monitoring?.port;
   if (monitorPort) {
     dashboardServer = Bun.serve({
       port: monitorPort,
@@ -709,7 +742,7 @@ export async function runColony(
     // runAntWithSupervision never resolves, so this awaits indefinitely.
     await Promise.all(
       config.ants.map((ant) =>
-        runAntWithSupervision(ant, config.colony, config.configDir, discord, colonyState, github)
+        runAntWithSupervision(ant, config.colony, config.configDir, discord, colonyState, github, workStore)
       )
     );
   } finally {
