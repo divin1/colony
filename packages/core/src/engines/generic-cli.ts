@@ -30,12 +30,18 @@ export function createGenericCliRunner(
   return async (prompt: string, opts: EngineRunOptions): Promise<void> => {
     const lmOutput = opts.config.logging?.lm_output ?? "discord";
 
-    const proc = _spawn([binary, ...extraArgs, prompt], {
-      cwd: opts.cwd ?? process.cwd(),
-      stdout: "pipe",
-      stderr: "pipe",
-      env: { ...process.env },
-    });
+    let proc: ReturnType<SpawnFn>;
+    try {
+      proc = _spawn([binary, ...extraArgs, prompt], {
+        cwd: opts.cwd ?? process.cwd(),
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new AntSessionError(`Failed to spawn ${binary}: ${msg}`, "permanent");
+    }
 
     const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
     const decoder = new TextDecoder();

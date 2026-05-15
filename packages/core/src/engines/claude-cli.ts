@@ -102,12 +102,18 @@ export async function runClaudeCli(
     args.push("--append-system-prompt", combined);
   }
 
-  const proc = _spawn(args, {
-    cwd: opts.cwd ?? process.cwd(),
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env },
-  });
+  let proc: ReturnType<SpawnFn>;
+  try {
+    proc = _spawn(args, {
+      cwd: opts.cwd ?? process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...process.env },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new AntSessionError(`Failed to spawn claude: ${msg}`, "permanent");
+  }
 
   const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
   const decoder = new TextDecoder();
