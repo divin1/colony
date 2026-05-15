@@ -28,6 +28,30 @@ describe("MemoryState", () => {
     state.markIssueSeen("worker", 7);
     expect(state.hasSeenIssue("worker", 7)).toBe(true);
   });
+
+  it("returns null before any summary is stored", () => {
+    const state = createState("memory");
+    expect(state.getLastSessionSummary("worker")).toBeNull();
+  });
+
+  it("returns the stored summary after setSessionSummary", () => {
+    const state = createState("memory");
+    state.setSessionSummary("worker", "Completed PR #42.");
+    expect(state.getLastSessionSummary("worker")).toBe("Completed PR #42.");
+  });
+
+  it("overwrites the previous summary on a second call", () => {
+    const state = createState("memory");
+    state.setSessionSummary("worker", "First summary.");
+    state.setSessionSummary("worker", "Second summary.");
+    expect(state.getLastSessionSummary("worker")).toBe("Second summary.");
+  });
+
+  it("scopes summaries per ant name", () => {
+    const state = createState("memory");
+    state.setSessionSummary("ant-a", "Summary A.");
+    expect(state.getLastSessionSummary("ant-b")).toBeNull();
+  });
 });
 
 describe("SQLiteState", () => {
@@ -69,5 +93,37 @@ describe("SQLiteState", () => {
     state.markIssueSeen("worker", 7);
     state.markIssueSeen("worker", 7);
     expect(state.hasSeenIssue("worker", 7)).toBe(true);
+  });
+
+  it("returns null before any summary is stored", () => {
+    const state = createState("sqlite", dbPath);
+    expect(state.getLastSessionSummary("worker")).toBeNull();
+  });
+
+  it("returns the stored summary after setSessionSummary", () => {
+    const state = createState("sqlite", dbPath);
+    state.setSessionSummary("worker", "Completed PR #42.");
+    expect(state.getLastSessionSummary("worker")).toBe("Completed PR #42.");
+  });
+
+  it("overwrites the previous summary on a second call", () => {
+    const state = createState("sqlite", dbPath);
+    state.setSessionSummary("worker", "First summary.");
+    state.setSessionSummary("worker", "Second summary.");
+    expect(state.getLastSessionSummary("worker")).toBe("Second summary.");
+  });
+
+  it("scopes summaries per ant name", () => {
+    const state = createState("sqlite", dbPath);
+    state.setSessionSummary("ant-a", "Summary A.");
+    expect(state.getLastSessionSummary("ant-b")).toBeNull();
+  });
+
+  it("persists summaries across instances (survives restart)", () => {
+    const state1 = createState("sqlite", dbPath);
+    state1.setSessionSummary("worker", "Completed issue #7, opened PR #8.");
+
+    const state2 = createState("sqlite", dbPath);
+    expect(state2.getLastSessionSummary("worker")).toBe("Completed issue #7, opened PR #8.");
   });
 });

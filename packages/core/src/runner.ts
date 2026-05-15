@@ -510,7 +510,13 @@ async function runAntWithSupervision(
         .filter(Boolean)
         .join("\n\n");
 
-      const result = await runAnt(workItem.prompt, {
+      // Prepend the previous session summary so the agent resumes with context.
+      const previousSummary = antState.getLastSessionSummary(ant.name);
+      const prompt = previousSummary
+        ? `## Context from your previous session\n\n${previousSummary}\n\n---\n\n${workItem.prompt}`
+        : workItem.prompt;
+
+      const result = await runAnt(prompt, {
         config: ant,
         channel: teeChannel,
         channelId,
@@ -521,6 +527,11 @@ async function runAntWithSupervision(
       colonyState.incrementSessions(ant.name, "completed");
       log(ant.name, "session completed");
       broadcast(`✅ **${ant.name}** completed its work session.`);
+
+      // Persist the agent's closing output as context for the next session.
+      if (result.lastOutput) {
+        antState.setSessionSummary(ant.name, result.lastOutput);
+      }
 
       // Post a summary comment on the triggering GitHub issue.
       if (workItem.issueContext && result.lastOutput && github) {
