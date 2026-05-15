@@ -12,7 +12,7 @@ integrations:
     token: \${GITHUB_TOKEN}
 
 defaults:
-  confirmation_timeout: 30m
+  poll_interval: 5m
 `;
 
 const WORKER_YAML = `name: worker
