@@ -2,6 +2,7 @@ import "./engines/index.js";
 import { getEngine } from "./engines/registry.js";
 import type { AntConfig } from "./config.js";
 import type { ConfirmationChannel } from "./hooks.js";
+import type { EngineResult } from "./engines/types.js";
 
 export interface AntRunOptions {
   config: AntConfig;
@@ -18,7 +19,7 @@ export interface AntRunOptions {
 export async function runAnt(
   prompt: string,
   opts: AntRunOptions
-): Promise<void> {
+): Promise<EngineResult> {
   const engine = getEngine(opts.config.engine);
   return engine(prompt, opts);
 }

@@ -36,13 +36,14 @@ function chunkText(text: string, maxLen = 1900): string[] {
 }
 
 // --- NDJSON message handler ---
+// Returns the extracted assistant text (if any) so the caller can track lastOutput.
 
 async function handleMessage(
   msg: unknown,
   opts: EngineRunOptions,
   lmOutput: "discord" | "console" | "both"
-): Promise<void> {
-  if (typeof msg !== "object" || msg === null) return;
+): Promise<string | undefined> {
+  if (typeof msg !== "object" || msg === null) return undefined;
   const m = msg as Record<string, unknown>;
 
   if (m.type === "assistant") {
@@ -60,6 +61,7 @@ async function handleMessage(
           await opts.channel.send(opts.channelId, chunk).catch(() => {});
         }
       }
+      return text;
     }
   } else if (m.type === "rate_limit_event") {
     const info = m.rate_limit_info as Record<string, unknown> | undefined;
@@ -80,6 +82,7 @@ async function handleMessage(
       category
     );
   }
+  return undefined;
 }
 
 // --- Engine implementation ---
@@ -90,8 +93,9 @@ export async function runClaudeCli(
   prompt: string,
   opts: EngineRunOptions,
   _spawn: SpawnFn = Bun.spawn
-): Promise<void> {
+): Promise<{ lastOutput?: string }> {
   const lmOutput = opts.config.logging?.lm_output ?? "discord";
+  let lastOutput: string | undefined;
 
   const combined = [opts.config.instructions, opts.commonInstructions]
     .filter(Boolean)
@@ -131,7 +135,8 @@ export async function runClaudeCli(
         if (!line.trim()) continue;
         try {
           const msg = JSON.parse(line);
-          await handleMessage(msg, opts, lmOutput);
+          const text = await handleMessage(msg, opts, lmOutput);
+          if (text) lastOutput = text;
           if ((msg as Record<string, unknown>).type === "result") hasResult = true;
         } catch (err) {
           // Re-throw AntSessionError (thrown from handleMessage), skip unparseable lines.
@@ -147,7 +152,8 @@ export async function runClaudeCli(
   if (buffer.trim()) {
     try {
       const msg = JSON.parse(buffer);
-      await handleMessage(msg, opts, lmOutput);
+      const text = await handleMessage(msg, opts, lmOutput);
+      if (text) lastOutput = text;
       if ((msg as Record<string, unknown>).type === "result") hasResult = true;
     } catch (err) {
       if (err instanceof AntSessionError) throw err;
@@ -161,6 +167,8 @@ export async function runClaudeCli(
       "transient"
     );
   }
+
+  return { lastOutput };
 }
 
 registerEngine("claude-cli", runClaudeCli);

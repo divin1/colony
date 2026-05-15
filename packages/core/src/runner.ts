@@ -32,7 +32,7 @@ export class ConsoleDiscord implements RunnerDiscord {
   on<T>(_event: string, _handler: (payload: T) => void): void {}
 }
 
-// Minimal GitHub interface the runner needs for issue polling.
+// Minimal GitHub interface the runner needs for issue polling and comments.
 // GitHubIntegration satisfies this structurally — core does not depend on @colony/github.
 export interface RunnerGitHub {
   listIssues(
@@ -40,6 +40,23 @@ export interface RunnerGitHub {
     repo: string,
     opts?: { labels?: string[] }
   ): Promise<Array<{ number: number; title: string; body: string | null }>>;
+  createIssueComment(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    body: string
+  ): Promise<void>;
+}
+
+// A unit of work queued for an ant. May carry issue context when triggered by GitHub.
+interface WorkItem {
+  prompt: string;
+  issueContext?: {
+    owner: string;
+    repo: string;
+    number: number;
+    repoSlug: string;
+  };
 }
 
 const BASE_RESTART_DELAY_MS = 10_000;
@@ -220,7 +237,7 @@ async function runAntWithSupervision(
   // antState used for GitHub issue deduplication (hasSeenIssue / markIssueSeen).
 
   const defaultPrompt = `You are ${ant.name}. ${ant.description}. Begin your work session now.`;
-  const queue = new PromiseQueue<string>();
+  const queue = new PromiseQueue<WorkItem>();
 
   // --- Pause / resume state ---
   let paused = false;
@@ -248,7 +265,7 @@ async function runAntWithSupervision(
       }
     },
     pushPrompt: (prompt: string) => {
-      queue.push(prompt);
+      queue.push({ prompt }); // no issueContext for manually injected prompts
       if (paused) {
         paused = false;
         resumeResolve?.();
@@ -412,7 +429,7 @@ async function runAntWithSupervision(
   // --- Cron trigger ---
   if (hasCron) {
     new Cron(ant.schedule!.cron, () => {
-      queue.push(defaultPrompt);
+      queue.push({ prompt: defaultPrompt });
     });
   }
 
@@ -435,8 +452,17 @@ async function runAntWithSupervision(
             if (antState.hasSeenIssue(ant.name, issue.number)) continue;
             antState.markIssueSeen(ant.name, issue.number);
             queue.push(
-              `You are ${ant.name}. A new GitHub issue has been opened in ${repoSlug}:\n` +
-                `Issue #${issue.number}: ${issue.title}\n${issue.body ?? ""}`
+              {
+                prompt:
+                  `You are ${ant.name}. A GitHub issue has been assigned:\n\n` +
+                  `Repository: ${repoSlug}\n` +
+                  `Issue #${issue.number}: ${issue.title}\n` +
+                  `URL: https://github.com/${owner}/${repo}/issues/${issue.number}\n\n` +
+                  `${issue.body ?? "(no description provided)"}\n\n` +
+                  `Work through this issue. When done, end your session with a concise summary ` +
+                  `of what you completed — it will be posted as a comment on the issue.`,
+                issueContext: { owner, repo, number: issue.number, repoSlug },
+              }
             );
           }
         } catch (err) {
@@ -455,7 +481,7 @@ async function runAntWithSupervision(
 
   // If no triggers configured: run once immediately, then re-queue after each run.
   if (!hasAnyTrigger) {
-    queue.push(defaultPrompt);
+    queue.push({ prompt: defaultPrompt });
   }
 
   // eslint-disable-next-line no-constant-condition
@@ -464,11 +490,11 @@ async function runAntWithSupervision(
       colonyState.setState(ant.name, "paused");
       await waitForResume();
     }
-    const prompt = await queue.next();
+    const workItem = await queue.next();
     log(ant.name, "session starting");
     colonyState.setState(ant.name, "running");
     try {
-      await runAnt(prompt, {
+      const result = await runAnt(workItem.prompt, {
         config: ant,
         channel: teeChannel,
         channelId,
@@ -479,6 +505,18 @@ async function runAntWithSupervision(
       colonyState.incrementSessions(ant.name, "completed");
       log(ant.name, "session completed");
       broadcast(`✅ **${ant.name}** completed its work session.`);
+
+      // Post a summary comment on the triggering GitHub issue.
+      if (workItem.issueContext && result.lastOutput && github) {
+        const { owner, repo, number } = workItem.issueContext;
+        log(ant.name, `posting comment on ${workItem.issueContext.repoSlug}#${number}`);
+        await github
+          .createIssueComment(owner, repo, number, result.lastOutput)
+          .catch((err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            broadcast(`⚠️ **${ant.name}** failed to post GitHub comment: ${msg}`);
+          });
+      }
     } catch (err) {
       sessionsCrashed++;
       colonyState.incrementSessions(ant.name, "crashed");
@@ -564,7 +602,7 @@ async function runAntWithSupervision(
       if (pollIntervalMs > 0) {
         await Bun.sleep(pollIntervalMs);
       }
-      queue.push(defaultPrompt);
+      queue.push({ prompt: defaultPrompt });
     }
   }
 }

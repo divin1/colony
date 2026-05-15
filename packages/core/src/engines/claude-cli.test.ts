@@ -52,8 +52,6 @@ describe("extractText", () => {
 function makeChannel() {
   return {
     send: mock(async () => ({ id: "msg-1" })),
-    addReaction: mock(async () => {}),
-    waitForReaction: mock(async () => null),
   };
 }
 
@@ -109,7 +107,7 @@ describe("runClaudeCli — NDJSON dispatch", () => {
 
   it("resolves cleanly on result success", async () => {
     const spawn = makeSpawn([{ type: "result", subtype: "success" }]);
-    await expect(runClaudeCli("go", makeOpts(), spawn)).resolves.toBeUndefined();
+    await expect(runClaudeCli("go", makeOpts(), spawn)).resolves.toMatchObject({});
   });
 
   it("throws rate_limit on rate_limit_event rejected", async () => {
@@ -127,7 +125,7 @@ describe("runClaudeCli — NDJSON dispatch", () => {
       { type: "rate_limit_event", rate_limit_info: { status: "allowed" } },
       { type: "result", subtype: "success" },
     ]);
-    await expect(runClaudeCli("go", makeOpts(), spawn)).resolves.toBeUndefined();
+    await expect(runClaudeCli("go", makeOpts(), spawn)).resolves.toMatchObject({});
   });
 
   it("throws correct category for result error_max_turns", async () => {
@@ -185,7 +183,7 @@ describe("runClaudeCli — NDJSON dispatch", () => {
   it("does not throw on non-zero exit when result was already received", async () => {
     // A result message was processed; exit code is irrelevant.
     const spawn = makeSpawn([{ type: "result", subtype: "success" }], 1);
-    await expect(runClaudeCli("go", makeOpts(), spawn)).resolves.toBeUndefined();
+    await expect(runClaudeCli("go", makeOpts(), spawn)).resolves.toMatchObject({});
   });
 
   it("skips unparseable NDJSON lines silently", async () => {
@@ -208,7 +206,23 @@ describe("runClaudeCli — NDJSON dispatch", () => {
       exited: Promise.resolve(0),
     })) as unknown as typeof Bun.spawn;
 
-    await expect(runClaudeCli("go", makeOpts(channel), spawn)).resolves.toBeUndefined();
+    await expect(runClaudeCli("go", makeOpts(channel), spawn)).resolves.toMatchObject({});
+  });
+
+  it("returns lastOutput from the final assistant text block", async () => {
+    const spawn = makeSpawn([
+      { type: "assistant", message: { content: [{ type: "text", text: "First message" }] } },
+      { type: "assistant", message: { content: [{ type: "text", text: "Done! Created PR #42." }] } },
+      { type: "result", subtype: "success" },
+    ]);
+    const result = await runClaudeCli("go", makeOpts(), spawn);
+    expect(result.lastOutput).toBe("Done! Created PR #42.");
+  });
+
+  it("returns lastOutput undefined when no assistant text was produced", async () => {
+    const spawn = makeSpawn([{ type: "result", subtype: "success" }]);
+    const result = await runClaudeCli("go", makeOpts(), spawn);
+    expect(result.lastOutput).toBeUndefined();
   });
 
   it("is an AntSessionError instance", async () => {

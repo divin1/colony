@@ -27,8 +27,9 @@ export function createGenericCliRunner(
   extraArgs: string[] = [],
   _spawn: SpawnFn = Bun.spawn
 ): (prompt: string, opts: EngineRunOptions) => Promise<void> {
-  return async (prompt: string, opts: EngineRunOptions): Promise<void> => {
+  return async (prompt: string, opts: EngineRunOptions): Promise<{ lastOutput?: string }> => {
     const lmOutput = opts.config.logging?.lm_output ?? "discord";
+    let lastOutput: string | undefined;
 
     let proc: ReturnType<SpawnFn>;
     try {
@@ -56,6 +57,7 @@ export function createGenericCliRunner(
         buffer = lines.pop() ?? "";
         for (const line of lines) {
           if (!line.trim()) continue;
+          lastOutput = line;
           if (lmOutput === "console" || lmOutput === "both") {
             log(opts.config.name, line);
           }
@@ -72,6 +74,7 @@ export function createGenericCliRunner(
 
     // Flush any remaining partial line.
     if (buffer.trim()) {
+      lastOutput = buffer;
       if (lmOutput === "console" || lmOutput === "both") {
         log(opts.config.name, buffer);
       }
@@ -89,6 +92,8 @@ export function createGenericCliRunner(
         "transient"
       );
     }
+
+    return { lastOutput };
   };
 }
 
