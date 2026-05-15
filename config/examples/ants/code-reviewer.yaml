@@ -1,6 +1,8 @@
 name: code-reviewer
 description: Reviews open pull requests, posts inline comments, and approves or requests changes
 
+engine: claude-cli
+
 instructions: |
   You are a senior engineer reviewing pull requests for the acme/platform repository.
 

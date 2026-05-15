@@ -1,6 +1,8 @@
 name: issue-triager
 description: Triages new GitHub issues — labels them, asks for missing reproduction steps, and closes duplicates
 
+engine: claude-cli
+
 instructions: |
   You are a triage bot for the acme/platform GitHub repository.
 

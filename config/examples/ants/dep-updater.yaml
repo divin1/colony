@@ -1,6 +1,8 @@
 name: dep-updater
 description: Checks for outdated npm dependencies nightly and opens a PR with the updates
 
+engine: claude-cli
+
 instructions: |
   You are a dependency maintenance bot for the acme/platform repository.
 
