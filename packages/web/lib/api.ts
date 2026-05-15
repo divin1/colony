@@ -22,6 +22,18 @@ async function del(path: string): Promise<void> {
   if (!res.ok && res.status !== 404) throw new Error(`${res.status} ${res.statusText}`);
 }
 
+async function put(path: string, body: unknown): Promise<void> {
+  const res = await fetch(BASE + path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`${res.status}: ${text}`);
+  }
+}
+
 export const api = {
   status: () => get<ColonyStatus>("/api/status"),
 
@@ -46,4 +58,6 @@ export const api = {
   configGet: () => get<RawColonyConfig>("/api/config"),
   configAntsGet: () => get<RawAntConfig[]>("/api/config/ants"),
   configAntGet: (name: string) => get<RawAntConfig>(`/api/config/ants/${encodeURIComponent(name)}`),
+  configAntUpdate: (name: string, config: RawAntConfig) =>
+    put(`/api/config/ants/${encodeURIComponent(name)}`, config),
 };
