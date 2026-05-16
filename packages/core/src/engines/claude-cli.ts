@@ -85,6 +85,33 @@ async function handleMessage(
   return undefined;
 }
 
+// --- Abort helpers ---
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
+}
+
+// Races a promise against an AbortSignal. If the signal fires first, rejects
+// with a DOMException("Aborted", "AbortError"). Cleans up the listener either way.
+function raceSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new DOMException("Aborted", "AbortError"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (val) => { signal.removeEventListener("abort", onAbort); resolve(val); },
+      (err) => { signal.removeEventListener("abort", onAbort); reject(err as Error); }
+    );
+  });
+}
+
+async function killProcess(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
+  proc.kill();  // SIGTERM — gives Claude CLI a chance to flush and exit
+  const killTimer = setTimeout(() => { try { proc.kill(9); } catch { /* already gone */ } }, 5000);
+  await proc.exited.catch(() => {});
+  clearTimeout(killTimer);
+}
+
 // --- Engine implementation ---
 
 type SpawnFn = typeof Bun.spawn;
@@ -123,12 +150,22 @@ export async function runClaudeCli(
   const decoder = new TextDecoder();
   let buffer = "";
   let hasResult = false;
+  let abortErr: unknown;
 
   try {
     while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+      const readPromise = reader.read();
+      const chunk = opts.signal
+        ? await raceSignal(readPromise, opts.signal).catch((err) => {
+            if (isAbortError(err)) { abortErr = err; return null; }
+            throw err;
+          })
+        : await readPromise;
+
+      if (chunk === null) break;  // aborted
+      if (chunk.done) break;
+
+      buffer += decoder.decode(chunk.value, { stream: true });
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
       for (const line of lines) {
@@ -146,6 +183,11 @@ export async function runClaudeCli(
     }
   } finally {
     reader.releaseLock();
+  }
+
+  if (abortErr) {
+    await killProcess(proc);
+    throw abortErr;
   }
 
   // Process any remaining buffer content.

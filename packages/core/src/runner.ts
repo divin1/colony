@@ -297,12 +297,21 @@ async function runAntWithSupervision(
       }, { once: true });
     });
 
+  // Per-session abort controller — set while runAnt() is active, null otherwise.
+  // pause() aborts this to interrupt the running session immediately.
+  let sessionController: AbortController | null = null;
+
   // --- Register with colony state for dashboard control ---
   colonyState.register(ant.name, ant.engine, {
     pause: () => {
       if (!paused) {
         paused = true;
-        broadcast(`⏸️ **${ant.name}** will pause after the current session.`);
+        if (sessionController) {
+          sessionController.abort();
+          broadcast(`⏸️ **${ant.name}** pausing…`);
+        } else {
+          broadcast(`⏸️ **${ant.name}** will pause after the current session.`);
+        }
       }
     },
     resume: () => {
@@ -559,6 +568,7 @@ async function runAntWithSupervision(
       colonyState.setState(ant.name, "running");
       workStore?.updateStatus(workItem.id, "running", { startedAt: Date.now() });
 
+      sessionController = new AbortController();
       try {
         // Load skill files fresh each session (task-snapshot pattern).
         const skillTexts: string[] = [];
@@ -584,6 +594,7 @@ async function runAntWithSupervision(
           channel: teeChannel,
           channelId,
           commonInstructions,
+          signal: sessionController.signal,
         });
         sessionsCompleted++;
         consecutiveCrashes = 0;
@@ -610,7 +621,14 @@ async function runAntWithSupervision(
             });
         }
       } catch (err) {
-        if (isAbortError(err)) throw err; // propagate abort through session error handler
+        if (isAbortError(err)) {
+          // Ant-level abort (hot reload / stop) — propagate out of the supervisor loop.
+          if (signal.aborted) throw err;
+          // Session-level abort (pause) — mark the work item failed and let the outer
+          // loop fall through to waitForResume(). paused is already true (set by pause()).
+          workStore?.updateStatus(workItem.id, "failed", { completedAt: Date.now() });
+          continue;
+        }
         sessionsCrashed++;
         colonyState.incrementSessions(ant.name, "crashed");
         workStore?.updateStatus(workItem.id, "failed", { completedAt: Date.now() });
@@ -689,6 +707,8 @@ async function runAntWithSupervision(
           broadcast(`❌ **${ant.name}** crashed: ${message}\nRestarting in ${delay / 1000}s…`);
           await sleepInterruptible(delay, signal);
         }
+      } finally {
+        sessionController = null;
       }
 
       // If no triggers: sleep (if configured) then re-queue so the ant keeps running.

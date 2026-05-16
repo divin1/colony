@@ -7,6 +7,9 @@ export interface EngineRunOptions {
   channelId: string;
   cwd?: string;
   commonInstructions?: string;
+  /** Abort signal for mid-session interrupt (pause). When fired, the engine must
+   *  terminate the child process and re-throw as an AbortError. */
+  signal?: AbortSignal;
 }
 
 export interface EngineResult {

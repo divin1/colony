@@ -15,6 +15,29 @@ function chunkText(text: string, maxLen = 1900): string[] {
   return chunks;
 }
 
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
+}
+
+function raceSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new DOMException("Aborted", "AbortError"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (val) => { signal.removeEventListener("abort", onAbort); resolve(val); },
+      (err) => { signal.removeEventListener("abort", onAbort); reject(err as Error); }
+    );
+  });
+}
+
+async function killProcess(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
+  proc.kill();
+  const killTimer = setTimeout(() => { try { proc.kill(9); } catch { /* already gone */ } }, 5000);
+  await proc.exited.catch(() => {});
+  clearTimeout(killTimer);
+}
+
 type SpawnFn = typeof Bun.spawn;
 
 /**
@@ -26,7 +49,7 @@ export function createGenericCliRunner(
   binary: string,
   extraArgs: string[] = [],
   _spawn: SpawnFn = Bun.spawn
-): (prompt: string, opts: EngineRunOptions) => Promise<void> {
+): (prompt: string, opts: EngineRunOptions) => Promise<{ lastOutput?: string }> {
   return async (prompt: string, opts: EngineRunOptions): Promise<{ lastOutput?: string }> => {
     const lmOutput = opts.config.logging?.lm_output ?? "discord";
     let lastOutput: string | undefined;
@@ -47,12 +70,22 @@ export function createGenericCliRunner(
     const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let abortErr: unknown;
 
     try {
       while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
+        const readPromise = reader.read();
+        const chunk = opts.signal
+          ? await raceSignal(readPromise, opts.signal).catch((err) => {
+              if (isAbortError(err)) { abortErr = err; return null; }
+              throw err;
+            })
+          : await readPromise;
+
+        if (chunk === null) break;  // aborted
+        if (chunk.done) break;
+
+        buffer += decoder.decode(chunk.value, { stream: true });
         const lines = buffer.split("\n");
         buffer = lines.pop() ?? "";
         for (const line of lines) {
@@ -70,6 +103,11 @@ export function createGenericCliRunner(
       }
     } finally {
       reader.releaseLock();
+    }
+
+    if (abortErr) {
+      await killProcess(proc);
+      throw abortErr;
     }
 
     // Flush any remaining partial line.

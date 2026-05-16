@@ -237,3 +237,85 @@ describe("runClaudeCli — NDJSON dispatch", () => {
     }
   });
 });
+
+// --- Signal / mid-session abort ---
+
+/** Spawn that blocks on reader.read() until the returned resolve function is called. */
+function makeBlockingSpawn(): { spawn: typeof Bun.spawn; unblock: () => void; killMock: ReturnType<typeof mock> } {
+  let unblock!: () => void;
+  const readPromise = new Promise<{ done: boolean; value: Uint8Array }>((res) => {
+    unblock = () => res({ done: true, value: new Uint8Array() });
+  });
+  const killMock = mock(() => {});
+  const spawn = mock((_args: string[], _opts: unknown) => ({
+    stdout: {
+      getReader: () => ({
+        read: () => readPromise,
+        releaseLock: mock(() => {}),
+      }),
+    } as unknown as ReadableStream<Uint8Array>,
+    stderr: {
+      getReader: () => ({ read: async () => ({ done: true, value: undefined }), releaseLock: () => {} }),
+    } as unknown as ReadableStream<Uint8Array>,
+    exited: new Promise<number>((res) => { setTimeout(() => res(0), 10); }),
+    kill: killMock,
+  })) as unknown as typeof Bun.spawn;
+  return { spawn, unblock, killMock };
+}
+
+function assertAbortError(err: unknown) {
+  expect(err).toBeInstanceOf(DOMException);
+  expect((err as DOMException).name).toBe("AbortError");
+}
+
+describe("runClaudeCli — signal / mid-session abort", () => {
+  it("throws AbortError when signal is fired while reading", async () => {
+    const { spawn } = makeBlockingSpawn();
+    const controller = new AbortController();
+    const opts = { ...makeOpts(), signal: controller.signal };
+
+    const promise = runClaudeCli("go", opts, spawn);
+    setTimeout(() => controller.abort(), 5);
+
+    try {
+      await promise;
+      expect(true).toBe(false); // should not reach
+    } catch (err) {
+      assertAbortError(err);
+    }
+  });
+
+  it("calls proc.kill() when signal fires", async () => {
+    const { spawn, killMock } = makeBlockingSpawn();
+    const controller = new AbortController();
+    const opts = { ...makeOpts(), signal: controller.signal };
+
+    const promise = runClaudeCli("go", opts, spawn);
+    setTimeout(() => controller.abort(), 5);
+    await promise.catch(() => {});
+
+    expect(killMock).toHaveBeenCalled();
+  });
+
+  it("throws AbortError immediately when signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { spawn } = makeBlockingSpawn();
+    const opts = { ...makeOpts(), signal: controller.signal };
+
+    try {
+      await runClaudeCli("go", opts, spawn);
+      expect(true).toBe(false); // should not reach
+    } catch (err) {
+      assertAbortError(err);
+    }
+  });
+
+  it("completes normally when signal is present but never fired", async () => {
+    const controller = new AbortController();
+    const spawn = makeSpawn([{ type: "result", subtype: "success" }]);
+    const opts = { ...makeOpts(), signal: controller.signal };
+
+    await expect(runClaudeCli("go", opts, spawn)).resolves.toMatchObject({});
+  });
+});

@@ -14,6 +14,8 @@ export interface AntRunOptions {
   cwd?: string;
   /** Colony-level conventions (PLAN.md tracking, git identity) appended to the system prompt. */
   commonInstructions?: string;
+  /** Abort signal for mid-session interrupt. When fired the engine kills the child process. */
+  signal?: AbortSignal;
 }
 
 export async function runAnt(
