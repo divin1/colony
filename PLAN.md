@@ -122,6 +122,19 @@ Expose colony control as MCP tools for Claude Desktop and other MCP hosts.
 - [x] HTTP client architecture — talks to Colony's existing API; `monitoring.port` must be set
 - [x] Docs: `docs/mcp.md`
 
+### Phase 11 — Drag-and-drop Kanban + `PATCH /api/work/:id` ✅ (complete)
+
+Queued work items can be reordered by dragging within the Queued column.
+
+- [x] `work-store.ts` — `position` column added (migration-safe); `create()` sets position to `MAX + 1`; `list()` sorts queued items by position ASC, others by `created_at DESC`; `reorder(id, newIndex)` updates all positions atomically in a SQLite transaction
+- [x] `PromiseQueue.reorderBy(predicate, newIndex)` — in-memory counterpart
+- [x] `AntControlHandles.reorderWorkItem` + `ColonyState.reorderWorkItem` wired through
+- [x] `PATCH /api/work/:id` — body `{ position: number }`: validates queued status, updates store + in-memory queue; 409 if running
+- [x] `@dnd-kit/core` + `@dnd-kit/sortable` + `@dnd-kit/utilities` installed
+- [x] `KanbanBoard.tsx` — `DndContext` wraps the board; `SortableContext` + `verticalListSortingStrategy` on Queued column only; `SortableWorkItemCard` with drag-handle grip icon (click and drag don't conflict); `DragOverlay` for floating card; optimistic reorder via `queryClient.setQueryData`, reverts on API error
+- [x] `api.workReorder(id, position)` added to web API client
+- [x] 11 new backend tests (work-store reorder + dashboard PATCH); total: 281
+
 ### Phase 10 — Mid-session interrupt ✅ (complete)
 
 Pause takes effect immediately — the running agent process is terminated rather than waiting for the session to finish.
