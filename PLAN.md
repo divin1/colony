@@ -122,6 +122,22 @@ Expose colony control as MCP tools for Claude Desktop and other MCP hosts.
 - [x] HTTP client architecture — talks to Colony's existing API; `monitoring.port` must be set
 - [x] Docs: `docs/mcp.md`
 
+### Phase 12b — Project & Task Management (UI) ✅ (complete)
+
+Full web UI for the project/task model. Old work-item components replaced throughout.
+
+- [x] `StatusDot.tsx` — `"idle"` state added (muted dot)
+- [x] `TaskCard.tsx` (new) — title, assignee chip (ant/human), source icon, comment count
+- [x] `TaskDrawer.tsx` (new) — task detail drawer: status badge, assignee dropdown, description, last output, GitHub issue link, comment thread, add-comment form; "Approve" (in_review→done), "Re-queue" (done/in_review→todo), "Move to To Do" (backlog→todo) quick actions
+- [x] `AddTaskModal.tsx` (new) — project selector, title, description, ant/human toggle, ant picker, initial status (backlog or todo)
+- [x] `KanbanBoard.tsx` — rebuilt: 5 columns (Backlog muted, To Do sortable via dnd-kit, In Progress/In Review/Done read-only); project-scoped; `+` button per column opens `AddTaskModal` pre-set to that status
+- [x] `Nav.tsx` — project switcher dropdown (select element); "New project…" option; shown only on board page
+- [x] `app/page.tsx` — owns project state; auto-selects first project; "Create your first project" empty state; "New project" dialog
+- [x] `app/work/page.tsx` — repurposed as task list/history table; filters by status and assignee; `TaskDrawer` for detail
+- [x] `app/ants/page.tsx` — updated to `AddTaskModal`
+- [x] `app/ants/[name]/page.tsx` — "Recent tasks" sidebar uses `api.taskList({ assignee })`; actions use `AddTaskModal` and `TaskDrawer`
+- [x] Deleted: `WorkItemCard.tsx`, `WorkItemDrawer.tsx`, `AddWorkModal.tsx`
+
 ### Phase 12a — Project & Task Management (backend) ✅ (complete)
 
 Replaces the ant-centric `WorkStore` with a proper project/task model. `WorkStore` and `colony-work.db` are gone; `TaskStore` and `colony-tasks.db` are the new source of truth.
