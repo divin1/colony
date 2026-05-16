@@ -1,12 +1,12 @@
 # Colony — Project Plan
 
-_Last updated: 2026-05-16_ (0.5.0)
+_Last updated: 2026-05-16_ (0.6.0)
 
 ---
 
 ## Current State
 
-v0.5.0 is complete. Colony now ships with a full web dashboard (Kanban board, config editor, live output), an MCP server for Claude Desktop / Claude Code integration, SQLite-backed work item persistence, hot reload, and API key auth for remote deployments. Discord is fully optional.
+v0.6.0 is in progress. On top of v0.5.0, Colony now has a full project/task management model (replacing the old work-item queue), mid-session interrupt, GitHub webhooks, and a skill management UI. The web dashboard is the primary control plane.
 
 ### What is fully implemented
 
@@ -20,21 +20,24 @@ v0.5.0 is complete. Colony now ships with a full web dashboard (Kanban board, co
 | Discord integration | ✅ | Optional; send + resolveChannelId; webhook fallback |
 | Human → Ant commands | ✅ | Slash commands (/help, /status, /stats, /pause, /resume, /clear) |
 | GitHub integration | ✅ | listIssues (with label filter), createIssueComment |
+| GitHub webhooks | ✅ | `POST /api/webhooks/github`; HMAC-SHA256 verification; issues opened/labeled |
+| Mid-session interrupt | ✅ | AbortSignal propagated to engines; SIGTERM + 5s SIGKILL escalation on pause |
 | Config validation | ✅ | Zod schemas, env interpolation, fail-fast on missing vars |
-| State persistence | ✅ | memory and SQLite backends; issue deduplication |
+| State persistence | ✅ | memory and SQLite backends; session summaries |
 | PLAN.md convention | ✅ | Injected into every ant's system prompt |
 | Git identity | ✅ | Injected into every ant's system prompt from colony.yaml defaults |
 | CLI: init / validate / run / update / mcp | ✅ | Full CLI surface, including self-update and MCP server |
 | Docker deployment | ✅ | Dockerfile + docker-compose; no SDK deps required |
 | CLI binary distribution | ✅ | `bun build --compile`, GitHub Actions release workflow, install.sh |
-| Web dashboard | ✅ | Next.js 16, Kanban board, live SSE output, config editor, auth gate |
-| Work item persistence | ✅ | SQLite (`colony-work.db`); lifecycle queued→running→done/failed/cancelled |
+| Web dashboard | ✅ | Next.js 16, 5-column Kanban, config editor, live SSE output, auth gate |
+| Project & task management | ✅ | SQLite (`colony-tasks.db`); projects, tasks, comments; pull-model runner |
+| Skill management | ✅ | CRUD API + web UI; `/skills` list + editor; skill picker in ant config editor |
 | Hot reload | ✅ | `POST /api/reload` — diffs and restarts changed ants without runner restart |
 | MCP server | ✅ | 6 tools; StdioServerTransport; `colony mcp` CLI command |
 | API key auth | ✅ | `COLONY_API_KEY` env var; Bearer token on all `/api/*`; `?key=` for SSE |
 | Documentation | ✅ | getting-started, configuration, cli, docker, supervisor, mcp |
 
-### What was removed in v0.4.0
+### What was removed in v0.4.0 / v0.6.0
 
 | Removed | Reason |
 |---|---|
@@ -46,13 +49,15 @@ v0.5.0 is complete. Colony now ships with a full web dashboard (Kanban board, co
 | Pre-action Discord ✅/❌ confirmation | Removed with autonomy |
 | PostToolUse logging | Removed with SDK hooks |
 | `notify_discord` Gemini tool | Gemini is now CLI-only, no custom tools |
+| `WorkStore` / `colony-work.db` | Replaced by `TaskStore` / `colony-tasks.db` in v0.6.0 |
+| `/api/work` routes | Replaced by project/task/comment API in v0.6.0 |
 
 ### Test coverage
 
-- **Core:** runner helpers, config, errors, state, claude-cli engine, dashboard (including auth), work store, colony-state
+- **Core:** runner helpers, config, errors, state, claude-cli engine, dashboard (including auth, skills, tasks, projects), task-store, colony-state
 - **CLI:** `init`, `validate`, `run` commands
 - **Integrations:** Discord, GitHub, MCP fully tested
-- 257 tests pass (`bun test`)
+- ~295 tests pass (`bun test`)
 
 ---
 
@@ -121,6 +126,21 @@ Expose colony control as MCP tools for Claude Desktop and other MCP hosts.
 - [x] `colony mcp [--url <url>] [--key <key>]` CLI command — StdioServerTransport for Claude Desktop / Claude Code
 - [x] HTTP client architecture — talks to Colony's existing API; `monitoring.port` must be set
 - [x] Docs: `docs/mcp.md`
+
+### Phase 13 — Skill management UI ✅ (complete)
+
+Full web UI for creating, editing, and assigning skills to ants.
+
+- [x] `GET /api/skills` — lists `.md` files in the `skills/` directory; parses YAML frontmatter for name + description
+- [x] `GET /api/skills/:filename` — returns raw markdown content
+- [x] `PUT /api/skills/:filename` — creates or overwrites a skill file; path traversal guard
+- [x] `DELETE /api/skills/:filename` — removes the file; 404-safe
+- [x] `SkillInfo` type in web `types.ts`; skill API methods in `api.ts`
+- [x] `app/skills/page.tsx` — grid of skill cards (name, description, file path); "New skill" dialog slugifies name; delete with confirm
+- [x] `app/skills/[filename]/page.tsx` — full-screen textarea editor; save/delete buttons; ⌘S shortcut; shows path for reference
+- [x] `Nav.tsx` — "Skills" link added (BookOpen icon)
+- [x] `AntConfigEditor.tsx` — Skills section replaced with live `SkillPicker` component: checkboxes populated from `GET /api/skills`; unknown paths shown in fallback textarea
+- [x] 6 skill tests in `dashboard.test.ts`; total: ~295
 
 ### Phase 12b — Project & Task Management (UI) ✅ (complete)
 
@@ -219,21 +239,32 @@ Full web application for managing Colony without touching YAML or a terminal.
 - [x] Work item persistence — SQLite (`colony-work.db`); full lifecycle tracking
 - [x] Config CRUD API — `GET/PUT /api/config`, `GET/POST/PUT/DELETE /api/config/ants/:name`
 
+### Phase 14 — Real-time push (planned)
+
+Replace 5-second polling with server-sent events for board and status updates. The ant output stream already uses SSE; extend the pattern to board-level events.
+
+- [ ] `GET /api/events` — SSE stream that emits `task`, `project`, and `ant-state` change events
+- [ ] `TaskStore` and `ColonyState` emit events after mutations (observer pattern or simple callbacks)
+- [ ] Web dashboard subscribes and updates TanStack Query cache on event, eliminating polling for board, task list, and ant status
+- [ ] Auth: `?key=` query param (same pattern as existing output SSE)
+
+### Phase 15 — UX polish (planned)
+
+Small-scale improvements across the web dashboard.
+
+- [ ] Project settings page — rename, change color, delete project from the UI
+- [ ] Session memory viewer — view and clear per-ant session summaries stored in SQLite
+- [ ] Optimistic updates — drag-reorder and status transitions update the cache immediately; revert on API error
+- [ ] Skill path validation in ant config — warn (not block) when a configured skill path doesn't exist
+- [ ] Mobile layout — responsive Kanban columns (horizontal scroll or stacked view)
+
 ---
 
 ## Open Decisions
 
 ### Discord long-term
 
-Discord remains available as an optional integration but is no longer the primary control plane. The web dashboard (Phase 2) is the target control plane. Long-term, Discord may be replaced by a simple webhook notifier (Phase 1 introduces this). No decision yet on whether to deprecate the full Discord integration. Conceptually, Discord or a simple webhook notifier would simply act as a channel to notify the human when their input is required.
-
-### Interrupting a running session
-
-Human commands (pause, work instructions) currently only take effect after the current session finishes. Interrupting mid-session requires an AbortSignal passed to the engine runner. Not yet planned.
-
-### GitHub webhooks vs. polling
-
-Issues are polled every 5 minutes. Real-time response requires exposing an HTTP webhook endpoint. Phase 2's HTTP server makes this feasible — add it then.
+Discord remains available as an optional integration but is no longer the primary control plane. The web dashboard is the target control plane. Long-term, Discord may be reduced to a simple webhook notifier (outbound only). No decision yet on whether to deprecate the full bot integration. Conceptually, any notification channel just alerts the human when their input is required.
 
 ---
 
