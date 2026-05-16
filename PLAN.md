@@ -122,6 +122,22 @@ Expose colony control as MCP tools for Claude Desktop and other MCP hosts.
 - [x] HTTP client architecture — talks to Colony's existing API; `monitoring.port` must be set
 - [x] Docs: `docs/mcp.md`
 
+### Phase 9 — GitHub webhooks ✅ (complete)
+
+Real-time issue triggers via GitHub webhook push instead of 5-minute polling.
+
+- [x] `POST /api/webhooks/github` — exempt from API key auth; HMAC-SHA256 signature verification via `X-Hub-Signature-256`
+- [x] Handles `issues` events with `action: opened | labeled`; ignores everything else
+- [x] `onGithubWebhook` callback in `createDashboardHandler` options; runner registers with ant-config-aware match logic
+- [x] `DashboardOptions` interface replaces positional `apiKey?` arg on `createDashboardHandler`
+- [x] `GitHubIssueEvent` type exported from `dashboard.ts`
+- [x] `integrations.github.webhook_secret` field in `ColonyConfigSchema` and `RawColonyConfigSchema`
+- [x] `IssueContext` exported as named type from `work-store.ts`
+- [x] `AntControlHandles.pushPrompt` + `ColonyState.pushPrompt` extended to forward `issueContext?`
+- [x] Label matching: `action: labeled` checks only the newly added label; `action: opened` checks all issue labels
+- [x] Repo filter: ant must list the event's repo in `integrations.github.repos` (if any configured)
+- [x] 9 new tests; total: 266
+
 ### Phase 8 — Docker update ✅ (complete)
 
 Runner + web dashboard deployable as a single `docker compose up`.
