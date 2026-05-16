@@ -122,6 +122,20 @@ Expose colony control as MCP tools for Claude Desktop and other MCP hosts.
 - [x] HTTP client architecture — talks to Colony's existing API; `monitoring.port` must be set
 - [x] Docs: `docs/mcp.md`
 
+### Phase 12a — Project & Task Management (backend) ✅ (complete)
+
+Replaces the ant-centric `WorkStore` with a proper project/task model. `WorkStore` and `colony-work.db` are gone; `TaskStore` and `colony-tasks.db` are the new source of truth.
+
+- [x] `task-store.ts` — three SQLite tables: `projects`, `tasks`, `task_comments`; full CRUD; pull-model helpers `listTodo`, `countTodo`, `cancelAllTodo`; `reorder`; `getOrCreateDefaultProject`
+- [x] `colony-state.ts` — `AntControlHandles` slimmed to `{pause, resume, wake, clearQueue, getQueueSize}`; `"idle"` added to `AntRuntimeState`; `pushPrompt/cancelWorkItem/reorderWorkItem/getWorkStore` removed; `wake()` and `listAntNames()` added
+- [x] `runner.ts` — supervisor rewritten: `PromiseQueue<void>` wake-signal queue replaces `PromiseQueue<WorkItem>`; ant pulls tasks from `TaskStore.listTodo` each iteration; Discord messages, GitHub poll, cron, and webhook all create tasks; on session success → task `in_review` + comment; on failure/interrupt → task back to `todo` + comment; `TaskStore` always created (not just when monitoring port configured)
+- [x] `dashboard.ts` — new project/task/comment API routes (14 endpoints); prompt endpoint creates task + wakes ant; old `/api/work` routes removed; `DashboardOptions.taskStore` added
+- [x] `index.ts` — exports `task-store` instead of `work-store`
+- [x] Web `types.ts` — `Project`, `Task`, `TaskComment`, `TaskStatus`, `AssigneeType`, `AntRuntimeState` (now includes "idle"); `PersistedWorkItem` removed
+- [x] Web `api.ts` — project/task/comment API calls; old work-item calls removed
+- [x] `work-store.ts` and `work-store.test.ts` deleted (fresh start)
+- [x] 25 new `task-store.test.ts` tests + updated colony-state + dashboard tests; total: 289
+
 ### Phase 11 — Drag-and-drop Kanban + `PATCH /api/work/:id` ✅ (complete)
 
 Queued work items can be reordered by dragging within the Queued column.
