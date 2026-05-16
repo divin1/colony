@@ -122,6 +122,17 @@ Expose colony control as MCP tools for Claude Desktop and other MCP hosts.
 - [x] HTTP client architecture — talks to Colony's existing API; `monitoring.port` must be set
 - [x] Docs: `docs/mcp.md`
 
+### Phase 8 — Docker update ✅ (complete)
+
+Runner + web dashboard deployable as a single `docker compose up`.
+
+- [x] `docker/Dockerfile.web` — multi-stage: `oven/bun:1` builder → `node:24-slim` runtime via Next.js standalone output
+- [x] `packages/web/next.config.ts` — `output: "standalone"` + `outputFileTracingRoot` for monorepo support
+- [x] `docker/docker-compose.yml` — two services: `runner` and `web`; web proxied to `http://runner:8080`
+- [x] `docker/.env.example` — all env vars documented including `COLONY_API_KEY`
+- [x] `.dockerignore` — excludes `node_modules`, `.next`, `.env`, `*.db` from build context
+- [x] `docs/docker.md` — rewritten for two-service setup; auth, multi-colony, and updating sections
+
 ### Phase 7 — Kanban dashboard + config editor + auth ✅ (complete)
 
 Full web application for managing Colony without touching YAML or a terminal.
