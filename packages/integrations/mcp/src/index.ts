@@ -14,7 +14,7 @@ export async function startMcpServer(apiUrl: string, apiKey?: string): Promise<v
   const client = new ColonyClient(apiUrl, apiKey);
 
   const server = new Server(
-    { name: "colony", version: "0.4.0" },
+    { name: "colony", version: "0.5.0" },
     { capabilities: { tools: {} } }
   );
 
