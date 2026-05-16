@@ -1,0 +1,30 @@
+# ---- build stage ----
+FROM oven/bun:1 AS builder
+WORKDIR /app
+
+# Install all workspace deps (needed to build the web package)
+COPY package.json bunfig.toml bun.lock ./
+COPY packages/ packages/
+RUN bun install --frozen-lockfile
+
+# Build Next.js with standalone output
+WORKDIR /app/packages/web
+RUN bun run build
+
+# ---- runtime stage ----
+# next.config.ts sets outputFileTracingRoot to the repo root, so the standalone
+# output at .next/standalone/ mirrors the monorepo structure:
+#   packages/web/server.js    ← entry point
+#   node_modules/             ← only traced runtime deps (lean)
+FROM node:24-slim AS web
+WORKDIR /app
+
+COPY --from=builder /app/packages/web/.next/standalone ./
+COPY --from=builder /app/packages/web/.next/static ./packages/web/.next/static
+
+ENV NODE_ENV=production
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
+
+EXPOSE 3000
+CMD ["node", "packages/web/server.js"]

@@ -1,5 +1,5 @@
 services:
-  colony:
+  runner:
     build:
       context: ..
       dockerfile: docker/Dockerfile
@@ -9,3 +9,22 @@ services:
       - ../:/colony
     working_dir: /colony
     command: ["run", "."]
+    # Expose 8080 to the host only if you need direct API access.
+    # The web service reaches the runner over the internal Docker network.
+    # ports:
+    #   - "8080:8080"
+
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+    restart: unless-stopped
+    environment:
+      # Points the Next.js API proxy at the runner's internal address.
+      # COLONY_API_KEY is NOT needed here — the browser sends it as a Bearer
+      # token which the proxy passes through to the runner transparently.
+      COLONY_API_URL: http://runner:8080
+    depends_on:
+      - runner
+    ports:
+      - "3000:3000"

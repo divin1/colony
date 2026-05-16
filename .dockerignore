@@ -1,0 +1,9 @@
+.git
+node_modules
+packages/*/node_modules
+packages/web/.next
+*.log
+*.db
+.env
+.env.local
+.env.*.local

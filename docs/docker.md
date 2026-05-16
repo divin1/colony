@@ -1,6 +1,6 @@
 # Docker Deployment
 
-Docker is the recommended way to run a colony in production. The provided `Dockerfile` and `docker-compose.yml` give you a zero-downtime, auto-restarting deployment with a single command.
+Docker is the recommended way to run a colony in production. A single `docker compose up -d` starts both the Colony runner and the web dashboard, with automatic restarts on crash or host reboot.
 
 ## Prerequisites
 
@@ -10,229 +10,248 @@ Docker is the recommended way to run a colony in production. The provided `Docke
 
 ---
 
-## Directory layout
+## Services
 
-Your colony directory must be on the Docker host. The container mounts it at runtime, so you can edit configs and restart without rebuilding the image.
+| Service | What it runs | Default port |
+|---|---|---|
+| `runner` | Colony runner — ant supervisor, HTTP API | 8080 (internal only) |
+| `web` | Next.js dashboard — Kanban board, config editor, live output | 3000 (host-exposed) |
 
-```
-my-colony/              ← this is the directory you mount
-  colony.yaml
-  ants/
-    worker.yaml
-    reviewer.yaml
-  .env                  ← secrets live here, never in YAML
-```
-
-The `docker/` directory inside the Colony repo contains the `Dockerfile` and a template `docker-compose.yml`. You reference them from your colony directory.
+The `web` service proxies all `/api/*` calls to `http://runner:8080` over the internal Docker network. The runner's port is not exposed to the host by default; open your browser at **http://localhost:3000**.
 
 ---
 
-## Option A — docker compose (recommended)
-
-From the root of the Colony repo (the directory you cloned), with your colony directory alongside it:
+## Directory layout
 
 ```
-colony/         ← cloned repo
+colony/          ← cloned Colony repo
   docker/
     Dockerfile
+    Dockerfile.web
     docker-compose.yml
-my-colony/      ← your colony directory
+    .env.example
+my-colony/       ← your colony directory (mounted at runtime)
   colony.yaml
   ants/
-  .env
+    worker.yaml
+  .env            ← fill in your tokens here
 ```
 
-1. **Copy and adapt the compose file** into your colony directory:
+The colony directory is mounted as a volume — you can edit configs and hot-reload without rebuilding images.
+
+---
+
+## Quick start
+
+### 1. Enable the HTTP API
+
+`colony.yaml` must have `monitoring.port` set for the dashboard to work:
+
+```yaml
+name: my-colony
+monitoring:
+  port: 8080
+```
+
+### 2. Create your `.env`
+
+```bash
+cp colony/docker/.env.example my-colony/.env
+```
+
+Edit `my-colony/.env` and fill in your credentials:
+
+```env
+ANTHROPIC_API_KEY=sk-ant-...   # required for claude-cli ants
+
+GITHUB_TOKEN=ghp_...           # optional — for GitHub triggers
+DISCORD_TOKEN=                 # optional — full Discord bot
+DISCORD_WEBHOOK_URL=           # optional — send-only webhook
+
+# Set a secret to protect the dashboard with an API key (recommended for
+# any deployment accessible beyond localhost):
+COLONY_API_KEY=your-secret-here
+```
+
+### 3. Copy and adapt the compose file
 
 ```bash
 cp colony/docker/docker-compose.yml my-colony/docker-compose.yml
 ```
 
-2. **Edit `docker-compose.yml`** to set the correct paths:
+Edit the `context:` paths to point at the Colony repo:
 
 ```yaml
 services:
-  colony:
+  runner:
     build:
       context: ../colony          # path to the cloned Colony repo
       dockerfile: docker/Dockerfile
     restart: unless-stopped
-    env_file: .env                # secrets from your colony directory
+    env_file: .env
     volumes:
-      - .:/colony                 # mount your colony directory into the container
+      - .:/colony
     working_dir: /colony
     command: ["run", "."]
+
+  web:
+    build:
+      context: ../colony
+      dockerfile: docker/Dockerfile.web
+    restart: unless-stopped
+    environment:
+      COLONY_API_URL: http://runner:8080
+    depends_on:
+      - runner
+    ports:
+      - "3000:3000"
 ```
 
-3. **Start:**
+### 4. Build and start
 
 ```bash
 cd my-colony
+docker compose build   # first time, or after pulling a new Colony version
 docker compose up -d
 ```
 
-4. **Tail logs:**
+Open **http://localhost:3000**. If `COLONY_API_KEY` is set in `.env`, the dashboard will prompt for the key on first load.
+
+### 5. Tail logs
 
 ```bash
-docker compose logs -f
+docker compose logs -f           # all services
+docker compose logs -f runner    # runner only
+docker compose logs -f web       # web only
 ```
 
-5. **Stop:**
+### 6. Stop
 
 ```bash
 docker compose down
 ```
 
-The `restart: unless-stopped` policy means the container restarts automatically if it crashes or after a host reboot, until you explicitly stop it with `docker compose down`.
-
 ---
 
-## Option B — docker run
+## Running without the web dashboard
 
-Build the image once from the Colony repo root:
+If you only want the runner (no dashboard), use a single-service compose file or `docker run` directly:
 
 ```bash
 cd colony
-docker build -f docker/Dockerfile -t colony:latest .
-```
+docker build -f docker/Dockerfile -t colony-runner:latest .
 
-Run it, mounting your colony directory:
-
-```bash
 docker run -d \
   --name my-colony \
   --restart unless-stopped \
   --env-file /path/to/my-colony/.env \
   -v /path/to/my-colony:/colony \
   -w /colony \
-  colony:latest run .
-```
-
-View logs:
-
-```bash
-docker logs -f my-colony
-```
-
-Stop and remove:
-
-```bash
-docker stop my-colony
-docker rm my-colony
+  colony-runner:latest run .
 ```
 
 ---
 
-## Environment variables
+## Dashboard auth
 
-Secrets are passed to the container via `--env-file` (docker run) or `env_file:` (compose). Never put tokens in `colony.yaml` or commit `.env`.
+Set `COLONY_API_KEY` in `.env` to protect the HTTP API and web dashboard with a Bearer token. The web frontend prompts for the key on first load and stores it in the browser's `localStorage`.
 
-**`.env` format:**
+If you also use the MCP server (`colony mcp`), pass the same key:
 
-```env
-ANTHROPIC_API_KEY=sk-ant-...   # required for Claude ants (default)
-DISCORD_TOKEN=MTIz...
-GITHUB_TOKEN=ghp_...           # optional
-GEMINI_API_KEY=AIza...         # required for Gemini ants (read by the gemini CLI binary)
+```bash
+colony mcp --url http://your-host:3000 --key your-secret-here
+# or via env: export COLONY_API_KEY=your-secret-here
 ```
 
-Variables referenced in YAML as `${VAR_NAME}` are read from the container's environment at startup. If a variable is missing, `colony run` exits immediately with a clear error — check `docker logs` to see which variable is absent.
+> **Note:** The web service does not need `COLONY_API_KEY` itself. The browser sends the Bearer token directly to the runner through the Next.js proxy.
+
+---
+
+## Exposing the raw API
+
+The runner's port 8080 is internal by default. To expose it to the host (e.g. for direct API access or a remote MCP server), uncomment in `docker-compose.yml`:
+
+```yaml
+  runner:
+    ports:
+      - "8080:8080"
+```
 
 ---
 
 ## Updating configs
 
-Because the colony directory is mounted as a volume, you can change ant configs without rebuilding the image. Just restart the container:
+The colony directory is mounted as a volume, so config changes take effect after a hot reload — no image rebuild needed:
+
+1. Edit ant or colony YAML files.
+2. Click **Reload** in the dashboard, or call `POST /api/reload`.
+
+To restart all ants:
 
 ```bash
-# with compose:
-docker compose restart
-
-# with docker run:
-docker restart my-colony
+docker compose restart runner
 ```
-
-The runner reloads all config from disk on startup.
 
 ---
 
 ## Updating Colony itself
 
-When you pull a new version of the Colony repo and want to deploy it:
-
 ```bash
 cd colony
 git pull
-bun install       # update lockfile if dependencies changed
+bun install           # update lockfile if deps changed
 
-# rebuild the image:
-docker compose build    # or: docker build -f docker/Dockerfile -t colony:latest .
-
-# restart with the new image:
-docker compose up -d
+docker compose build  # rebuild both images
+docker compose up -d  # restart with new images
 ```
-
----
-
-## Logs and monitoring
-
-The runner logs to stdout. Docker captures this automatically.
-
-```bash
-# follow live:
-docker compose logs -f
-
-# last 100 lines:
-docker compose logs --tail=100
-```
-
-What you will see in the logs:
-
-```
-Colony "my-colony" online — 2 ant(s) starting.
-```
-
-Ant activity (status updates, tool summaries, errors) goes to Discord, not stdout. Check your Discord channels for runtime details.
-
----
-
-## Running multiple colonies
-
-Each colony is an independent container. To run two colonies on the same host, give them different service names and colony directories:
-
-```yaml
-# docker-compose.yml
-services:
-  colony-acme:
-    build: { context: ../colony, dockerfile: docker/Dockerfile }
-    restart: unless-stopped
-    env_file: acme/.env
-    volumes: [./acme:/colony]
-    working_dir: /colony
-    command: ["run", "."]
-
-  colony-internal:
-    build: { context: ../colony, dockerfile: docker/Dockerfile }
-    restart: unless-stopped
-    env_file: internal/.env
-    volumes: [./internal:/colony]
-    working_dir: /colony
-    command: ["run", "."]
-```
-
-Each colony uses its own Discord bot, guild, and `.env`.
 
 ---
 
 ## Persistent state
 
-If your ants use `state.backend: sqlite`, the database file is written inside the mounted colony directory on the host. It survives container restarts and re-deploys automatically because it is part of the volume mount.
+SQLite state files are written inside the mounted colony directory and survive container restarts automatically:
 
 ```yaml
 # ants/worker.yaml
 state:
   backend: sqlite
-  path: ./colony-state.db    # written to /path/to/my-colony/colony-state.db on the host
+  path: ./colony-state.db    # written to my-colony/colony-state.db on the host
 ```
 
-No extra volume configuration is needed.
+Work item history (`colony-work.db`) is also written to the colony directory.
+
+---
+
+## Running multiple colonies
+
+Each colony is an independent stack. Use separate compose files and directories:
+
+```
+projects/
+  acme/
+    colony.yaml
+    ants/
+    .env
+    docker-compose.yml    # context: ../../colony
+  internal/
+    colony.yaml
+    ants/
+    .env
+    docker-compose.yml
+```
+
+Each runs on its own port:
+
+```yaml
+# acme/docker-compose.yml
+services:
+  web:
+    ports:
+      - "3001:3000"   # acme dashboard on :3001
+
+# internal/docker-compose.yml
+services:
+  web:
+    ports:
+      - "3002:3000"   # internal dashboard on :3002
+```
