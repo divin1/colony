@@ -4,19 +4,17 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { ColonyState } from "./colony-state";
-import { WorkStore } from "./work-store";
+import { TaskStore } from "./task-store";
 import { createDashboardHandler } from "./dashboard";
 
 function makeState(configDir?: string) {
-  const s = new ColonyState("test-colony", undefined, configDir);
+  const s = new ColonyState("test-colony", configDir);
   s.register("worker", "claude-cli", {
     pause: mock(() => {}),
     resume: mock(() => {}),
-    pushPrompt: mock(() => {}),
+    wake: mock(() => {}),
     clearQueue: mock(() => 2),
     getQueueSize: mock(() => 0),
-    removeWorkItem: mock(() => false),
-    reorderWorkItem: mock(() => false),
   });
   s.pushOutput("worker", "hello");
   s.pushOutput("worker", "world");
@@ -318,87 +316,120 @@ describe("createDashboardHandler — reload", () => {
 
 // --- PATCH /api/work/:id (reorder) ---
 
-describe("createDashboardHandler — PATCH /api/work/:id", () => {
+// --- Task / Project / Comment route tests ---
+
+describe("createDashboardHandler — task routes", () => {
   let dir: string;
-  let store: WorkStore;
+  let ts: TaskStore;
 
   beforeEach(() => {
-    dir = mkdtempSync(`${tmpdir()}/colony-work-patch-test-`);
-    store = new WorkStore(dir);
+    dir = mkdtempSync(`${tmpdir()}/colony-task-test-`);
+    ts = new TaskStore(dir);
   });
 
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  function makeStateWithStore() {
-    const s = new ColonyState("test-colony", store, dir);
+  function makeStateWithTask() {
+    const s = new ColonyState("test-colony", dir);
     s.register("worker", "claude-cli", {
       pause: mock(() => {}),
       resume: mock(() => {}),
-      pushPrompt: mock(() => {}),
+      wake: mock(() => {}),
       clearQueue: mock(() => 0),
       getQueueSize: mock(() => 0),
-      removeWorkItem: mock(() => false),
-      reorderWorkItem: mock(() => true),
     });
     return s;
   }
 
-  it("PATCH /api/work/:id reorders a queued item", async () => {
-    const a = store.create("worker", "First", "manual");
-    const b = store.create("worker", "Second", "manual");
-    const c = store.create("worker", "Third", "manual");
-    const handler = createDashboardHandler(makeStateWithStore());
-    const res = await handler(
-      new Request(`http://localhost/api/work/${c.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ position: 0 }),
-      })
-    );
+  it("GET /api/projects returns empty array when no projects exist", async () => {
+    const handler = createDashboardHandler(makeStateWithTask(), { taskStore: ts });
+    const res = await handler(req("GET", "/api/projects"));
     expect(res.status).toBe(200);
-    const order = store.list({ status: ["queued"] }).map((i) => i.title);
-    expect(order[0]).toBe("Third");
+    expect(await res.json()).toEqual([]);
   });
 
-  it("returns 404 for unknown id", async () => {
-    const handler = createDashboardHandler(makeStateWithStore());
-    const res = await handler(
-      new Request("http://localhost/api/work/no-such-id", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ position: 0 }),
-      })
-    );
-    expect(res.status).toBe(404);
+  it("POST /api/projects creates a project", async () => {
+    const handler = createDashboardHandler(makeStateWithTask(), { taskStore: ts });
+    const res = await handler(req("POST", "/api/projects", { name: "My Project" }));
+    expect(res.status).toBe(201);
+    const body = await res.json() as { name: string };
+    expect(body.name).toBe("My Project");
+    expect(ts.listProjects()).toHaveLength(1);
   });
 
-  it("returns 409 for running items", async () => {
-    const item = store.create("worker", "Task", "manual");
-    store.updateStatus(item.id, "running");
-    const handler = createDashboardHandler(makeStateWithStore());
-    const res = await handler(
-      new Request(`http://localhost/api/work/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ position: 0 }),
-      })
-    );
-    expect(res.status).toBe(409);
+  it("GET /api/tasks returns empty array when no tasks exist", async () => {
+    const handler = createDashboardHandler(makeStateWithTask(), { taskStore: ts });
+    const res = await handler(req("GET", "/api/tasks"));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([]);
   });
 
-  it("returns 400 for invalid position", async () => {
-    const item = store.create("worker", "Task", "manual");
-    const handler = createDashboardHandler(makeStateWithStore());
-    const res = await handler(
-      new Request(`http://localhost/api/work/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ position: -1 }),
-      })
-    );
-    expect(res.status).toBe(400);
+  it("POST /api/tasks creates a task", async () => {
+    const project = ts.createProject("Test");
+    const handler = createDashboardHandler(makeStateWithTask(), { taskStore: ts });
+    const res = await handler(req("POST", "/api/tasks", {
+      projectId: project.id,
+      title: "Fix the bug",
+      description: "Details here",
+      assigneeType: "ant",
+      assigneeName: "worker",
+    }));
+    expect(res.status).toBe(201);
+    const body = await res.json() as { title: string; status: string };
+    expect(body.title).toBe("Fix the bug");
+    expect(body.status).toBe("backlog"); // default — human moves to todo when ready
+  });
+
+  it("PATCH /api/tasks/:id updates status", async () => {
+    const project = ts.createProject("P");
+    const task = ts.createTask({ projectId: project.id, title: "T", description: "", assigneeType: "human" });
+    const handler = createDashboardHandler(makeStateWithTask(), { taskStore: ts });
+    const res = await handler(new Request(`http://localhost/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "done" }),
+    }));
+    expect(res.status).toBe(200);
+    expect(ts.getTask(task.id)!.status).toBe("done");
+  });
+
+  it("PATCH /api/tasks/:id reorders a task", async () => {
+    const project = ts.createProject("P");
+    const a = ts.createTask({ projectId: project.id, title: "A", description: "", assigneeType: "human" });
+    ts.createTask({ projectId: project.id, title: "B", description: "", assigneeType: "human" });
+    const c = ts.createTask({ projectId: project.id, title: "C", description: "", assigneeType: "human" });
+    const handler = createDashboardHandler(makeStateWithTask(), { taskStore: ts });
+    await handler(new Request(`http://localhost/api/tasks/${c.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ position: 0 }),
+    }));
+    const titles = ts.listTasks({ projectId: project.id }).map((t) => t.title);
+    expect(titles[0]).toBe("C");
+  });
+
+  it("DELETE /api/tasks/:id removes the task", async () => {
+    const project = ts.createProject("P");
+    const task = ts.createTask({ projectId: project.id, title: "T", description: "", assigneeType: "human" });
+    const handler = createDashboardHandler(makeStateWithTask(), { taskStore: ts });
+    const res = await handler(new Request(`http://localhost/api/tasks/${task.id}`, { method: "DELETE" }));
+    expect(res.status).toBe(200);
+    expect(ts.getTask(task.id)).toBeNull();
+  });
+
+  it("POST /api/tasks/:id/comments adds a comment", async () => {
+    const project = ts.createProject("P");
+    const task = ts.createTask({ projectId: project.id, title: "T", description: "", assigneeType: "human" });
+    const handler = createDashboardHandler(makeStateWithTask(), { taskStore: ts });
+    const res = await handler(new Request(`http://localhost/api/tasks/${task.id}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ author: "worker", body: "Done!" }),
+    }));
+    expect(res.status).toBe(201);
+    expect(ts.listComments(task.id)).toHaveLength(1);
   });
 });
 

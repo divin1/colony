@@ -1,4 +1,4 @@
-import type { ColonyStatus, PersistedWorkItem, WorkItemStatus, RawColonyConfig, RawAntConfig } from "./types";
+import type { ColonyStatus, Project, Task, TaskComment, TaskStatus, AssigneeType, RawColonyConfig, RawAntConfig } from "./types";
 import { AuthError, getStoredKey } from "./auth";
 
 const BASE = "";
@@ -78,26 +78,52 @@ export const api = {
   antPrompt: (name: string, prompt: string) =>
     post(`/api/ants/${encodeURIComponent(name)}/prompt`, { prompt }),
 
-  workList: (params?: { status?: WorkItemStatus[]; ant?: string; limit?: number }) => {
+  // --- Projects ---
+  projectList: () => get<Project[]>("/api/projects"),
+  projectCreate: (name: string, description?: string, color?: string) =>
+    postJson<Project>("/api/projects", { name, description, color }),
+  projectGet: (id: string) => get<Project>(`/api/projects/${encodeURIComponent(id)}`),
+  projectUpdate: (id: string, updates: Partial<Pick<Project, "name" | "description" | "color">>) =>
+    put(`/api/projects/${encodeURIComponent(id)}`, updates),
+  projectDelete: (id: string) => deleteReq(`/api/projects/${encodeURIComponent(id)}`),
+
+  // --- Tasks ---
+  taskList: (params?: { project?: string; assigneeType?: AssigneeType; assignee?: string; status?: TaskStatus[]; limit?: number }) => {
     const q = new URLSearchParams();
+    if (params?.project) q.set("project", params.project);
+    if (params?.assigneeType) q.set("assigneeType", params.assigneeType);
+    if (params?.assignee) q.set("assignee", params.assignee);
     if (params?.status?.length) q.set("status", params.status.join(","));
-    if (params?.ant) q.set("ant", params.ant);
     if (params?.limit) q.set("limit", String(params.limit));
     const qs = q.toString();
-    return get<PersistedWorkItem[]>(`/api/work${qs ? "?" + qs : ""}`);
+    return get<Task[]>(`/api/tasks${qs ? "?" + qs : ""}`);
   },
-
-  workGet: (id: string) => get<PersistedWorkItem>(`/api/work/${id}`),
-  workCancel: (id: string) => del(`/api/work/${id}`),
-  workReorder: async (id: string, position: number): Promise<void> => {
-    const res = await fetch(`/api/work/${encodeURIComponent(id)}`, {
+  taskCreate: (body: {
+    projectId: string; title: string; description?: string;
+    assigneeType?: AssigneeType; assigneeName?: string;
+    source?: string; status?: TaskStatus;
+  }) => postJson<Task>("/api/tasks", body),
+  taskGet: (id: string) => get<Task>(`/api/tasks/${encodeURIComponent(id)}`),
+  taskUpdate: (id: string, body: Partial<Pick<Task, "title" | "description" | "assigneeType" | "assigneeName" | "projectId" | "status">>) =>
+    put(`/api/tasks/${encodeURIComponent(id)}`, body),
+  taskPatch: async (id: string, patch: { status?: TaskStatus; position?: number; assigneeType?: AssigneeType; assigneeName?: string | null }): Promise<Task> => {
+    const res = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ position }),
+      body: JSON.stringify(patch),
     });
     if (res.status === 401) throw new AuthError();
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return res.json() as Promise<Task>;
   },
+  taskDelete: (id: string) => deleteReq(`/api/tasks/${encodeURIComponent(id)}`),
+
+  // --- Comments ---
+  commentList: (taskId: string) => get<TaskComment[]>(`/api/tasks/${encodeURIComponent(taskId)}/comments`),
+  commentAdd: (taskId: string, author: string, body: string) =>
+    postJson<TaskComment>(`/api/tasks/${encodeURIComponent(taskId)}/comments`, { author, body }),
+  commentDelete: (taskId: string, commentId: string) =>
+    deleteReq(`/api/tasks/${encodeURIComponent(taskId)}/comments/${encodeURIComponent(commentId)}`),
 
   reload: async (): Promise<{ added: string[]; removed: string[]; updated: string[] }> => {
     const res = await fetch("/api/reload", { method: "POST", headers: authHeaders() });

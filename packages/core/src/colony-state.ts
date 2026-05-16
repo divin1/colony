@@ -1,12 +1,11 @@
-import type { WorkStore, WorkItemSource, IssueContext } from "./work-store.js";
-
 export interface ReloadResult {
   added: string[];
   removed: string[];
   updated: string[];
 }
 
-export type AntRuntimeState = "starting" | "running" | "paused" | "crashed" | "backoff";
+// "idle" = waiting for work (no tasks in queue); distinct from "paused" (human-paused).
+export type AntRuntimeState = "starting" | "idle" | "running" | "paused" | "crashed" | "backoff";
 
 export interface AntStatusEntry {
   name: string;
@@ -22,11 +21,12 @@ export interface AntStatusEntry {
 export interface AntControlHandles {
   pause(): void;
   resume(): void;
-  pushPrompt(prompt: string, source?: WorkItemSource, issueContext?: IssueContext): void;
+  /** Signal the ant that a new task is available — wakes it from idle state. */
+  wake(): void;
+  /** Moves all queued (todo) tasks back to backlog. Returns count removed. */
   clearQueue(): number;
+  /** Returns the number of todo tasks assigned to this ant. */
   getQueueSize(): number;
-  removeWorkItem(id: string): boolean;
-  reorderWorkItem(id: string, newIndex: number): boolean;
 }
 
 const MAX_RECENT_LINES = 150;
@@ -39,12 +39,10 @@ interface AntEntry {
 export class ColonyState {
   private readonly entries = new Map<string, AntEntry>();
   private readonly subscribers = new Map<string, Set<(line: string) => void>>();
-  private readonly workStore: WorkStore | null;
   private readonly _configDir: string | null;
   private reloadCallback: (() => Promise<ReloadResult>) | null = null;
 
-  constructor(public readonly colonyName: string, workStore?: WorkStore, configDir?: string) {
-    this.workStore = workStore ?? null;
+  constructor(public readonly colonyName: string, configDir?: string) {
     this._configDir = configDir ?? null;
   }
 
@@ -69,14 +67,9 @@ export class ColonyState {
   register(name: string, engine: string, controls: AntControlHandles): void {
     this.entries.set(name, {
       status: {
-        name,
-        engine,
-        state: "starting",
-        queueSize: 0,
-        sessionsCompleted: 0,
-        sessionsCrashed: 0,
-        startedAt: Date.now(),
-        recentOutput: [],
+        name, engine, state: "starting", queueSize: 0,
+        sessionsCompleted: 0, sessionsCrashed: 0,
+        startedAt: Date.now(), recentOutput: [],
       },
       controls,
     });
@@ -127,6 +120,10 @@ export class ColonyState {
     return { ...entry.status, queueSize: entry.controls.getQueueSize() };
   }
 
+  listAntNames(): string[] {
+    return [...this.entries.keys()];
+  }
+
   pause(name: string): boolean {
     const entry = this.entries.get(name);
     if (!entry) return false;
@@ -141,10 +138,11 @@ export class ColonyState {
     return true;
   }
 
-  pushPrompt(name: string, prompt: string, source: WorkItemSource = "manual", issueContext?: IssueContext): boolean {
+  /** Signal the ant that a new task is available (wakes it from idle). */
+  wake(name: string): boolean {
     const entry = this.entries.get(name);
     if (!entry) return false;
-    entry.controls.pushPrompt(prompt, source, issueContext);
+    entry.controls.wake();
     return true;
   }
 
@@ -154,31 +152,6 @@ export class ColonyState {
     return entry.controls.clearQueue();
   }
 
-  reorderWorkItem(antName: string, id: string, newIndex: number): boolean {
-    const entry = this.entries.get(antName);
-    if (!entry) return false;
-    return entry.controls.reorderWorkItem(id, newIndex);
-  }
-
-  cancelWorkItem(id: string): "cancelled" | "running" | "not_found" {
-    if (!this.workStore) return "not_found";
-    const item = this.workStore.get(id);
-    if (!item) return "not_found";
-    if (item.status === "running") return "running";
-    if (item.status !== "queued") return "not_found";
-
-    const antEntry = this.entries.get(item.antName);
-    if (antEntry) antEntry.controls.removeWorkItem(id);
-    this.workStore.cancel(id);
-    return "cancelled";
-  }
-
-  getWorkStore(): WorkStore | null {
-    return this.workStore;
-  }
-
-  // Subscribe to live output lines for a named ant.
-  // Returns an unsubscribe function.
   subscribeOutput(name: string, cb: (line: string) => void): () => void {
     const subs = this.subscribers.get(name) ?? new Set();
     this.subscribers.set(name, subs);

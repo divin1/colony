@@ -5,4 +5,4 @@ export * from "./runner";
 export * from "./state";
 export * from "./colony-state";
 export * from "./skill";
-export * from "./work-store";
+export * from "./task-store";

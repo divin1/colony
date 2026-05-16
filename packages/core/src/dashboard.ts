@@ -1,5 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import type { ColonyState } from "./colony-state.js";
+import { TaskStore, taskTitle } from "./task-store.js";
+import type { TaskStatus, AssigneeType, TaskSource } from "./task-store.js";
 import {
   readRawColonyYaml,
   readRawAntYamls,
@@ -33,6 +35,7 @@ export interface DashboardOptions {
   apiKey?: string;
   webhookSecret?: string;
   onGithubWebhook?: (event: GitHubIssueEvent) => void;
+  taskStore?: TaskStore;
 }
 
 function verifyGitHubSignature(body: string, signature: string, secret: string): boolean {
@@ -84,8 +87,7 @@ export function createDashboardHandler(
   state: ColonyState,
   options: DashboardOptions = {}
 ): (req: Request) => Response | Promise<Response> {
-  const { apiKey, webhookSecret, onGithubWebhook } = options;
-  const workStore = state.getWorkStore();
+  const { apiKey, webhookSecret, onGithubWebhook, taskStore } = options;
 
   return async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
@@ -150,58 +152,166 @@ export function createDashboardHandler(
       }
     }
 
-    // GET /api/work — list work items (filterable by status, ant, limit, offset)
-    if (path === "/api/work" && req.method === "GET") {
-      if (!workStore) return jsonResponse([]);
-      const statusParam = url.searchParams.get("status");
-      const antName = url.searchParams.get("ant") ?? undefined;
-      const limit = parseInt(url.searchParams.get("limit") ?? "100", 10);
-      const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
-      const status = statusParam
-        ? (statusParam.split(",") as Parameters<typeof workStore.list>[0]["status"])
-        : undefined;
-      const items = workStore.list({ status, antName, limit, offset });
-      return jsonResponse(items);
+    // --- Project routes ---
+
+    if (path === "/api/projects" && req.method === "GET") {
+      if (!taskStore) return jsonResponse([]);
+      return jsonResponse(taskStore.listProjects());
     }
 
-    // /api/work/:id
-    const workRoute = path.match(/^\/api\/work\/([^/]+)$/);
-    if (workRoute) {
-      const id = decodeURIComponent(workRoute[1]);
+    if (path === "/api/projects" && req.method === "POST") {
+      if (!taskStore) return textResponse("Task store not available", 503);
+      let body: { name?: unknown; description?: unknown; color?: unknown };
+      try { body = await req.json() as typeof body; } catch { return textResponse("Invalid JSON", 400); }
+      if (typeof body.name !== "string" || !body.name.trim()) return textResponse("name is required", 400);
+      const project = taskStore.createProject(
+        body.name.trim(),
+        typeof body.description === "string" ? body.description : undefined,
+        typeof body.color === "string" ? body.color : undefined
+      );
+      return jsonResponse(project, 201);
+    }
 
-      // GET /api/work/:id — single item
+    const projectRoute = path.match(/^\/api\/projects\/([^/]+)$/);
+    if (projectRoute) {
+      const projectId = decodeURIComponent(projectRoute[1]);
+      if (!taskStore) return textResponse("Not found", 404);
       if (req.method === "GET") {
-        if (!workStore) return textResponse("Not found", 404);
-        const item = workStore.get(id);
-        if (!item) return textResponse("Not found", 404);
-        return jsonResponse(item);
+        const p = taskStore.getProject(projectId);
+        return p ? jsonResponse(p) : textResponse("Not found", 404);
       }
-
-      // DELETE /api/work/:id — cancel a queued item
+      if (req.method === "PUT") {
+        let body: { name?: unknown; description?: unknown; color?: unknown };
+        try { body = await req.json() as typeof body; } catch { return textResponse("Invalid JSON", 400); }
+        const ok = taskStore.updateProject(projectId, {
+          name: typeof body.name === "string" ? body.name : undefined,
+          description: typeof body.description === "string" ? body.description : undefined,
+          color: "color" in body ? (body.color as string | null) : undefined,
+        });
+        return ok ? jsonResponse({ ok: true }) : textResponse("Not found", 404);
+      }
       if (req.method === "DELETE") {
-        if (!workStore) return textResponse("Not found", 404);
-        const result = state.cancelWorkItem(id);
-        if (result === "not_found") return textResponse("Not found", 404);
-        if (result === "running") return textResponse("Item is currently running", 409);
+        taskStore.deleteProject(projectId);
         return jsonResponse({ ok: true });
+      }
+    }
+
+    // --- Task routes ---
+
+    if (path === "/api/tasks" && req.method === "GET") {
+      if (!taskStore) return jsonResponse([]);
+      const statusParam = url.searchParams.get("status");
+      const filter = {
+        projectId: url.searchParams.get("project") ?? undefined,
+        assigneeType: (url.searchParams.get("assigneeType") ?? undefined) as AssigneeType | undefined,
+        assigneeName: url.searchParams.get("assignee") ?? undefined,
+        status: statusParam ? (statusParam.split(",") as TaskStatus[]) : undefined,
+        limit: parseInt(url.searchParams.get("limit") ?? "200", 10),
+        offset: parseInt(url.searchParams.get("offset") ?? "0", 10),
+      };
+      return jsonResponse(taskStore.listTasks(filter));
+    }
+
+    if (path === "/api/tasks" && req.method === "POST") {
+      if (!taskStore) return textResponse("Task store not available", 503);
+      let body: Record<string, unknown>;
+      try { body = await req.json() as Record<string, unknown>; } catch { return textResponse("Invalid JSON", 400); }
+      if (typeof body.projectId !== "string") return textResponse("projectId is required", 400);
+      if (typeof body.title !== "string" || !body.title.trim()) return textResponse("title is required", 400);
+      const task = taskStore.createTask({
+        projectId: body.projectId,
+        title: body.title.trim(),
+        description: typeof body.description === "string" ? body.description : "",
+        assigneeType: (body.assigneeType as AssigneeType) ?? "human",
+        assigneeName: typeof body.assigneeName === "string" ? body.assigneeName : undefined,
+        source: (body.source as TaskSource) ?? "manual",
+        status: (body.status as TaskStatus) ?? "backlog",
+      });
+      if (task.assigneeType === "ant" && task.assigneeName) {
+        state.wake(task.assigneeName);
+      }
+      return jsonResponse(task, 201);
+    }
+
+    const taskRoute = path.match(/^\/api\/tasks\/([^/]+)$/);
+    if (taskRoute) {
+      const taskId = decodeURIComponent(taskRoute[1]);
+      if (!taskStore) return textResponse("Not found", 404);
+
+      if (req.method === "GET") {
+        const t = taskStore.getTask(taskId);
+        return t ? jsonResponse(t) : textResponse("Not found", 404);
       }
 
-      // PATCH /api/work/:id — reorder a queued item { position: number }
-      if (req.method === "PATCH") {
-        if (!workStore) return textResponse("Not found", 404);
-        let body: { position?: unknown };
-        try { body = await req.json() as { position?: unknown }; }
-        catch { return textResponse("Invalid JSON", 400); }
-        if (typeof body.position !== "number" || !Number.isInteger(body.position) || body.position < 0) {
-          return textResponse("position must be a non-negative integer", 400);
+      if (req.method === "PUT") {
+        let body: Record<string, unknown>;
+        try { body = await req.json() as Record<string, unknown>; } catch { return textResponse("Invalid JSON", 400); }
+        const t = taskStore.getTask(taskId);
+        if (!t) return textResponse("Not found", 404);
+        taskStore.updateTask(taskId, {
+          title: typeof body.title === "string" ? body.title : undefined,
+          description: typeof body.description === "string" ? body.description : undefined,
+          assigneeType: body.assigneeType as AssigneeType | undefined,
+          assigneeName: "assigneeName" in body ? (body.assigneeName as string | null) : undefined,
+          projectId: typeof body.projectId === "string" ? body.projectId : undefined,
+        });
+        if (typeof body.status === "string") taskStore.setStatus(taskId, body.status as TaskStatus);
+        const updated = taskStore.getTask(taskId)!;
+        if (updated.assigneeType === "ant" && updated.assigneeName && updated.status === "todo") {
+          state.wake(updated.assigneeName);
         }
-        const item = workStore.get(id);
-        if (!item) return textResponse("Not found", 404);
-        if (item.status !== "queued") return textResponse("Can only reorder queued items", 409);
-        workStore.reorder(id, body.position);
-        state.reorderWorkItem(item.antName, id, body.position);
+        return jsonResponse(updated);
+      }
+
+      if (req.method === "PATCH") {
+        let body: Record<string, unknown>;
+        try { body = await req.json() as Record<string, unknown>; } catch { return textResponse("Invalid JSON", 400); }
+        const t = taskStore.getTask(taskId);
+        if (!t) return textResponse("Not found", 404);
+        if (typeof body.status === "string") taskStore.setStatus(taskId, body.status as TaskStatus);
+        if (typeof body.position === "number") taskStore.reorder(taskId, body.position);
+        if ("assigneeType" in body || "assigneeName" in body) {
+          taskStore.updateTask(taskId, {
+            assigneeType: body.assigneeType as AssigneeType | undefined,
+            assigneeName: "assigneeName" in body ? (body.assigneeName as string | null) : undefined,
+          });
+        }
+        const updated = taskStore.getTask(taskId)!;
+        if (updated.assigneeType === "ant" && updated.assigneeName && updated.status === "todo") {
+          state.wake(updated.assigneeName);
+        }
+        return jsonResponse(updated);
+      }
+
+      if (req.method === "DELETE") {
+        taskStore.deleteTask(taskId);
         return jsonResponse({ ok: true });
       }
+    }
+
+    // --- Comment routes ---
+
+    const commentListRoute = path.match(/^\/api\/tasks\/([^/]+)\/comments$/);
+    if (commentListRoute) {
+      const taskId = decodeURIComponent(commentListRoute[1]);
+      if (!taskStore) return textResponse("Not found", 404);
+      if (req.method === "GET") return jsonResponse(taskStore.listComments(taskId));
+      if (req.method === "POST") {
+        let body: { author?: unknown; body?: unknown };
+        try { body = await req.json() as typeof body; } catch { return textResponse("Invalid JSON", 400); }
+        if (typeof body.author !== "string" || !body.author) return textResponse("author is required", 400);
+        if (typeof body.body !== "string" || !body.body) return textResponse("body is required", 400);
+        if (!taskStore.getTask(taskId)) return textResponse("Not found", 404);
+        const comment = taskStore.addComment(taskId, body.author, body.body);
+        return jsonResponse(comment, 201);
+      }
+    }
+
+    const commentDeleteRoute = path.match(/^\/api\/tasks\/([^/]+)\/comments\/([^/]+)$/);
+    if (commentDeleteRoute && req.method === "DELETE") {
+      if (!taskStore) return textResponse("Not found", 404);
+      const deleted = taskStore.deleteComment(decodeURIComponent(commentDeleteRoute[2]));
+      return deleted ? jsonResponse({ ok: true }) : textResponse("Not found", 404);
     }
 
     // Config routes — raw YAML (no env interpolation) so the editor sees/writes template values.
@@ -363,8 +473,22 @@ export function createDashboardHandler(
         if (typeof body.prompt !== "string" || !body.prompt.trim()) {
           return textResponse("prompt is required", 400);
         }
-        const ok = state.pushPrompt(antName, body.prompt.trim(), "manual");
-        return ok ? jsonResponse({ ok: true }) : textResponse("Ant not found", 404);
+        if (!state.getAntStatus(antName)) return textResponse("Ant not found", 404);
+        if (taskStore) {
+          const project = taskStore.getOrCreateDefaultProject();
+          const prompt = body.prompt.trim();
+          const task = taskStore.createTask({
+            projectId: project.id,
+            title: taskTitle(prompt),
+            description: prompt,
+            assigneeType: "ant",
+            assigneeName: antName,
+            source: "manual",
+          });
+          state.wake(antName);
+          return jsonResponse({ ok: true, taskId: task.id });
+        }
+        return jsonResponse({ ok: true });
       }
 
       // POST /api/ants/:name/clear

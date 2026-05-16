@@ -2,16 +2,12 @@ import { describe, it, expect, mock } from "bun:test";
 import { ColonyState } from "./colony-state";
 
 function makeControls(overrides: Partial<Parameters<ColonyState["register"]>[2]> = {}) {
-  const queue: string[] = [];
   return {
     pause: mock(() => {}),
     resume: mock(() => {}),
-    pushPrompt: mock((p: string) => { queue.push(p); }),
-    clearQueue: mock(() => { const n = queue.length; queue.length = 0; return n; }),
-    getQueueSize: mock(() => queue.length),
-    removeWorkItem: mock((_id: string) => false),
-    reorderWorkItem: mock((_id: string, _newIndex: number) => false),
-    _queue: queue,
+    wake: mock(() => {}),
+    clearQueue: mock(() => 3),
+    getQueueSize: mock(() => 0),
     ...overrides,
   };
 }
@@ -40,6 +36,15 @@ describe("ColonyState", () => {
     expect(s.getAntStatus("worker")?.state).toBe("running");
   });
 
+  it("setState accepts all valid states including idle", () => {
+    const s = new ColonyState("c");
+    s.register("worker", "claude-cli", makeControls());
+    for (const state of ["starting", "idle", "running", "paused", "crashed", "backoff"] as const) {
+      s.setState("worker", state);
+      expect(s.getAntStatus("worker")?.state).toBe(state);
+    }
+  });
+
   it("incrementSessions tracks completed and crashed independently", () => {
     const s = new ColonyState("c");
     s.register("worker", "claude-cli", makeControls());
@@ -54,13 +59,10 @@ describe("ColonyState", () => {
   it("pushOutput appends to recentOutput and notifies subscribers", () => {
     const s = new ColonyState("c");
     s.register("worker", "claude-cli", makeControls());
-
     const received: string[] = [];
     s.subscribeOutput("worker", (t) => received.push(t));
-
     s.pushOutput("worker", "hello");
     s.pushOutput("worker", "world");
-
     expect(s.getAntStatus("worker")?.recentOutput).toEqual(["hello", "world"]);
     expect(received).toEqual(["hello", "world"]);
   });
@@ -68,14 +70,11 @@ describe("ColonyState", () => {
   it("subscribeOutput unsubscribe stops notifications", () => {
     const s = new ColonyState("c");
     s.register("worker", "claude-cli", makeControls());
-
     const received: string[] = [];
     const unsub = s.subscribeOutput("worker", (t) => received.push(t));
-
     s.pushOutput("worker", "before");
     unsub();
     s.pushOutput("worker", "after");
-
     expect(received).toEqual(["before"]);
   });
 
@@ -91,8 +90,7 @@ describe("ColonyState", () => {
     const s = new ColonyState("c");
     const controls = makeControls();
     s.register("worker", "claude-cli", controls);
-    const ok = s.pause("worker");
-    expect(ok).toBe(true);
+    expect(s.pause("worker")).toBe(true);
     expect(controls.pause).toHaveBeenCalledTimes(1);
   });
 
@@ -100,66 +98,55 @@ describe("ColonyState", () => {
     const s = new ColonyState("c");
     const controls = makeControls();
     s.register("worker", "claude-cli", controls);
-    const ok = s.resume("worker");
-    expect(ok).toBe(true);
+    expect(s.resume("worker")).toBe(true);
     expect(controls.resume).toHaveBeenCalledTimes(1);
   });
 
-  it("pushPrompt() calls the control handle's pushPrompt() with default source", () => {
+  it("wake() calls the control handle's wake()", () => {
     const s = new ColonyState("c");
     const controls = makeControls();
     s.register("worker", "claude-cli", controls);
-    const ok = s.pushPrompt("worker", "do the thing");
-    expect(ok).toBe(true);
-    expect(controls.pushPrompt).toHaveBeenCalledWith("do the thing", "manual", undefined);
-  });
-
-  it("pushPrompt() passes explicit source through to the control handle", () => {
-    const s = new ColonyState("c");
-    const controls = makeControls();
-    s.register("worker", "claude-cli", controls);
-    s.pushPrompt("worker", "from discord", "discord");
-    expect(controls.pushPrompt).toHaveBeenCalledWith("from discord", "discord", undefined);
+    expect(s.wake("worker")).toBe(true);
+    expect(controls.wake).toHaveBeenCalledTimes(1);
   });
 
   it("clearQueue() calls the control handle and returns count", () => {
     const s = new ColonyState("c");
-    const controls = makeControls();
-    // Manually push items to the internal queue
-    controls._queue.push("a", "b", "c");
-    s.register("worker", "claude-cli", controls);
-    const cleared = s.clearQueue("worker");
-    expect(cleared).toBe(3);
-    expect(controls._queue.length).toBe(0);
+    s.register("worker", "claude-cli", makeControls());
+    expect(s.clearQueue("worker")).toBe(3);
   });
 
   it("returns false / 0 for unknown ant names", () => {
     const s = new ColonyState("c");
     expect(s.pause("unknown")).toBe(false);
     expect(s.resume("unknown")).toBe(false);
-    expect(s.pushPrompt("unknown", "p")).toBe(false);
+    expect(s.wake("unknown")).toBe(false);
     expect(s.clearQueue("unknown")).toBe(0);
     expect(s.getAntStatus("unknown")).toBeUndefined();
   });
 
   it("getStatus queueSize reflects live queue size via control handle", () => {
     const s = new ColonyState("c");
-    const controls = makeControls();
+    const controls = makeControls({ getQueueSize: mock(() => 5) });
     s.register("worker", "claude-cli", controls);
-    controls._queue.push("x", "y");
-    expect(s.getStatus().ants[0].queueSize).toBe(2);
+    expect(s.getStatus().ants[0].queueSize).toBe(5);
+  });
+
+  it("listAntNames() returns registered ant names", () => {
+    const s = new ColonyState("c");
+    s.register("ant-a", "claude-cli", makeControls());
+    s.register("ant-b", "gemini-cli", makeControls());
+    expect(s.listAntNames().sort()).toEqual(["ant-a", "ant-b"]);
   });
 
   it("unregister() removes the ant from status and subscribers", () => {
     const s = new ColonyState("c");
     s.register("worker", "claude-cli", makeControls());
-    expect(s.getStatus().ants).toHaveLength(1);
     const received: string[] = [];
     s.subscribeOutput("worker", (line) => received.push(line));
     s.unregister("worker");
     expect(s.getStatus().ants).toHaveLength(0);
     expect(s.getAntStatus("worker")).toBeUndefined();
-    // Pushing output after unregister should not notify the old subscriber.
     s.pushOutput("worker", "ghost");
     expect(received).toHaveLength(0);
   });

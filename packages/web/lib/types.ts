@@ -1,6 +1,7 @@
-export type AntRuntimeState = "starting" | "running" | "paused" | "crashed" | "backoff";
-export type WorkItemStatus = "queued" | "running" | "done" | "failed" | "cancelled";
-export type WorkItemSource = "manual" | "github_issue" | "cron" | "discord";
+export type AntRuntimeState = "starting" | "idle" | "running" | "paused" | "crashed" | "backoff";
+export type TaskStatus = "backlog" | "todo" | "in_progress" | "in_review" | "done";
+export type AssigneeType = "ant" | "human";
+export type TaskSource = "manual" | "github_issue" | "cron" | "discord";
 
 export interface AntStatusEntry {
   name: string;
@@ -18,23 +19,41 @@ export interface ColonyStatus {
   ants: AntStatusEntry[];
 }
 
-export interface PersistedWorkItem {
+export interface Project {
   id: string;
-  antName: string;
-  title: string;
-  prompt: string;
-  source: WorkItemSource;
-  status: WorkItemStatus;
-  issueContext?: { owner: string; repo: string; number: number; repoSlug: string };
+  name: string;
+  description: string;
+  color: string | null;
   createdAt: number;
-  startedAt?: number;
-  completedAt?: number;
-  lastOutput?: string;
 }
 
-// Raw config types — values are as written in YAML (env var templates unresolved).
-// Used by the config editor; never passed to the runner directly.
+export interface Task {
+  id: string;
+  projectId: string;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  assigneeType: AssigneeType;
+  assigneeName: string | null;
+  position: number;
+  source: TaskSource;
+  issueContext: { owner: string; repo: string; number: number; repoSlug: string } | null;
+  lastOutput: string | null;
+  createdAt: number;
+  updatedAt: number;
+  startedAt: number | null;
+  completedAt: number | null;
+}
 
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  author: string;
+  body: string;
+  createdAt: number;
+}
+
+// Raw config types — values as written in YAML (env var templates unresolved).
 export type AntEngine = "claude-cli" | "codex" | "gemini-cli" | "opencode" | "cli";
 
 export interface RawAntConfig {
@@ -53,7 +72,7 @@ export interface RawAntConfig {
     | { type: "discord_command" }
   >;
   integrations?: {
-    github?: { repos?: string[] };
+    github?: { repos?: string[]; webhook_secret?: string };
     discord?: { channel?: string };
   };
 }
@@ -63,7 +82,7 @@ export interface RawColonyConfig {
   integrations?: {
     discord?: { token: string; guild: string };
     discord_webhook?: { url: string };
-    github?: { token: string };
+    github?: { token: string; webhook_secret?: string };
   };
   defaults?: {
     poll_interval?: string;

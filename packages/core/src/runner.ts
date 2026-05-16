@@ -1,6 +1,5 @@
 import { Cron } from "croner";
 import { join } from "path";
-import { randomUUID } from "crypto";
 import { runAnt } from "./ant";
 import type { ConfirmationChannel } from "./hooks";
 import type { LoadedConfig, AntConfig, ColonyConfig } from "./config";
@@ -12,8 +11,8 @@ import { createDashboardHandler } from "./dashboard";
 import type { GitHubIssueEvent } from "./dashboard";
 import { AntSessionError } from "./errors";
 import { log } from "./log";
-import { WorkStore } from "./work-store.js";
-import type { WorkItemSource, IssueContext } from "./work-store.js";
+import { TaskStore } from "./task-store.js";
+import type { IssueContext } from "./task-store.js";
 
 // Extended interface the runner needs beyond ConfirmationChannel.
 // DiscordIntegration satisfies this structurally — core does not depend on @colony/discord.
@@ -33,50 +32,24 @@ export class ConsoleDiscord implements RunnerDiscord {
     console.log(content);
     return { id: `console-${Date.now()}` };
   }
-  async resolveChannelId(nameOrId: string): Promise<string> {
-    return nameOrId;
-  }
+  async resolveChannelId(nameOrId: string): Promise<string> { return nameOrId; }
   on<T>(_event: string, _handler: (payload: T) => void): void {}
 }
 
 // Minimal GitHub interface the runner needs for issue polling and comments.
-// GitHubIntegration satisfies this structurally — core does not depend on @colony/github.
 export interface RunnerGitHub {
   listIssues(
-    owner: string,
-    repo: string,
-    opts?: { labels?: string[] }
+    owner: string, repo: string, opts?: { labels?: string[] }
   ): Promise<Array<{ number: number; title: string; body: string | null }>>;
-  createIssueComment(
-    owner: string,
-    repo: string,
-    issueNumber: number,
-    body: string
-  ): Promise<void>;
-}
-
-// A unit of work queued for an ant. May carry issue context when triggered by GitHub.
-interface WorkItem {
-  id: string;
-  prompt: string;
-  source: WorkItemSource;
-  issueContext?: {
-    owner: string;
-    repo: string;
-    number: number;
-    repoSlug: string;
-  };
+  createIssueComment(owner: string, repo: string, issueNumber: number, body: string): Promise<void>;
 }
 
 const BASE_RESTART_DELAY_MS = 10_000;
-const MAX_RESTART_DELAY_MS = 5 * 60 * 1000; // 5 min cap
-const GITHUB_POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_RESTART_DELAY_MS = 5 * 60 * 1000;
+const GITHUB_POLL_INTERVAL_MS = 5 * 60 * 1000;
 
 function backoffDelayMs(consecutiveCrashes: number): number {
-  return Math.min(
-    BASE_RESTART_DELAY_MS * 2 ** consecutiveCrashes,
-    MAX_RESTART_DELAY_MS
-  );
+  return Math.min(BASE_RESTART_DELAY_MS * 2 ** consecutiveCrashes, MAX_RESTART_DELAY_MS);
 }
 
 function isAbortError(err: unknown): boolean {
@@ -94,18 +67,9 @@ function sleepInterruptible(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-/**
- * Builds the colony-level instructions appended to every ant's system prompt.
- * Covers two conventions that apply regardless of which project management tool
- * (if any) is in use:
- *
- *   1. PLAN.md — ants track goals and tasks in a committed markdown file.
- *   2. Git identity — ants always commit as the project owner, never as a bot.
- */
 export function buildCommonInstructions(colony: ColonyConfig): string {
   const parts: string[] = [];
 
-  // --- PLAN.md convention ---
   parts.push(`\
 ## Project tracking (PLAN.md)
 
@@ -133,7 +97,6 @@ Structure PLAN.md as follows:
 - [x] Previously completed task
 \`\`\``);
 
-  // --- Git identity convention ---
   const gitName = colony.defaults?.git?.user_name;
   const gitEmail = colony.defaults?.git?.user_email;
 
@@ -162,20 +125,11 @@ Never override it with a bot name such as "claude", "github-actions[bot]", or an
   return parts.join("\n\n");
 }
 
-// Parse a human-friendly duration string (e.g. "30m", "1h", "60s") to milliseconds.
 export function parseTimeoutMs(duration: string): number {
   const match = /^(\d+)(s|m|h)$/.exec(duration.trim());
-  if (!match) {
-    throw new Error(
-      `Invalid duration: "${duration}". Expected format: 30s, 5m, 1h`
-    );
-  }
+  if (!match) throw new Error(`Invalid duration: "${duration}". Expected format: 30s, 5m, 1h`);
   const value = parseInt(match[1], 10);
-  const multipliers: Record<string, number> = {
-    s: 1_000,
-    m: 60_000,
-    h: 3_600_000,
-  };
+  const multipliers: Record<string, number> = { s: 1_000, m: 60_000, h: 3_600_000 };
   return value * multipliers[match[2]];
 }
 
@@ -186,11 +140,7 @@ export class PromiseQueue<T> {
 
   push(item: T): void {
     const waiter = this.waiters.shift();
-    if (waiter) {
-      waiter(item);
-    } else {
-      this.queue.push(item);
-    }
+    if (waiter) { waiter(item); } else { this.queue.push(item); }
   }
 
   next(signal?: AbortSignal): Promise<T> {
@@ -212,18 +162,14 @@ export class PromiseQueue<T> {
     });
   }
 
-  get size(): number {
-    return this.queue.length;
-  }
+  get size(): number { return this.queue.length; }
 
-  // Discards all queued items and returns the count removed.
   clear(): number {
     const count = this.queue.length;
     this.queue = [];
     return count;
   }
 
-  // Removes the first item matching the predicate. Returns true if an item was removed.
   remove(predicate: (item: T) => boolean): boolean {
     const idx = this.queue.findIndex(predicate);
     if (idx === -1) return false;
@@ -231,7 +177,6 @@ export class PromiseQueue<T> {
     return true;
   }
 
-  // Moves the first item matching predicate to newIndex. Returns true if moved.
   reorderBy(predicate: (item: T) => boolean, newIndex: number): boolean {
     const idx = this.queue.findIndex(predicate);
     if (idx === -1) return false;
@@ -241,7 +186,6 @@ export class PromiseQueue<T> {
   }
 }
 
-// Formats a millisecond duration as a human-readable string, e.g. "2d 3h 15m" or "45s".
 export function formatUptime(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
   const seconds = totalSeconds % 60;
@@ -250,7 +194,6 @@ export function formatUptime(ms: number): string {
   const totalHours = Math.floor(totalMinutes / 60);
   const hours = totalHours % 24;
   const days = Math.floor(totalHours / 24);
-
   if (days > 0) return `${days}d ${hours}h ${minutes}m`;
   if (hours > 0) return `${hours}h ${minutes}m`;
   if (minutes > 0) return `${minutes}m ${seconds}s`;
@@ -263,9 +206,8 @@ interface DiscordCommandPayload {
   author: string;
 }
 
-// Runs a single ant in a supervisor loop.
+// Runs a single ant in a supervisor loop using a TaskStore pull model.
 // Resolves cleanly when controller.signal is aborted (hot reload / graceful stop).
-// On crash: logs to Discord and restarts after a backoff delay.
 async function runAntWithSupervision(
   ant: AntConfig,
   colony: ColonyConfig,
@@ -273,27 +215,24 @@ async function runAntWithSupervision(
   discord: RunnerDiscord,
   colonyState: ColonyState,
   controller: AbortController,
-  github?: RunnerGitHub,
-  workStore?: WorkStore
+  taskStore: TaskStore,
+  defaultProjectId: string,
+  github?: RunnerGitHub
 ): Promise<void> {
   const { signal } = controller;
-  // Fall back to the ant name when no Discord channel is configured (e.g. ConsoleDiscord).
   const channelName = ant.integrations?.discord?.channel ?? ant.name;
   const channelId = await discord.resolveChannelId(channelName);
 
   const pollIntervalRaw = ant.poll_interval ?? colony.defaults?.poll_interval;
   const pollIntervalMs = pollIntervalRaw ? parseTimeoutMs(pollIntervalRaw) : 0;
 
-  const antState = createState(
-    ant.state?.backend ?? "memory",
-    ant.state?.path
-  );
-  // antState used for GitHub issue deduplication (hasSeenIssue / markIssueSeen).
+  const antState = createState(ant.state?.backend ?? "memory", ant.state?.path);
 
   const defaultPrompt = `You are ${ant.name}. ${ant.description}. Begin your work session now.`;
-  const queue = new PromiseQueue<WorkItem>();
 
-  // --- Pause / resume state ---
+  // Wake-signal queue: pushing signals the ant to check TaskStore for new tasks.
+  const wakeQueue = new PromiseQueue<void>();
+
   let paused = false;
   let resumeResolve: (() => void) | null = null;
   const waitForResume = (): Promise<void> =>
@@ -306,11 +245,8 @@ async function runAntWithSupervision(
       }, { once: true });
     });
 
-  // Per-session abort controller — set while runAnt() is active, null otherwise.
-  // pause() aborts this to interrupt the running session immediately.
   let sessionController: AbortController | null = null;
 
-  // --- Register with colony state for dashboard control ---
   colonyState.register(ant.name, ant.engine, {
     pause: () => {
       if (!paused) {
@@ -319,7 +255,7 @@ async function runAntWithSupervision(
           sessionController.abort();
           broadcast(`⏸️ **${ant.name}** pausing…`);
         } else {
-          broadcast(`⏸️ **${ant.name}** will pause after the current session.`);
+          broadcast(`⏸️ **${ant.name}** will pause before the next task.`);
         }
       }
     },
@@ -332,35 +268,16 @@ async function runAntWithSupervision(
         colonyState.setState(ant.name, "running");
       }
     },
-    pushPrompt: (prompt: string, source: WorkItemSource = "manual", issueContext?: IssueContext) => {
-      const stored = workStore?.create(ant.name, prompt, source, issueContext);
-      const id = stored?.id ?? randomUUID();
-      queue.push({ id, prompt, source, issueContext });
-      if (paused) {
-        paused = false;
-        resumeResolve?.();
-        resumeResolve = null;
-        colonyState.setState(ant.name, "running");
-      }
-    },
-    clearQueue: () => {
-      const count = queue.clear();
-      workStore?.cancelAllQueued(ant.name);
-      return count;
-    },
-    getQueueSize: () => queue.size,
-    removeWorkItem: (id: string) => queue.remove((item) => item.id === id),
-    reorderWorkItem: (id: string, newIndex: number) =>
-      queue.reorderBy((item) => item.id === id, newIndex),
+    wake: () => { wakeQueue.push(); },
+    clearQueue: () => taskStore.cancelAllTodo(ant.name),
+    getQueueSize: () => taskStore.countTodo(ant.name),
   });
 
-  // Sends to both Discord and the dashboard output stream.
   const broadcast = (message: string): void => {
     colonyState.pushOutput(ant.name, message);
     discord.send(channelId, message).catch(() => {});
   };
 
-  // Channel proxy so engine output also reaches the dashboard.
   const teeChannel: ConfirmationChannel = {
     send: async (chId: string, content: string) => {
       colonyState.pushOutput(ant.name, content);
@@ -378,145 +295,113 @@ async function runAntWithSupervision(
   const hasGithubTrigger = triggers.some((t) => t.type === "github_issue");
   const hasAnyTrigger = hasCron || hasDiscordTrigger || hasGithubTrigger;
 
-  // --- Session statistics ---
   const startedAt = Date.now();
   let sessionsCompleted = 0;
   let sessionsCrashed = 0;
   let consecutiveCrashes = 0;
 
-  // --- Slash command handler ---
-  // Slash commands starting with "/" are intercepted here and never forwarded to the ant LLM.
-  // Returns true if the command was handled, false if unrecognised.
   function handleSlashCommand(text: string): boolean {
-    const trimmed = text.trim();
-    const lower = trimmed.toLowerCase();
-
+    const lower = text.trim().toLowerCase();
     switch (lower) {
       case "/help":
-        discord
-          .send(
-            channelId,
-            [
-              `**${ant.name}** — available commands:`,
-              `\`/help\` — show this message`,
-              `\`/status\` — current state (running / paused) and queue depth`,
-              `\`/stats\` (or \`/usage\`) — uptime and session statistics`,
-              `\`/pause\` (or \`/stop\`) — pause after the current session`,
-              `\`/resume\` (or \`/start\`) — resume a paused ant`,
-              `\`/clear\` — discard all queued work items`,
-              `_Any other message is forwarded to the ant as a work instruction._`,
-            ].join("\n")
-          )
-          .catch(() => {});
+        discord.send(channelId, [
+          `**${ant.name}** — available commands:`,
+          `\`/help\` — show this message`,
+          `\`/status\` — current state and queue depth`,
+          `\`/stats\` (or \`/usage\`) — uptime and session statistics`,
+          `\`/pause\` (or \`/stop\`) — pause before the next task`,
+          `\`/resume\` (or \`/start\`) — resume a paused ant`,
+          `\`/clear\` — move all queued tasks back to backlog`,
+          `_Any other message is queued as a task for this ant._`,
+        ].join("\n")).catch(() => {});
         return true;
 
       case "/status": {
-        const state = paused ? "⏸️ paused" : "▶️ running";
-        discord
-          .send(
-            channelId,
-            `**${ant.name}** is ${state}. Queue: ${queue.size} item(s).`
-          )
-          .catch(() => {});
+        const state = paused ? "⏸️ paused" : "▶️ active";
+        discord.send(channelId, `**${ant.name}** is ${state}. Tasks queued: ${taskStore.countTodo(ant.name)}.`).catch(() => {});
         return true;
       }
 
       case "/stats":
-      case "/usage": {
-        const uptime = formatUptime(Date.now() - startedAt);
-        discord
-          .send(
-            channelId,
-            [
-              `**${ant.name}** statistics:`,
-              `Uptime: ${uptime}`,
-              `Sessions completed: ${sessionsCompleted}`,
-              `Sessions crashed: ${sessionsCrashed}`,
-            ].join("\n")
-          )
-          .catch(() => {});
+      case "/usage":
+        discord.send(channelId, [
+          `**${ant.name}** statistics:`,
+          `Uptime: ${formatUptime(Date.now() - startedAt)}`,
+          `Sessions completed: ${sessionsCompleted}`,
+          `Sessions crashed: ${sessionsCrashed}`,
+        ].join("\n")).catch(() => {});
         return true;
-      }
 
       case "/pause":
       case "/stop":
-        log(ant.name, "pausing after current session");
         colonyState.pause(ant.name);
         return true;
 
       case "/resume":
       case "/start":
-        log(ant.name, "resumed");
         colonyState.resume(ant.name);
         return true;
 
       case "/clear": {
         const cleared = colonyState.clearQueue(ant.name);
-        broadcast(`🗑️ **${ant.name}** work queue cleared (${cleared} item(s) discarded).`);
+        broadcast(`🗑️ **${ant.name}** task queue cleared (${cleared} task(s) returned to backlog).`);
         return true;
       }
 
-      default:
-        return false;
+      default: return false;
     }
   }
 
-  // --- Discord command listener (always-on) ---
-  // Every ant listens to its channel regardless of trigger config.
-  // Slash commands (starting with "/") are intercepted by the runner first.
-  // Plain-text messages are classified:
-  //   "pause" / "stop"    → pause after the current session  (kept for backward compat)
-  //   "resume" / "start"  → resume a paused ant              (kept for backward compat)
-  //   anything else       → forward as a work instruction (also auto-resumes if paused)
+  // Discord listener — always-on regardless of trigger config.
   discord.on<DiscordCommandPayload>("discord_command", (payload) => {
     if (payload.channelId !== channelId) return;
-
     const text = payload.content.trim();
 
-    // Slash commands: handled by the runner, never forwarded to the ant LLM.
     if (text.startsWith("/")) {
       if (!handleSlashCommand(text)) {
-        discord
-          .send(
-            channelId,
-            `Unknown command: \`${text}\`. Type \`/help\` to see available commands.`
-          )
-          .catch(() => {});
+        discord.send(channelId, `Unknown command: \`${text}\`. Type \`/help\` to see available commands.`).catch(() => {});
       }
       return;
     }
 
     const cmd = text.toLowerCase();
-
     if (cmd === "pause" || cmd === "stop") {
-      log(ant.name, "pausing after current session");
       colonyState.pause(ant.name);
     } else if (cmd === "resume" || cmd === "start") {
-      log(ant.name, "resumed");
       colonyState.resume(ant.name);
     } else {
-      // Forward as work instruction. Auto-resumes if the ant is currently paused.
-      colonyState.pushPrompt(
-        ant.name,
-        `You are ${ant.name}. A human operator (${payload.author}) sent you this message: "${text}"`,
-        "discord"
-      );
+      // Create a task for the Discord message and wake the ant.
+      taskStore.createTask({
+        projectId: defaultProjectId,
+        title: `${payload.author}: ${text.slice(0, 60)}`,
+        description: `You are ${ant.name}. A human operator (${payload.author}) sent you this message: "${text}"`,
+        assigneeType: "ant",
+        assigneeName: ant.name,
+        source: "discord",
+      });
+      wakeQueue.push();
     }
   });
 
-  // --- Cron trigger ---
+  // Cron trigger.
   if (hasCron) {
     new Cron(ant.schedule!.cron, () => {
-      const stored = workStore?.create(ant.name, defaultPrompt, "cron");
-      queue.push({ id: stored?.id ?? randomUUID(), prompt: defaultPrompt, source: "cron" });
+      taskStore.createTask({
+        projectId: defaultProjectId,
+        title: `${ant.name} — scheduled run`,
+        description: defaultPrompt,
+        assigneeType: "ant",
+        assigneeName: ant.name,
+        source: "cron",
+      });
+      wakeQueue.push();
     });
   }
 
-  // --- GitHub issue trigger ---
+  // GitHub issue polling trigger.
   if (hasGithubTrigger && github) {
     const githubTrigger = triggers.find((t) => t.type === "github_issue");
-    const labels =
-      githubTrigger?.type === "github_issue" ? githubTrigger.labels : [];
+    const labels = githubTrigger?.type === "github_issue" ? githubTrigger.labels : [];
     const repos = ant.integrations?.github?.repos ?? [];
 
     const pollGitHub = async () => {
@@ -530,7 +415,8 @@ async function runAntWithSupervision(
           for (const issue of issues) {
             if (antState.hasSeenIssue(ant.name, issue.number)) continue;
             antState.markIssueSeen(ant.name, issue.number);
-            const issuePrompt =
+            const issueContext: IssueContext = { owner, repo, number: issue.number, repoSlug };
+            const description =
               `You are ${ant.name}. A GitHub issue has been assigned:\n\n` +
               `Repository: ${repoSlug}\n` +
               `Issue #${issue.number}: ${issue.title}\n` +
@@ -538,116 +424,135 @@ async function runAntWithSupervision(
               `${issue.body ?? "(no description provided)"}\n\n` +
               `Work through this issue. When done, end your session with a concise summary ` +
               `of what you completed — it will be posted as a comment on the issue.`;
-            const issueContext = { owner, repo, number: issue.number, repoSlug };
-            const stored = workStore?.create(ant.name, issuePrompt, "github_issue", issueContext);
-            queue.push({
-              id: stored?.id ?? randomUUID(),
-              prompt: issuePrompt,
+            taskStore.createTask({
+              projectId: defaultProjectId,
+              title: `#${issue.number}: ${issue.title}`,
+              description,
+              assigneeType: "ant",
+              assigneeName: ant.name,
               source: "github_issue",
               issueContext,
             });
+            wakeQueue.push();
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          await discord
-            .send(channelId, `⚠️ **${ant.name}** GitHub poll failed: ${msg}`)
-            .catch(() => {});
+          await discord.send(channelId, `⚠️ **${ant.name}** GitHub poll failed: ${msg}`).catch(() => {});
         }
       }
     };
 
-    // Initial poll immediately, then on interval.
     pollGitHub().catch(() => {});
     setInterval(() => pollGitHub().catch(() => {}), GITHUB_POLL_INTERVAL_MS);
   }
 
-  // If no triggers configured: run once immediately, then re-queue after each run.
-  if (!hasAnyTrigger) {
-    const stored = workStore?.create(ant.name, defaultPrompt, "cron");
-    queue.push({ id: stored?.id ?? randomUUID(), prompt: defaultPrompt, source: "cron" });
+  // Startup: if tasks already exist in todo, wake immediately.
+  if (taskStore.countTodo(ant.name) > 0) {
+    wakeQueue.push();
   }
 
   try {
     while (!signal.aborted) {
       if (paused) {
         colonyState.setState(ant.name, "paused");
-        await waitForResume(); // throws AbortError on abort
+        await waitForResume();
       }
 
-      const workItem = await queue.next(signal); // throws AbortError on abort
-      log(ant.name, "session starting");
+      const tasks = taskStore.listTodo(ant.name);
+
+      if (tasks.length === 0) {
+        if (!hasAnyTrigger) {
+          // Autonomous ant: sleep, then create a new default task.
+          if (pollIntervalMs > 0) {
+            await sleepInterruptible(pollIntervalMs, signal);
+          }
+          taskStore.createTask({
+            projectId: defaultProjectId,
+            title: `${ant.name} — autonomous session`,
+            description: defaultPrompt,
+            assigneeType: "ant",
+            assigneeName: ant.name,
+            source: "cron",
+          });
+          continue;
+        } else {
+          // Event-driven ant: wait for a wake signal.
+          colonyState.setState(ant.name, "idle");
+          await wakeQueue.next(signal);
+          continue;
+        }
+      }
+
+      const task = tasks[0];
+      log(ant.name, `starting task: ${task.title}`);
       colonyState.setState(ant.name, "running");
-      workStore?.updateStatus(workItem.id, "running", { startedAt: Date.now() });
+      taskStore.setStatus(task.id, "in_progress", { startedAt: Date.now() });
+      taskStore.addComment(task.id, ant.name, "🐜 Started session.");
 
       sessionController = new AbortController();
       try {
-        // Load skill files fresh each session (task-snapshot pattern).
         const skillTexts: string[] = [];
         for (const relPath of ant.skills ?? []) {
-          try {
-            skillTexts.push(loadSkill(join(configDir, relPath)));
-          } catch (err) {
-            log(ant.name, `skill load warning: ${(err as Error).message}`);
-          }
+          try { skillTexts.push(loadSkill(join(configDir, relPath))); }
+          catch (err) { log(ant.name, `skill load warning: ${(err as Error).message}`); }
         }
         const commonInstructions = [buildCommonInstructions(colony), ...skillTexts]
-          .filter(Boolean)
-          .join("\n\n");
+          .filter(Boolean).join("\n\n");
 
-        // Prepend the previous session summary so the agent resumes with context.
         const previousSummary = antState.getLastSessionSummary(ant.name);
         const prompt = previousSummary
-          ? `## Context from your previous session\n\n${previousSummary}\n\n---\n\n${workItem.prompt}`
-          : workItem.prompt;
+          ? `## Context from your previous session\n\n${previousSummary}\n\n---\n\n${task.description}`
+          : task.description;
 
         const result = await runAnt(prompt, {
-          config: ant,
-          channel: teeChannel,
-          channelId,
-          commonInstructions,
+          config: ant, channel: teeChannel, channelId, commonInstructions,
           signal: sessionController.signal,
         });
+
         sessionsCompleted++;
         consecutiveCrashes = 0;
         colonyState.incrementSessions(ant.name, "completed");
         log(ant.name, "session completed");
-        broadcast(`✅ **${ant.name}** completed its work session.`);
 
-        const completedAt = Date.now();
-        workStore?.updateStatus(workItem.id, "done", { completedAt });
+        taskStore.setStatus(task.id, "in_review", { completedAt: Date.now() });
         if (result.lastOutput) {
-          workStore?.setOutput(workItem.id, result.lastOutput);
+          taskStore.setOutput(task.id, result.lastOutput);
+          taskStore.addComment(task.id, ant.name, result.lastOutput);
           antState.setSessionSummary(ant.name, result.lastOutput);
         }
+        broadcast(`✅ **${ant.name}** completed: ${task.title}`);
 
-        // Post a summary comment on the triggering GitHub issue.
-        if (workItem.issueContext && result.lastOutput && github) {
-          const { owner, repo, number } = workItem.issueContext;
-          log(ant.name, `posting comment on ${workItem.issueContext.repoSlug}#${number}`);
-          await github
-            .createIssueComment(owner, repo, number, result.lastOutput)
-            .catch((err) => {
-              const msg = err instanceof Error ? err.message : String(err);
-              broadcast(`⚠️ **${ant.name}** failed to post GitHub comment: ${msg}`);
-            });
+        if (task.issueContext && result.lastOutput && github) {
+          const { owner, repo, number } = task.issueContext;
+          log(ant.name, `posting comment on ${task.issueContext.repoSlug}#${number}`);
+          await github.createIssueComment(owner, repo, number, result.lastOutput).catch((err) => {
+            broadcast(`⚠️ **${ant.name}** failed to post GitHub comment: ${(err as Error).message}`);
+          });
         }
       } catch (err) {
         if (isAbortError(err)) {
-          // Ant-level abort (hot reload / stop) — propagate out of the supervisor loop.
           if (signal.aborted) throw err;
-          // Session-level abort (pause) — mark the work item failed and let the outer
-          // loop fall through to waitForResume(). paused is already true (set by pause()).
-          workStore?.updateStatus(workItem.id, "failed", { completedAt: Date.now() });
+          // Session interrupted by pause — push task back to todo and re-wake after resume.
+          taskStore.setStatus(task.id, "todo");
+          taskStore.addComment(task.id, ant.name, "⏸️ Session paused. Task returned to queue.");
+          wakeQueue.push();
           continue;
         }
+
         sessionsCrashed++;
         colonyState.incrementSessions(ant.name, "crashed");
-        workStore?.updateStatus(workItem.id, "failed", { completedAt: Date.now() });
+        const errMsg = err instanceof Error ? err.message : String(err);
+
+        // All failures: task back to todo; retry after backoff.
+        taskStore.setStatus(task.id, "todo");
+        taskStore.addComment(task.id, ant.name, `❌ Session failed: ${errMsg}. Task returned to queue.`);
+
         if (err instanceof AntSessionError) {
           switch (err.category) {
             case "max_turns":
               consecutiveCrashes = 0;
               log(ant.name, "max turns reached — restarting");
+              wakeQueue.push();
               break;
 
             case "rate_limit": {
@@ -658,6 +563,7 @@ async function runAntWithSupervision(
               colonyState.setState(ant.name, "backoff");
               broadcast(`⏳ **${ant.name}** is rate limited. Resuming in ${waitSec}s…`);
               await sleepInterruptible(waitMs, signal);
+              wakeQueue.push();
               break;
             }
 
@@ -668,6 +574,7 @@ async function runAntWithSupervision(
               broadcast(`💳 **${ant.name}** has a billing error — check your Anthropic account. Pausing until resumed.`);
               paused = true;
               await waitForResume();
+              wakeQueue.push();
               break;
 
             case "auth":
@@ -677,6 +584,7 @@ async function runAntWithSupervision(
               broadcast(`🔐 **${ant.name}** failed to authenticate — check credentials. Pausing until resumed.`);
               paused = true;
               await waitForResume();
+              wakeQueue.push();
               break;
 
             case "budget":
@@ -686,49 +594,41 @@ async function runAntWithSupervision(
               broadcast(`💰 **${ant.name}** exceeded its USD budget cap. Pausing until resumed.`);
               paused = true;
               await waitForResume();
+              wakeQueue.push();
               break;
 
             case "permanent": {
               consecutiveCrashes++;
               const delay = backoffDelayMs(consecutiveCrashes);
-              log(ant.name, `permanent error: ${err.message} — restarting in ${delay / 1000}s`);
+              log(ant.name, `permanent error: ${errMsg} — restarting in ${delay / 1000}s`);
               colonyState.setState(ant.name, "backoff");
-              broadcast(`🚫 **${ant.name}** encountered a permanent error: ${err.message}\nRestarting in ${delay / 1000}s…`);
+              broadcast(`🚫 **${ant.name}** encountered a permanent error: ${errMsg}\nRestarting in ${delay / 1000}s…`);
               await sleepInterruptible(delay, signal);
+              wakeQueue.push();
               break;
             }
 
             default: {
-              // 'transient'
               consecutiveCrashes++;
               const delay = backoffDelayMs(consecutiveCrashes);
-              log(ant.name, `crashed: ${err.message} — restarting in ${delay / 1000}s`);
+              log(ant.name, `crashed: ${errMsg} — restarting in ${delay / 1000}s`);
               colonyState.setState(ant.name, "crashed");
-              broadcast(`❌ **${ant.name}** crashed: ${err.message}\nRestarting in ${delay / 1000}s…`);
+              broadcast(`❌ **${ant.name}** crashed: ${errMsg}\nRestarting in ${delay / 1000}s…`);
               await sleepInterruptible(delay, signal);
+              wakeQueue.push();
             }
           }
         } else {
-          // Non-AntSessionError (e.g. unexpected JS error): treat as transient.
           consecutiveCrashes++;
           const delay = backoffDelayMs(consecutiveCrashes);
-          const message = err instanceof Error ? err.message : String(err);
-          log(ant.name, `crashed: ${message} — restarting in ${delay / 1000}s`);
+          log(ant.name, `crashed: ${errMsg} — restarting in ${delay / 1000}s`);
           colonyState.setState(ant.name, "crashed");
-          broadcast(`❌ **${ant.name}** crashed: ${message}\nRestarting in ${delay / 1000}s…`);
+          broadcast(`❌ **${ant.name}** crashed: ${errMsg}\nRestarting in ${delay / 1000}s…`);
           await sleepInterruptible(delay, signal);
+          wakeQueue.push();
         }
       } finally {
         sessionController = null;
-      }
-
-      // If no triggers: sleep (if configured) then re-queue so the ant keeps running.
-      if (!hasAnyTrigger) {
-        if (pollIntervalMs > 0) {
-          await sleepInterruptible(pollIntervalMs, signal);
-        }
-        const stored = workStore?.create(ant.name, defaultPrompt, "cron");
-        queue.push({ id: stored?.id ?? randomUUID(), prompt: defaultPrompt, source: "cron" });
       }
     }
   } catch (err) {
@@ -737,20 +637,12 @@ async function runAntWithSupervision(
     }
   }
 
-  // Clean up: cancel any queued-but-not-yet-started work items and remove from state.
   log(ant.name, "stopping");
-  queue.clear();
-  workStore?.cancelAllQueued(ant.name);
   colonyState.unregister(ant.name);
 }
 
-// Maps engine names to the CLI binary they spawn.
-// Used for pre-flight availability checks at startup.
 const ENGINE_BINARIES: Record<string, string> = {
-  "claude-cli": "claude",
-  "gemini-cli": "gemini",
-  "codex": "codex",
-  "opencode": "opencode",
+  "claude-cli": "claude", "gemini-cli": "gemini", "codex": "codex", "opencode": "opencode",
 };
 
 function checkDiscordChannels(colony: LoadedConfig["colony"], ants: LoadedConfig["ants"]): void {
@@ -768,8 +660,7 @@ function checkDiscordChannels(colony: LoadedConfig["colony"], ants: LoadedConfig
 function checkBinaries(ants: LoadedConfig["ants"]): void {
   const missing: string[] = [];
   for (const ant of ants) {
-    const binaryName =
-      ant.engine === "cli" ? ant.cli?.binary : ENGINE_BINARIES[ant.engine];
+    const binaryName = ant.engine === "cli" ? ant.cli?.binary : ENGINE_BINARIES[ant.engine];
     if (binaryName && !Bun.which(binaryName)) {
       missing.push(`  • ant "${ant.name}" (engine: ${ant.engine}) requires "${binaryName}"`);
     }
@@ -781,8 +672,6 @@ function checkBinaries(ants: LoadedConfig["ants"]): void {
   }
 }
 
-// Connects to Discord, launches all ants concurrently, and runs until the process is killed.
-// Supports hot reload via colonyState.triggerReload() — ants can be stopped/started without restart.
 export async function runColony(
   config: LoadedConfig,
   discord: RunnerDiscord,
@@ -800,12 +689,11 @@ export async function runColony(
     return;
   }
 
-  // Create shared colony state and optional work store for the dashboard.
-  const monitorPort = config.colony.monitoring?.port;
-  const workStore = monitorPort ? new WorkStore(config.configDir) : undefined;
-  const colonyState = new ColonyState(config.colony.name, workStore, config.configDir);
+  // TaskStore is always created — it's the primary work model.
+  const taskStore = new TaskStore(config.configDir);
+  const defaultProject = taskStore.getOrCreateDefaultProject();
+  const colonyState = new ColonyState(config.colony.name, config.configDir);
 
-  // Track running ant supervisors so reload can stop/restart individual ants.
   type AntHandle = { controller: AbortController; promise: Promise<void> };
   const runningAnts = new Map<string, AntHandle>();
   let currentConfig = config;
@@ -814,7 +702,7 @@ export async function runColony(
     const controller = new AbortController();
     const promise = runAntWithSupervision(
       ant, currentConfig.colony, currentConfig.configDir,
-      discord, colonyState, controller, github, workStore
+      discord, colonyState, controller, taskStore, defaultProject.id, github
     ).catch((err: Error) => log(ant.name, `supervisor exited: ${err.message}`));
     runningAnts.set(ant.name, { controller, promise });
   }
@@ -827,9 +715,8 @@ export async function runColony(
     runningAnts.delete(name);
   }
 
-  // Wire up the reload callback used by POST /api/reload.
   colonyState.setReloadCallback(async () => {
-    const newConfig = loadConfig(currentConfig.configDir); // throws on invalid YAML
+    const newConfig = loadConfig(currentConfig.configDir);
     checkDiscordChannels(newConfig.colony, newConfig.ants);
 
     const oldByName = new Map(currentConfig.ants.map((a) => [a.name, a]));
@@ -839,27 +726,16 @@ export async function runColony(
     const removed: string[] = [];
     const updated: string[] = [];
 
-    // Stop ants that were removed or whose config changed.
     for (const [name, oldAnt] of oldByName) {
       const newAnt = newByName.get(name);
-      if (!newAnt) {
-        removed.push(name);
-        await stopAnt(name);
-      } else if (JSON.stringify(oldAnt) !== JSON.stringify(newAnt)) {
-        updated.push(name);
-        await stopAnt(name);
-      }
+      if (!newAnt) { removed.push(name); await stopAnt(name); }
+      else if (JSON.stringify(oldAnt) !== JSON.stringify(newAnt)) { updated.push(name); await stopAnt(name); }
     }
 
-    // Start new ants and changed ants (already stopped above).
     currentConfig = newConfig;
     for (const [name, newAnt] of newByName) {
-      if (!oldByName.has(name)) {
-        added.push(name);
-        startAnt(newAnt);
-      } else if (updated.includes(name)) {
-        startAnt(newAnt);
-      }
+      if (!oldByName.has(name)) { added.push(name); startAnt(newAnt); }
+      else if (updated.includes(name)) { startAnt(newAnt); }
     }
 
     const summary = [
@@ -868,12 +744,11 @@ export async function runColony(
       updated.length > 0 ? `${updated.length} updated` : "",
     ].filter(Boolean).join(", ");
     console.log(`Colony reloaded — ${summary || "no changes"}`);
-
     return { added, removed, updated };
   });
 
-  // Start the optional HTTP dashboard.
   let dashboardServer: ReturnType<typeof Bun.serve> | undefined;
+  const monitorPort = config.colony.monitoring?.port;
   if (monitorPort) {
     const onGithubWebhook = (event: GitHubIssueEvent): void => {
       const repoSlug = event.repository.full_name;
@@ -882,18 +757,14 @@ export async function runColony(
         const githubTrigger = triggers.find((t) => t.type === "github_issue");
         if (!githubTrigger || githubTrigger.type !== "github_issue") continue;
 
-        // Ant must list this repo in its github.repos (if any are configured).
         const repos = ant.integrations?.github?.repos ?? [];
         if (repos.length > 0 && !repos.includes(repoSlug)) continue;
 
-        // Label matching: for "labeled" only the newly added label counts;
-        // for "opened" any of the issue's labels count.
         const triggerLabels = githubTrigger.labels;
         if (triggerLabels.length > 0) {
-          const eventLabels =
-            event.action === "labeled" && event.label
-              ? [event.label.name]
-              : event.issue.labels.map((l) => l.name);
+          const eventLabels = event.action === "labeled" && event.label
+            ? [event.label.name]
+            : event.issue.labels.map((l) => l.name);
           if (!triggerLabels.some((l) => eventLabels.includes(l))) continue;
         }
 
@@ -901,7 +772,7 @@ export async function runColony(
         const repo = event.repository.name;
         const issue = event.issue;
         const issueContext: IssueContext = { owner, repo, number: issue.number, repoSlug };
-        const issuePrompt =
+        const description =
           `You are ${ant.name}. A GitHub issue has been assigned:\n\n` +
           `Repository: ${repoSlug}\n` +
           `Issue #${issue.number}: ${issue.title}\n` +
@@ -910,7 +781,13 @@ export async function runColony(
           `Work through this issue. When done, end your session with a concise summary ` +
           `of what you completed — it will be posted as a comment on the issue.`;
 
-        colonyState.pushPrompt(ant.name, issuePrompt, "github_issue", issueContext);
+        taskStore.createTask({
+          projectId: defaultProject.id,
+          title: `#${issue.number}: ${issue.title}`,
+          description, assigneeType: "ant", assigneeName: ant.name,
+          source: "github_issue", issueContext,
+        });
+        colonyState.wake(ant.name);
       }
     };
 
@@ -920,15 +797,16 @@ export async function runColony(
         apiKey: process.env.COLONY_API_KEY,
         webhookSecret: config.colony.integrations?.github?.webhook_secret,
         onGithubWebhook,
+        taskStore,
       }),
     });
     console.log(`Dashboard: http://localhost:${monitorPort}`);
+    console.log(`Dashboard will be available at http://localhost:${monitorPort} once running.`);
   }
 
   for (const ant of config.ants) startAnt(ant);
 
   try {
-    // Block indefinitely — Colony runs until the process is killed.
     await new Promise<never>(() => {});
   } finally {
     dashboardServer?.stop(true);
