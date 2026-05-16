@@ -26,6 +26,7 @@ export interface AntControlHandles {
   clearQueue(): number;
   getQueueSize(): number;
   removeWorkItem(id: string): boolean;
+  reorderWorkItem(id: string, newIndex: number): boolean;
 }
 
 const MAX_RECENT_LINES = 150;
@@ -151,6 +152,12 @@ export class ColonyState {
     const entry = this.entries.get(name);
     if (!entry) return 0;
     return entry.controls.clearQueue();
+  }
+
+  reorderWorkItem(antName: string, id: string, newIndex: number): boolean {
+    const entry = this.entries.get(antName);
+    if (!entry) return false;
+    return entry.controls.reorderWorkItem(id, newIndex);
   }
 
   cancelWorkItem(id: string): "cancelled" | "running" | "not_found" {

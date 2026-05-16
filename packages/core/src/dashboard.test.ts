@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { ColonyState } from "./colony-state";
+import { WorkStore } from "./work-store";
 import { createDashboardHandler } from "./dashboard";
 
 function makeState(configDir?: string) {
@@ -15,6 +16,7 @@ function makeState(configDir?: string) {
     clearQueue: mock(() => 2),
     getQueueSize: mock(() => 0),
     removeWorkItem: mock(() => false),
+    reorderWorkItem: mock(() => false),
   });
   s.pushOutput("worker", "hello");
   s.pushOutput("worker", "world");
@@ -311,6 +313,92 @@ describe("createDashboardHandler — reload", () => {
     const res = await handler(req("POST", "/api/reload"));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(reloadResult);
+  });
+});
+
+// --- PATCH /api/work/:id (reorder) ---
+
+describe("createDashboardHandler — PATCH /api/work/:id", () => {
+  let dir: string;
+  let store: WorkStore;
+
+  beforeEach(() => {
+    dir = mkdtempSync(`${tmpdir()}/colony-work-patch-test-`);
+    store = new WorkStore(dir);
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function makeStateWithStore() {
+    const s = new ColonyState("test-colony", store, dir);
+    s.register("worker", "claude-cli", {
+      pause: mock(() => {}),
+      resume: mock(() => {}),
+      pushPrompt: mock(() => {}),
+      clearQueue: mock(() => 0),
+      getQueueSize: mock(() => 0),
+      removeWorkItem: mock(() => false),
+      reorderWorkItem: mock(() => true),
+    });
+    return s;
+  }
+
+  it("PATCH /api/work/:id reorders a queued item", async () => {
+    const a = store.create("worker", "First", "manual");
+    const b = store.create("worker", "Second", "manual");
+    const c = store.create("worker", "Third", "manual");
+    const handler = createDashboardHandler(makeStateWithStore());
+    const res = await handler(
+      new Request(`http://localhost/api/work/${c.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ position: 0 }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const order = store.list({ status: ["queued"] }).map((i) => i.title);
+    expect(order[0]).toBe("Third");
+  });
+
+  it("returns 404 for unknown id", async () => {
+    const handler = createDashboardHandler(makeStateWithStore());
+    const res = await handler(
+      new Request("http://localhost/api/work/no-such-id", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ position: 0 }),
+      })
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 409 for running items", async () => {
+    const item = store.create("worker", "Task", "manual");
+    store.updateStatus(item.id, "running");
+    const handler = createDashboardHandler(makeStateWithStore());
+    const res = await handler(
+      new Request(`http://localhost/api/work/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ position: 0 }),
+      })
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it("returns 400 for invalid position", async () => {
+    const item = store.create("worker", "Task", "manual");
+    const handler = createDashboardHandler(makeStateWithStore());
+    const res = await handler(
+      new Request(`http://localhost/api/work/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ position: -1 }),
+      })
+    );
+    expect(res.status).toBe(400);
   });
 });
 

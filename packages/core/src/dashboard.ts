@@ -185,6 +185,23 @@ export function createDashboardHandler(
         if (result === "running") return textResponse("Item is currently running", 409);
         return jsonResponse({ ok: true });
       }
+
+      // PATCH /api/work/:id — reorder a queued item { position: number }
+      if (req.method === "PATCH") {
+        if (!workStore) return textResponse("Not found", 404);
+        let body: { position?: unknown };
+        try { body = await req.json() as { position?: unknown }; }
+        catch { return textResponse("Invalid JSON", 400); }
+        if (typeof body.position !== "number" || !Number.isInteger(body.position) || body.position < 0) {
+          return textResponse("position must be a non-negative integer", 400);
+        }
+        const item = workStore.get(id);
+        if (!item) return textResponse("Not found", 404);
+        if (item.status !== "queued") return textResponse("Can only reorder queued items", 409);
+        workStore.reorder(id, body.position);
+        state.reorderWorkItem(item.antName, id, body.position);
+        return jsonResponse({ ok: true });
+      }
     }
 
     // Config routes — raw YAML (no env interpolation) so the editor sees/writes template values.

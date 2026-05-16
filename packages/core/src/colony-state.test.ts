@@ -10,6 +10,7 @@ function makeControls(overrides: Partial<Parameters<ColonyState["register"]>[2]>
     clearQueue: mock(() => { const n = queue.length; queue.length = 0; return n; }),
     getQueueSize: mock(() => queue.length),
     removeWorkItem: mock((_id: string) => false),
+    reorderWorkItem: mock((_id: string, _newIndex: number) => false),
     _queue: queue,
     ...overrides,
   };

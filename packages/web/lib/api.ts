@@ -89,6 +89,15 @@ export const api = {
 
   workGet: (id: string) => get<PersistedWorkItem>(`/api/work/${id}`),
   workCancel: (id: string) => del(`/api/work/${id}`),
+  workReorder: async (id: string, position: number): Promise<void> => {
+    const res = await fetch(`/api/work/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ position }),
+    });
+    if (res.status === 401) throw new AuthError();
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  },
 
   reload: async (): Promise<{ added: string[]; removed: string[]; updated: string[] }> => {
     const res = await fetch("/api/reload", { method: "POST", headers: authHeaders() });

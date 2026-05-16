@@ -32,6 +32,7 @@ interface RawRow {
   started_at: number | null;
   completed_at: number | null;
   last_output: string | null;
+  position: number;
 }
 
 function parseRow(row: RawRow): PersistedWorkItem {
@@ -79,9 +80,17 @@ export class WorkStore {
         created_at   INTEGER NOT NULL,
         started_at   INTEGER,
         completed_at INTEGER,
-        last_output  TEXT
+        last_output  TEXT,
+        position     INTEGER NOT NULL DEFAULT 0
       )
     `);
+
+    // Migration: add position column to existing tables that pre-date this field.
+    const cols = this.db.query("PRAGMA table_info(work_items)").all() as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === "position")) {
+      this.db.exec("ALTER TABLE work_items ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
+      this.db.exec("UPDATE work_items SET position = created_at WHERE position = 0");
+    }
   }
 
   create(
@@ -95,10 +104,17 @@ export class WorkStore {
     const title = workItemTitle(prompt);
     const issueContextJson = issueContext ? JSON.stringify(issueContext) : null;
 
+    // New items go to the end of this ant's queue.
+    const maxPos = (this.db
+      .query<{ m: number | null }, [string]>(
+        "SELECT MAX(position) as m FROM work_items WHERE ant_name = ? AND status = 'queued'"
+      )
+      .get(antName)?.m ?? -1) + 1;
+
     this.db.run(
-      `INSERT INTO work_items (id, ant_name, title, prompt, source, status, issue_context, created_at)
-       VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)`,
-      [id, antName, title, prompt, source, issueContextJson, createdAt]
+      `INSERT INTO work_items (id, ant_name, title, prompt, source, status, issue_context, created_at, position)
+       VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?)`,
+      [id, antName, title, prompt, source, issueContextJson, createdAt, maxPos]
     );
 
     return { id, antName, title, prompt, source, status: "queued", issueContext, createdAt };
@@ -159,9 +175,14 @@ export class WorkStore {
     const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
     params.push(limit, offset);
 
+    // Queued items sort by position (queue order); all others by created_at DESC.
     const rows = this.db
       .query<RawRow, (string | number)[]>(
-        `SELECT * FROM work_items ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+        `SELECT * FROM work_items ${where}
+         ORDER BY CASE WHEN status = 'queued' THEN 0 ELSE 1 END ASC,
+                  CASE WHEN status = 'queued' THEN position ELSE 0 END ASC,
+                  created_at DESC
+         LIMIT ? OFFSET ?`
       )
       .all(...params);
 
@@ -182,5 +203,31 @@ export class WorkStore {
       "UPDATE work_items SET status = 'cancelled' WHERE ant_name = ? AND status = 'queued'",
       [antName]
     );
+  }
+
+  // Moves a queued item to newIndex within its ant's queue (0 = front).
+  // Returns false if the item is not found or not queued.
+  reorder(id: string, newIndex: number): boolean {
+    const item = this.get(id);
+    if (!item || item.status !== "queued") return false;
+
+    const ids = this.db
+      .query<{ id: string }, [string]>(
+        "SELECT id FROM work_items WHERE ant_name = ? AND status = 'queued' ORDER BY position ASC"
+      )
+      .all(item.antName)
+      .map((r) => r.id);
+
+    const oldIdx = ids.indexOf(id);
+    if (oldIdx === -1) return false;
+    ids.splice(oldIdx, 1);
+    ids.splice(Math.max(0, Math.min(newIndex, ids.length)), 0, id);
+
+    const updateStmt = this.db.prepare("UPDATE work_items SET position = ? WHERE id = ?");
+    this.db.transaction(() => {
+      ids.forEach((itemId, pos) => updateStmt.run(pos, itemId));
+    })();
+
+    return true;
   }
 }

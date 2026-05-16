@@ -230,6 +230,15 @@ export class PromiseQueue<T> {
     this.queue.splice(idx, 1);
     return true;
   }
+
+  // Moves the first item matching predicate to newIndex. Returns true if moved.
+  reorderBy(predicate: (item: T) => boolean, newIndex: number): boolean {
+    const idx = this.queue.findIndex(predicate);
+    if (idx === -1) return false;
+    const [item] = this.queue.splice(idx, 1);
+    this.queue.splice(Math.max(0, Math.min(newIndex, this.queue.length)), 0, item);
+    return true;
+  }
 }
 
 // Formats a millisecond duration as a human-readable string, e.g. "2d 3h 15m" or "45s".
@@ -341,6 +350,8 @@ async function runAntWithSupervision(
     },
     getQueueSize: () => queue.size,
     removeWorkItem: (id: string) => queue.remove((item) => item.id === id),
+    reorderWorkItem: (id: string, newIndex: number) =>
+      queue.reorderBy((item) => item.id === id, newIndex),
   });
 
   // Sends to both Discord and the dashboard output stream.

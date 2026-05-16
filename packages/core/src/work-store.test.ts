@@ -93,13 +93,23 @@ describe("WorkStore", () => {
     expect(store.list({ antName: "ant-b" })[0].status).toBe("queued");
   });
 
-  it("list() returns items in descending createdAt order", () => {
+  it("list() returns queued items in insertion (position) order", () => {
     store.create("worker", "First", "manual");
     store.create("worker", "Second", "cron");
     store.create("worker", "Third", "discord");
-    const items = store.list();
-    expect(items[0].title).toBe("Third");
-    expect(items[2].title).toBe("First");
+    const items = store.list({ status: ["queued"] });
+    expect(items[0].title).toBe("First");
+    expect(items[2].title).toBe("Third");
+  });
+
+  it("list() returns non-queued items in descending createdAt order", () => {
+    const a = store.create("worker", "First", "manual");
+    const b = store.create("worker", "Second", "cron");
+    store.updateStatus(a.id, "done");
+    store.updateStatus(b.id, "done");
+    const items = store.list({ status: ["done"] });
+    expect(items[0].title).toBe("Second");
+    expect(items[1].title).toBe("First");
   });
 
   it("list() filters by status", () => {
@@ -117,6 +127,51 @@ describe("WorkStore", () => {
     const results = store.list({ antName: "ant-1" });
     expect(results).toHaveLength(1);
     expect(results[0].antName).toBe("ant-1");
+  });
+
+  it("reorder() moves an item to the front", () => {
+    const a = store.create("worker", "First", "manual");
+    const b = store.create("worker", "Second", "manual");
+    const c = store.create("worker", "Third", "manual");
+    expect(store.reorder(c.id, 0)).toBe(true);
+    const order = store.list({ status: ["queued"] }).map((i) => i.title);
+    expect(order).toEqual(["Third", "First", "Second"]);
+  });
+
+  it("reorder() moves an item to the end", () => {
+    const a = store.create("worker", "First", "manual");
+    store.create("worker", "Second", "manual");
+    store.create("worker", "Third", "manual");
+    store.reorder(a.id, 99);
+    const order = store.list({ status: ["queued"] }).map((i) => i.title);
+    expect(order).toEqual(["Second", "Third", "First"]);
+  });
+
+  it("reorder() moves an item to the middle", () => {
+    const a = store.create("worker", "First", "manual");
+    store.create("worker", "Second", "manual");
+    store.create("worker", "Third", "manual");
+    store.reorder(a.id, 1);
+    const order = store.list({ status: ["queued"] }).map((i) => i.title);
+    expect(order).toEqual(["Second", "First", "Third"]);
+  });
+
+  it("reorder() returns false for non-queued items", () => {
+    const a = store.create("worker", "Task", "manual");
+    store.updateStatus(a.id, "running");
+    expect(store.reorder(a.id, 0)).toBe(false);
+  });
+
+  it("reorder() returns false for unknown id", () => {
+    expect(store.reorder("no-such-id", 0)).toBe(false);
+  });
+
+  it("new items go to the end of the queue", () => {
+    store.create("worker", "First", "manual");
+    store.create("worker", "Second", "manual");
+    store.create("worker", "Third", "manual");
+    const order = store.list({ status: ["queued"] }).map((i) => i.title);
+    expect(order).toEqual(["First", "Second", "Third"]);
   });
 
   it("stores and retrieves issueContext", () => {
