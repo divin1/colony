@@ -9,10 +9,11 @@ import { createState } from "./state";
 import { loadSkill } from "./skill";
 import { ColonyState } from "./colony-state";
 import { createDashboardHandler } from "./dashboard";
+import type { GitHubIssueEvent } from "./dashboard";
 import { AntSessionError } from "./errors";
 import { log } from "./log";
 import { WorkStore } from "./work-store.js";
-import type { WorkItemSource } from "./work-store.js";
+import type { WorkItemSource, IssueContext } from "./work-store.js";
 
 // Extended interface the runner needs beyond ConfirmationChannel.
 // DiscordIntegration satisfies this structurally — core does not depend on @colony/discord.
@@ -313,10 +314,10 @@ async function runAntWithSupervision(
         colonyState.setState(ant.name, "running");
       }
     },
-    pushPrompt: (prompt: string, source: WorkItemSource = "manual") => {
-      const stored = workStore?.create(ant.name, prompt, source);
+    pushPrompt: (prompt: string, source: WorkItemSource = "manual", issueContext?: IssueContext) => {
+      const stored = workStore?.create(ant.name, prompt, source, issueContext);
       const id = stored?.id ?? randomUUID();
-      queue.push({ id, prompt, source });
+      queue.push({ id, prompt, source, issueContext });
       if (paused) {
         paused = false;
         resumeResolve?.();
@@ -843,9 +844,52 @@ export async function runColony(
   // Start the optional HTTP dashboard.
   let dashboardServer: ReturnType<typeof Bun.serve> | undefined;
   if (monitorPort) {
+    const onGithubWebhook = (event: GitHubIssueEvent): void => {
+      const repoSlug = event.repository.full_name;
+      for (const ant of currentConfig.ants) {
+        const triggers = ant.triggers ?? [];
+        const githubTrigger = triggers.find((t) => t.type === "github_issue");
+        if (!githubTrigger || githubTrigger.type !== "github_issue") continue;
+
+        // Ant must list this repo in its github.repos (if any are configured).
+        const repos = ant.integrations?.github?.repos ?? [];
+        if (repos.length > 0 && !repos.includes(repoSlug)) continue;
+
+        // Label matching: for "labeled" only the newly added label counts;
+        // for "opened" any of the issue's labels count.
+        const triggerLabels = githubTrigger.labels;
+        if (triggerLabels.length > 0) {
+          const eventLabels =
+            event.action === "labeled" && event.label
+              ? [event.label.name]
+              : event.issue.labels.map((l) => l.name);
+          if (!triggerLabels.some((l) => eventLabels.includes(l))) continue;
+        }
+
+        const { login: owner } = event.repository.owner;
+        const repo = event.repository.name;
+        const issue = event.issue;
+        const issueContext: IssueContext = { owner, repo, number: issue.number, repoSlug };
+        const issuePrompt =
+          `You are ${ant.name}. A GitHub issue has been assigned:\n\n` +
+          `Repository: ${repoSlug}\n` +
+          `Issue #${issue.number}: ${issue.title}\n` +
+          `URL: ${issue.html_url}\n\n` +
+          `${issue.body ?? "(no description provided)"}\n\n` +
+          `Work through this issue. When done, end your session with a concise summary ` +
+          `of what you completed — it will be posted as a comment on the issue.`;
+
+        colonyState.pushPrompt(ant.name, issuePrompt, "github_issue", issueContext);
+      }
+    };
+
     dashboardServer = Bun.serve({
       port: monitorPort,
-      fetch: createDashboardHandler(colonyState, process.env.COLONY_API_KEY),
+      fetch: createDashboardHandler(colonyState, {
+        apiKey: process.env.COLONY_API_KEY,
+        webhookSecret: config.colony.integrations?.github?.webhook_secret,
+        onGithubWebhook,
+      }),
     });
     console.log(`Dashboard: http://localhost:${monitorPort}`);
   }

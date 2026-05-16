@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "crypto";
 import type { ColonyState } from "./colony-state.js";
 import {
   readRawColonyYaml,
@@ -8,6 +9,40 @@ import {
   deleteAntYaml,
   writeColonyYaml,
 } from "./config.js";
+
+// Minimal GitHub issues webhook payload — only fields Colony uses.
+export interface GitHubIssueEvent {
+  action: string;
+  issue: {
+    number: number;
+    title: string;
+    body: string | null;
+    html_url: string;
+    labels: Array<{ name: string }>;
+  };
+  repository: {
+    full_name: string;
+    name: string;
+    owner: { login: string };
+  };
+  // Present only for action: "labeled"
+  label?: { name: string };
+}
+
+export interface DashboardOptions {
+  apiKey?: string;
+  webhookSecret?: string;
+  onGithubWebhook?: (event: GitHubIssueEvent) => void;
+}
+
+function verifyGitHubSignature(body: string, signature: string, secret: string): boolean {
+  const expected = "sha256=" + createHmac("sha256", secret).update(body).digest("hex");
+  try {
+    return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -47,8 +82,9 @@ function writeOkResponse(data: unknown = { ok: true }, status = 200): Response {
 
 export function createDashboardHandler(
   state: ColonyState,
-  apiKey?: string
+  options: DashboardOptions = {}
 ): (req: Request) => Response | Promise<Response> {
+  const { apiKey, webhookSecret, onGithubWebhook } = options;
   const workStore = state.getWorkStore();
 
   return async (req: Request): Promise<Response> => {
@@ -58,6 +94,33 @@ export function createDashboardHandler(
     // Handle CORS preflight — always allowed so browsers can probe the API.
     if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+
+    // POST /api/webhooks/github — exempt from API key auth; verified by webhook secret instead.
+    if (path === "/api/webhooks/github" && req.method === "POST") {
+      const rawBody = await req.text();
+
+      if (webhookSecret) {
+        const sig = req.headers.get("X-Hub-Signature-256") ?? "";
+        if (!verifyGitHubSignature(rawBody, sig, webhookSecret)) {
+          return textResponse("Invalid signature", 401);
+        }
+      }
+
+      const event = req.headers.get("X-GitHub-Event");
+      if (event === "issues" && onGithubWebhook) {
+        let payload: GitHubIssueEvent;
+        try {
+          payload = JSON.parse(rawBody) as GitHubIssueEvent;
+        } catch {
+          return textResponse("Invalid JSON", 400);
+        }
+        if (payload.action === "opened" || payload.action === "labeled") {
+          try { onGithubWebhook(payload); } catch { /* never let a bad handler crash the server */ }
+        }
+      }
+
+      return textResponse("ok");
     }
 
     // Auth check — applies to all /api/* routes when a key is configured.

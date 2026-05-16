@@ -4,6 +4,7 @@ import { join } from "path";
 
 export type WorkItemStatus = "queued" | "running" | "done" | "failed" | "cancelled";
 export type WorkItemSource = "manual" | "github_issue" | "cron" | "discord";
+export type IssueContext = { owner: string; repo: string; number: number; repoSlug: string };
 
 export interface PersistedWorkItem {
   id: string;
@@ -12,7 +13,7 @@ export interface PersistedWorkItem {
   prompt: string;
   source: WorkItemSource;
   status: WorkItemStatus;
-  issueContext?: { owner: string; repo: string; number: number; repoSlug: string };
+  issueContext?: IssueContext;
   createdAt: number;
   startedAt?: number;
   completedAt?: number;

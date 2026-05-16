@@ -1,4 +1,4 @@
-import type { WorkStore, WorkItemSource } from "./work-store.js";
+import type { WorkStore, WorkItemSource, IssueContext } from "./work-store.js";
 
 export interface ReloadResult {
   added: string[];
@@ -22,7 +22,7 @@ export interface AntStatusEntry {
 export interface AntControlHandles {
   pause(): void;
   resume(): void;
-  pushPrompt(prompt: string, source?: WorkItemSource): void;
+  pushPrompt(prompt: string, source?: WorkItemSource, issueContext?: IssueContext): void;
   clearQueue(): number;
   getQueueSize(): number;
   removeWorkItem(id: string): boolean;
@@ -140,10 +140,10 @@ export class ColonyState {
     return true;
   }
 
-  pushPrompt(name: string, prompt: string, source: WorkItemSource = "manual"): boolean {
+  pushPrompt(name: string, prompt: string, source: WorkItemSource = "manual", issueContext?: IssueContext): boolean {
     const entry = this.entries.get(name);
     if (!entry) return false;
-    entry.controls.pushPrompt(prompt, source);
+    entry.controls.pushPrompt(prompt, source, issueContext);
     return true;
   }
 

@@ -110,7 +110,7 @@ describe("ColonyState", () => {
     s.register("worker", "claude-cli", controls);
     const ok = s.pushPrompt("worker", "do the thing");
     expect(ok).toBe(true);
-    expect(controls.pushPrompt).toHaveBeenCalledWith("do the thing", "manual");
+    expect(controls.pushPrompt).toHaveBeenCalledWith("do the thing", "manual", undefined);
   });
 
   it("pushPrompt() passes explicit source through to the control handle", () => {
@@ -118,7 +118,7 @@ describe("ColonyState", () => {
     const controls = makeControls();
     s.register("worker", "claude-cli", controls);
     s.pushPrompt("worker", "from discord", "discord");
-    expect(controls.pushPrompt).toHaveBeenCalledWith("from discord", "discord");
+    expect(controls.pushPrompt).toHaveBeenCalledWith("from discord", "discord", undefined);
   });
 
   it("clearQueue() calls the control handle and returns count", () => {

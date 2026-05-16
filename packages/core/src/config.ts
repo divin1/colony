@@ -46,6 +46,9 @@ export const ColonyConfigSchema = z.object({
       github: z
         .object({
           token: EnvString,
+          // Secret used to verify X-Hub-Signature-256 on incoming GitHub webhooks.
+          // Set this to the same value you configure in GitHub's webhook settings.
+          webhook_secret: EnvString.optional(),
         })
         .optional(),
     })
@@ -242,7 +245,7 @@ export const RawColonyConfigSchema = z.object({
     .object({
       discord: z.object({ token: z.string(), guild: z.string() }).optional(),
       discord_webhook: z.object({ url: z.string() }).optional(),
-      github: z.object({ token: z.string() }).optional(),
+      github: z.object({ token: z.string(), webhook_secret: z.string().optional() }).optional(),
     })
     .optional(),
   defaults: z

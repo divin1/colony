@@ -1,4 +1,5 @@
-import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, mock, beforeEach, afterEach, spyOn } from "bun:test";
+import { createHmac } from "crypto";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -129,13 +130,13 @@ describe("createDashboardHandler — auth", () => {
   });
 
   it("returns 401 for /api/* when apiKey is set and no Authorization header", async () => {
-    const handler = createDashboardHandler(makeState(), "secret");
+    const handler = createDashboardHandler(makeState(), { apiKey: "secret" });
     const res = await handler(req("GET", "/api/status"));
     expect(res.status).toBe(401);
   });
 
   it("returns 401 when the Authorization header has the wrong key", async () => {
-    const handler = createDashboardHandler(makeState(), "secret");
+    const handler = createDashboardHandler(makeState(), { apiKey: "secret" });
     const res = await handler(
       new Request("http://localhost/api/status", {
         headers: { Authorization: "Bearer wrong" },
@@ -145,7 +146,7 @@ describe("createDashboardHandler — auth", () => {
   });
 
   it("allows /api/* when the correct Bearer token is sent", async () => {
-    const handler = createDashboardHandler(makeState(), "secret");
+    const handler = createDashboardHandler(makeState(), { apiKey: "secret" });
     const res = await handler(
       new Request("http://localhost/api/status", {
         headers: { Authorization: "Bearer secret" },
@@ -155,34 +156,143 @@ describe("createDashboardHandler — auth", () => {
   });
 
   it("allows OPTIONS preflight without auth (CORS preflight)", async () => {
-    const handler = createDashboardHandler(makeState(), "secret");
+    const handler = createDashboardHandler(makeState(), { apiKey: "secret" });
     const res = await handler(new Request("http://localhost/api/status", { method: "OPTIONS" }));
     expect(res.status).toBe(204);
   });
 
   it("serves the HTML dashboard without auth even when apiKey is set", async () => {
-    const handler = createDashboardHandler(makeState(), "secret");
+    const handler = createDashboardHandler(makeState(), { apiKey: "secret" });
     const res = await handler(req("GET", "/"));
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
   });
 
   it("CORS headers include Authorization", async () => {
-    const handler = createDashboardHandler(makeState(), "secret");
+    const handler = createDashboardHandler(makeState(), { apiKey: "secret" });
     const res = await handler(new Request("http://localhost/api/status", { method: "OPTIONS" }));
     expect(res.headers.get("access-control-allow-headers")).toContain("Authorization");
   });
 
   it("allows /api/* when key is passed as ?key= query param (for SSE)", async () => {
-    const handler = createDashboardHandler(makeState(), "secret");
+    const handler = createDashboardHandler(makeState(), { apiKey: "secret" });
     const res = await handler(new Request("http://localhost/api/status?key=secret"));
     expect(res.status).toBe(200);
   });
 
   it("returns 401 when ?key= query param has the wrong value", async () => {
-    const handler = createDashboardHandler(makeState(), "secret");
+    const handler = createDashboardHandler(makeState(), { apiKey: "secret" });
     const res = await handler(new Request("http://localhost/api/status?key=wrong"));
     expect(res.status).toBe(401);
+  });
+});
+
+// --- GitHub webhook helpers ---
+
+function makeWebhookSig(body: string, secret: string): string {
+  return "sha256=" + createHmac("sha256", secret).update(body).digest("hex");
+}
+
+function webhookReq(body: unknown, opts: { event?: string; sig?: string } = {}): Request {
+  const raw = JSON.stringify(body);
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (opts.event) headers["X-GitHub-Event"] = opts.event;
+  if (opts.sig) headers["X-Hub-Signature-256"] = opts.sig;
+  return new Request("http://localhost/api/webhooks/github", { method: "POST", headers, body: raw });
+}
+
+const SAMPLE_ISSUE_EVENT = {
+  action: "opened",
+  issue: {
+    number: 42,
+    title: "Fix the bug",
+    body: "It breaks on login.",
+    html_url: "https://github.com/acme/repo/issues/42",
+    labels: [{ name: "ant-ready" }],
+  },
+  repository: {
+    full_name: "acme/repo",
+    name: "repo",
+    owner: { login: "acme" },
+  },
+};
+
+describe("createDashboardHandler — GitHub webhook", () => {
+  it("returns 200 and calls onGithubWebhook for a valid issues event", async () => {
+    const handler_fn = mock(() => {});
+    const handler = createDashboardHandler(makeState(), { onGithubWebhook: handler_fn });
+    const raw = JSON.stringify(SAMPLE_ISSUE_EVENT);
+    const res = await handler(webhookReq(SAMPLE_ISSUE_EVENT, { event: "issues" }));
+    expect(res.status).toBe(200);
+    expect(handler_fn).toHaveBeenCalledTimes(1);
+    expect((handler_fn.mock.calls[0] as unknown[])[0]).toMatchObject({ action: "opened" });
+  });
+
+  it("does not call onGithubWebhook for non-issues events", async () => {
+    const handler_fn = mock(() => {});
+    const handler = createDashboardHandler(makeState(), { onGithubWebhook: handler_fn });
+    const res = await handler(webhookReq(SAMPLE_ISSUE_EVENT, { event: "push" }));
+    expect(res.status).toBe(200);
+    expect(handler_fn).not.toHaveBeenCalled();
+  });
+
+  it("does not call onGithubWebhook for closed action", async () => {
+    const handler_fn = mock(() => {});
+    const handler = createDashboardHandler(makeState(), { onGithubWebhook: handler_fn });
+    const payload = { ...SAMPLE_ISSUE_EVENT, action: "closed" };
+    const res = await handler(webhookReq(payload, { event: "issues" }));
+    expect(res.status).toBe(200);
+    expect(handler_fn).not.toHaveBeenCalled();
+  });
+
+  it("calls onGithubWebhook for action: labeled", async () => {
+    const handler_fn = mock(() => {});
+    const handler = createDashboardHandler(makeState(), { onGithubWebhook: handler_fn });
+    const payload = { ...SAMPLE_ISSUE_EVENT, action: "labeled", label: { name: "ant-ready" } };
+    const res = await handler(webhookReq(payload, { event: "issues" }));
+    expect(res.status).toBe(200);
+    expect(handler_fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("verifies HMAC-SHA256 signature when webhookSecret is set", async () => {
+    const handler_fn = mock(() => {});
+    const secret = "my-webhook-secret";
+    const handler = createDashboardHandler(makeState(), { webhookSecret: secret, onGithubWebhook: handler_fn });
+    const raw = JSON.stringify(SAMPLE_ISSUE_EVENT);
+    const goodSig = makeWebhookSig(raw, secret);
+
+    const ok = await handler(webhookReq(SAMPLE_ISSUE_EVENT, { event: "issues", sig: goodSig }));
+    expect(ok.status).toBe(200);
+    expect(handler_fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 401 when signature is wrong", async () => {
+    const handler = createDashboardHandler(makeState(), { webhookSecret: "secret" });
+    const res = await handler(webhookReq(SAMPLE_ISSUE_EVENT, { event: "issues", sig: "sha256=bad" }));
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 401 when signature is missing and webhookSecret is set", async () => {
+    const handler = createDashboardHandler(makeState(), { webhookSecret: "secret" });
+    const res = await handler(webhookReq(SAMPLE_ISSUE_EVENT, { event: "issues" }));
+    expect(res.status).toBe(401);
+  });
+
+  it("skips signature check when webhookSecret is not set", async () => {
+    const handler_fn = mock(() => {});
+    const handler = createDashboardHandler(makeState(), { onGithubWebhook: handler_fn });
+    // no sig header, no secret — should still work
+    const res = await handler(webhookReq(SAMPLE_ISSUE_EVENT, { event: "issues" }));
+    expect(res.status).toBe(200);
+    expect(handler_fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("webhook endpoint is reachable even when apiKey auth is set", async () => {
+    const handler_fn = mock(() => {});
+    const handler = createDashboardHandler(makeState(), { apiKey: "secret", onGithubWebhook: handler_fn });
+    const res = await handler(webhookReq(SAMPLE_ISSUE_EVENT, { event: "issues" }));
+    expect(res.status).toBe(200);
+    expect(handler_fn).toHaveBeenCalledTimes(1);
   });
 });
 
