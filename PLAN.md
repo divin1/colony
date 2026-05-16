@@ -122,6 +122,17 @@ Expose colony control as MCP tools for Claude Desktop and other MCP hosts.
 - [x] HTTP client architecture — talks to Colony's existing API; `monitoring.port` must be set
 - [x] Docs: `docs/mcp.md`
 
+### Phase 10 — Mid-session interrupt ✅ (complete)
+
+Pause takes effect immediately — the running agent process is terminated rather than waiting for the session to finish.
+
+- [x] `signal?: AbortSignal` added to `EngineRunOptions` and `AntRunOptions`
+- [x] `claude-cli.ts` — `raceSignal` helper races `reader.read()` against the signal; on abort kills the child process (SIGTERM + 5s SIGKILL escalation) and re-throws `AbortError`
+- [x] `generic-cli.ts` — same pattern
+- [x] `runner.ts` — per-session `AbortController` (`sessionController`) tracked alongside the ant-level one; `pause()` signals `sessionController` when a session is active (broadcasts "pausing…") vs queues for later ("will pause after current session")
+- [x] Supervisor distinguishes session-level abort (pause) from ant-level abort (stop): session abort marks work item `failed`, does not increment crash counter, lets outer loop fall into `waitForResume()`
+- [x] 4 new engine signal tests; total: 270
+
 ### Phase 9 — GitHub webhooks ✅ (complete)
 
 Real-time issue triggers via GitHub webhook push instead of 5-minute polling.
