@@ -433,6 +433,90 @@ describe("createDashboardHandler — task routes", () => {
   });
 });
 
+// --- Skill route tests ---
+
+describe("createDashboardHandler — skill routes", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(`${tmpdir()}/colony-skill-test-`);
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("GET /api/skills returns empty array when skills dir does not exist", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const res = await handler(req("GET", "/api/skills"));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([]);
+  });
+
+  it("PUT /api/skills/:name creates a skill file", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const content = "---\nname: Test Skill\ndescription: A test\n---\n\n## Body";
+    const res = await handler(new Request("http://localhost/api/skills/test-skill", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    }));
+    expect(res.status).toBe(200);
+    const body = await res.json() as { filename: string };
+    expect(body.filename).toBe("test-skill.md");
+  });
+
+  it("GET /api/skills lists created skill files with parsed metadata", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    await handler(new Request("http://localhost/api/skills/my-skill", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "---\nname: My Skill\ndescription: Great skill\n---\n\nBody" }),
+    }));
+    const res = await handler(req("GET", "/api/skills"));
+    expect(res.status).toBe(200);
+    const list = await res.json() as { filename: string; name: string; description: string }[];
+    expect(list).toHaveLength(1);
+    expect(list[0].name).toBe("My Skill");
+    expect(list[0].description).toBe("Great skill");
+    expect(list[0].filename).toBe("my-skill.md");
+  });
+
+  it("GET /api/skills/:name returns file content", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const content = "---\nname: S\n---\n\nHello";
+    await handler(new Request("http://localhost/api/skills/s", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    }));
+    const res = await handler(req("GET", "/api/skills/s"));
+    expect(res.status).toBe(200);
+    const body = await res.json() as { content: string };
+    expect(body.content).toBe(content);
+  });
+
+  it("DELETE /api/skills/:name removes the file", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    await handler(new Request("http://localhost/api/skills/to-delete", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "# skill" }),
+    }));
+    const del = await handler(new Request("http://localhost/api/skills/to-delete", { method: "DELETE" }));
+    expect(del.status).toBe(200);
+    const list = await (await handler(req("GET", "/api/skills"))).json() as unknown[];
+    expect(list).toHaveLength(0);
+  });
+
+  it("returns 400 for path traversal attempts", async () => {
+    const handler = createDashboardHandler(makeState(dir));
+    const res = await handler(new Request("http://localhost/api/skills/..%2F..%2Fetc%2Fpasswd", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "bad" }),
+    }));
+    expect(res.status).toBe(400);
+  });
+});
+
 // --- Config route tests ---
 
 describe("createDashboardHandler — config routes", () => {

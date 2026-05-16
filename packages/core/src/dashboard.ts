@@ -1,4 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from "fs";
+import { join, resolve as resolvePath } from "path";
+import { parse as parseYaml } from "yaml";
 import type { ColonyState } from "./colony-state.js";
 import { TaskStore, taskTitle } from "./task-store.js";
 import type { TaskStatus, AssigneeType, TaskSource } from "./task-store.js";
@@ -11,6 +14,58 @@ import {
   deleteAntYaml,
   writeColonyYaml,
 } from "./config.js";
+
+// --- Skill file helpers ---
+
+interface SkillMeta { filename: string; name: string; description: string; }
+
+function skillsDir(colonyDir: string): string {
+  return join(colonyDir, "skills");
+}
+
+// Returns null if the resolved path escapes the skills directory.
+function resolveSkillPath(colonyDir: string, filename: string): string | null {
+  const dir = skillsDir(colonyDir);
+  const resolved = resolvePath(join(dir, filename));
+  const prefix = dir.endsWith("/") ? dir : dir + "/";
+  if (!resolved.startsWith(prefix)) return null;
+  return resolved;
+}
+
+function parseSkillMeta(content: string, filename: string): SkillMeta {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
+  if (match) {
+    try {
+      const fm = parseYaml(match[1]) as Record<string, unknown>;
+      return {
+        filename,
+        name: typeof fm.name === "string" ? fm.name : filename.replace(/\.md$/, ""),
+        description: typeof fm.description === "string" ? fm.description : "",
+      };
+    } catch { /* fall through */ }
+  }
+  return { filename, name: filename.replace(/\.md$/, ""), description: "" };
+}
+
+function listSkillFiles(colonyDir: string): SkillMeta[] {
+  const dir = skillsDir(colonyDir);
+  if (!existsSync(dir)) return [];
+  try {
+    return readdirSync(dir)
+      .filter((f) => f.endsWith(".md"))
+      .sort()
+      .map((f) => {
+        try {
+          const content = readFileSync(join(dir, f), "utf8");
+          return parseSkillMeta(content, f);
+        } catch {
+          return { filename: f, name: f.replace(/\.md$/, ""), description: "" };
+        }
+      });
+  } catch {
+    return [];
+  }
+}
 
 // Minimal GitHub issues webhook payload — only fields Colony uses.
 export interface GitHubIssueEvent {
@@ -312,6 +367,45 @@ export function createDashboardHandler(
       if (!taskStore) return textResponse("Not found", 404);
       const deleted = taskStore.deleteComment(decodeURIComponent(commentDeleteRoute[2]));
       return deleted ? jsonResponse({ ok: true }) : textResponse("Not found", 404);
+    }
+
+    // --- Skill routes ---
+
+    const configDir2 = state.getConfigDir();
+
+    if (path === "/api/skills" && req.method === "GET") {
+      if (!configDir2) return jsonResponse([]);
+      return jsonResponse(listSkillFiles(configDir2));
+    }
+
+    const skillRoute = path.match(/^\/api\/skills\/([^/]+)$/);
+    if (skillRoute) {
+      if (!configDir2) return textResponse("Config directory not available", 503);
+      const rawName = decodeURIComponent(skillRoute[1]);
+      const filename = rawName.endsWith(".md") ? rawName : `${rawName}.md`;
+      const filePath = resolveSkillPath(configDir2, filename);
+      if (!filePath) return textResponse("Invalid skill name", 400);
+
+      if (req.method === "GET") {
+        if (!existsSync(filePath)) return textResponse("Not found", 404);
+        const content = readFileSync(filePath, "utf8");
+        return jsonResponse({ filename, content });
+      }
+
+      if (req.method === "PUT") {
+        let body: { content?: unknown };
+        try { body = await req.json() as typeof body; } catch { return textResponse("Invalid JSON", 400); }
+        if (typeof body.content !== "string") return textResponse("content is required", 400);
+        mkdirSync(skillsDir(configDir2), { recursive: true });
+        writeFileSync(filePath, body.content, "utf8");
+        return jsonResponse({ ok: true, filename });
+      }
+
+      if (req.method === "DELETE") {
+        if (!existsSync(filePath)) return textResponse("Not found", 404);
+        unlinkSync(filePath);
+        return jsonResponse({ ok: true });
+      }
     }
 
     // Config routes — raw YAML (no env interpolation) so the editor sees/writes template values.

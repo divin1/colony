@@ -1,4 +1,4 @@
-import type { ColonyStatus, Project, Task, TaskComment, TaskStatus, AssigneeType, RawColonyConfig, RawAntConfig } from "./types";
+import type { ColonyStatus, Project, Task, TaskComment, TaskStatus, AssigneeType, SkillInfo, RawColonyConfig, RawAntConfig } from "./types";
 import { AuthError, getStoredKey } from "./auth";
 
 const BASE = "";
@@ -144,4 +144,19 @@ export const api = {
     put(`/api/config/ants/${encodeURIComponent(name)}`, config),
   configAntCreate: (config: RawAntConfig) => postJson("/api/config/ants", config),
   configAntDelete: (name: string) => deleteReq(`/api/config/ants/${encodeURIComponent(name)}`),
+
+  // --- Skills ---
+  skillList: () => get<SkillInfo[]>("/api/skills"),
+  skillGet: (filename: string) => get<{ filename: string; content: string }>(`/api/skills/${encodeURIComponent(filename)}`),
+  skillSave: async (filename: string, content: string): Promise<{ filename: string }> => {
+    const res = await fetch(`/api/skills/${encodeURIComponent(filename)}`, {
+      method: "PUT",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ content }),
+    });
+    if (res.status === 401) throw new AuthError();
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return res.json() as Promise<{ filename: string }>;
+  },
+  skillDelete: (filename: string) => deleteReq(`/api/skills/${encodeURIComponent(filename)}`),
 };

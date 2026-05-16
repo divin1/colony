@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { api } from "@/lib/api";
-import type { RawAntConfig, AntEngine } from "@/lib/types";
+import type { RawAntConfig, AntEngine, SkillInfo } from "@/lib/types";
 import { RestartBanner } from "@/components/RestartBanner";
 import { Save, AlertCircle, CheckCircle2, Info, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -151,6 +152,82 @@ function Section({ title, children }: { title: string; children: React.ReactNode
         {title}
       </p>
       {children}
+    </div>
+  );
+}
+
+function SkillPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data: skills = [], isLoading } = useQuery({
+    queryKey: ["skills"],
+    queryFn: api.skillList,
+  });
+
+  const paths = value.split("\n").map((s) => s.trim()).filter(Boolean);
+  const knownPathSet = new Set(skills.map((s: SkillInfo) => `skills/${s.filename}`));
+  const unknownPaths = paths.filter((p) => !knownPathSet.has(p));
+
+  const toggle = (path: string, checked: boolean) => {
+    if (checked) {
+      onChange([...paths.filter((p) => p !== path), path].join("\n"));
+    } else {
+      onChange(paths.filter((p) => p !== path).join("\n"));
+    }
+  };
+
+  const handleExtraChange = (text: string) => {
+    const custom = text.split("\n").map((s) => s.trim()).filter(Boolean);
+    const knownSelected = paths.filter((p) => knownPathSet.has(p));
+    onChange([...knownSelected, ...custom].join("\n"));
+  };
+
+  if (isLoading) return <p className="text-xs text-muted-foreground">Loading skills…</p>;
+
+  return (
+    <div className="flex flex-col gap-3">
+      {skills.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          No skills yet.{" "}
+          <Link href="/skills" className="underline hover:text-foreground transition-colors">
+            Create a skill
+          </Link>{" "}
+          to get started.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {skills.map((skill: SkillInfo) => (
+            <label key={skill.filename} className="flex items-start gap-2.5 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={paths.includes(`skills/${skill.filename}`)}
+                onChange={(e) => toggle(`skills/${skill.filename}`, e.target.checked)}
+                className="mt-0.5 accent-primary"
+              />
+              <div className="flex flex-col min-w-0">
+                <span className="text-sm group-hover:text-foreground transition-colors">
+                  {skill.name}
+                </span>
+                {skill.description && (
+                  <span className="text-xs text-muted-foreground truncate">{skill.description}</span>
+                )}
+                <code className="text-[10px] text-muted-foreground/50 font-mono">
+                  skills/{skill.filename}
+                </code>
+              </div>
+            </label>
+          ))}
+        </div>
+      )}
+      {unknownPaths.length > 0 && (
+        <Field label="Custom paths" hint="One path per line, relative to the colony directory.">
+          <Textarea
+            value={unknownPaths.join("\n")}
+            onChange={(e) => handleExtraChange(e.target.value)}
+            rows={2}
+            className="font-mono text-xs"
+            placeholder="skills/my-custom-skill.md"
+          />
+        </Field>
+      )}
     </div>
   );
 }
@@ -426,18 +503,10 @@ export function AntConfigEditor({ antName }: { antName: string }) {
 
       {/* Skills */}
       <Section title="Skills">
-        <Field
-          label="Skill file paths"
-          hint="One path per line, relative to the colony directory. e.g. config/examples/skills/code-review-standards.md"
-        >
-          <Textarea
-            value={form.skills}
-            onChange={(e) => set("skills", e.target.value)}
-            rows={3}
-            className="font-mono text-xs"
-            placeholder={"skills/code-review.md\nskills/testing.md"}
-          />
-        </Field>
+        <p className="text-xs text-muted-foreground -mt-2">
+          Select skills to inject into every session for this ant.
+        </p>
+        <SkillPicker value={form.skills} onChange={(val) => set("skills", val)} />
       </Section>
 
       <Separator />

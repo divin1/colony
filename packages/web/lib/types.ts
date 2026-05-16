@@ -1,4 +1,10 @@
 export type AntRuntimeState = "starting" | "idle" | "running" | "paused" | "crashed" | "backoff";
+
+export interface SkillInfo {
+  filename: string;
+  name: string;
+  description: string;
+}
 export type TaskStatus = "backlog" | "todo" | "in_progress" | "in_review" | "done";
 export type AssigneeType = "ant" | "human";
 export type TaskSource = "manual" | "github_issue" | "cron" | "discord";
