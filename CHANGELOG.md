@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] — 2026-05-16
+
+### Added
+
+- **Web dashboard** (`packages/web/`) — Next.js 16 App Router frontend with shadcn/ui; dark theme.
+  - Kanban board (`/`) — 4-column work item board (Queued / In Progress / Done / Failed), add-work modal, item detail drawer.
+  - Ant grid (`/ants`) — status dots, pause/resume/clear, assign-work button; ant detail page with live SSE output and controls.
+  - New ant form (`/ants/new`) — create an ant from a form; sanitized name input; success state.
+  - Config editor (`/ants/[name]` → Config tab) — form fields for all ant YAML fields; "Restart required" banner with "Reload now" button.
+  - Settings page (`/settings`) — colony-level config editor.
+  - Work history table (`/work`) — filterable by status, click-to-drawer.
+  - Auth gate — `AuthGate` component probes `api.status()` on mount; shows API key login card on 401; stores key in `localStorage`.
+- **Work item persistence** (`packages/core/src/work-store.ts`) — SQLite table (`colony-work.db`); full lifecycle: queued → running → done / failed / cancelled. REST API: `GET /api/work`, `GET /api/work/:id`, `DELETE /api/work/:id`.
+- **Config CRUD API** — `GET/PUT /api/config` (colony.yaml), `GET /api/config/ants`, `GET/POST/PUT/DELETE /api/config/ants/:name`. Raw YAML readers — no env interpolation, so template values like `${DISCORD_TOKEN}` display as-is.
+- **Hot reload** — `POST /api/reload` re-reads YAML, diffs running ants against new config, stops removed ants and starts added ones without restarting the runner. `X-Colony-Restart-Required: true` response header signals the UI to show a banner.
+- **MCP server** (`packages/integrations/mcp/`) — `colony mcp [--url <url>] [--key <key>]` CLI command; StdioServerTransport; 6 tools: `colony_status`, `colony_prompt`, `colony_pause`, `colony_resume`, `colony_clear`, `colony_output`. Talks to Colony's HTTP API; no shared memory with the runner. `COLONY_API_KEY` env var supported as an alternative to `--key`.
+- **API key auth** — `COLONY_API_KEY` env var on the runner protects all `/api/*` routes with a Bearer token. `?key=` query param accepted for SSE endpoints (EventSource cannot set headers). Inline HTML dashboard prompts for the key on 401 (stored in `sessionStorage`).
+- **Discord optional** — removed `addReaction` / `waitForReaction` from `MessagingIntegration` (dead code since v0.4.0). Three-way output priority: full Discord bot → webhook → console. `colony init` scaffold defaults to Discord commented-out with `monitoring.port: 8080` enabled.
+- **Abortable supervisor loop** — `runAntWithSupervision` now accepts an `AbortController` and resolves cleanly when signalled. `PromiseQueue.next(signal)` and `sleepInterruptible` are signal-aware. Used internally by hot reload to stop individual ants.
+- `docs/cli.md` — `colony mcp` command reference; `COLONY_API_KEY` env var entry.
+- `docs/getting-started.md` — web dashboard and MCP server sections.
+- `docs/mcp.md` — authentication section (`--key` flag and `COLONY_API_KEY` env block).
+
+### Changed
+
+- `createDashboardHandler(state, apiKey?)` — new optional second parameter; auth check on all `/api/*`.
+- `runAntWithSupervision` now returns `Promise<void>` (was `Promise<never>`).
+- CORS headers applied to all dashboard responses (required for separate Next.js frontend process).
+- `pushPrompt` on `AntControlHandles` accepts optional `source?: WorkItemSource` parameter.
+
 ## [0.4.0] — 2026-05-15
 
 ### Changed
