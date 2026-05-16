@@ -3,6 +3,7 @@ import type { AntRuntimeState } from "@/lib/types";
 
 const STATE_COLORS: Record<AntRuntimeState, string> = {
   starting: "bg-info animate-pulse",
+  idle: "bg-muted-foreground/40",
   running: "bg-success",
   paused: "bg-warning",
   crashed: "bg-danger",

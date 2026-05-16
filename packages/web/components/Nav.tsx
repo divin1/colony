@@ -3,28 +3,65 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Bug, History, Settings } from "lucide-react";
+import { LayoutDashboard, Bug, Settings, ChevronDown, Plus } from "lucide-react";
+import type { Project } from "@/lib/types";
 
 const links = [
   { href: "/", label: "Board", icon: LayoutDashboard },
   { href: "/ants", label: "Ants", icon: Bug },
-  { href: "/work", label: "History", icon: History },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function Nav({ colonyName }: { colonyName?: string }) {
+export function Nav({
+  colonyName,
+  projects,
+  selectedProjectId,
+  onProjectChange,
+  onNewProject,
+}: {
+  colonyName?: string;
+  projects?: Project[];
+  selectedProjectId?: string;
+  onProjectChange?: (id: string) => void;
+  onNewProject?: () => void;
+}) {
   const pathname = usePathname();
+  const selectedProject = projects?.find((p) => p.id === selectedProjectId);
 
   return (
     <header className="border-b border-border bg-card sticky top-0 z-40">
-      <div className="flex items-center gap-6 px-5 h-12">
-        <div className="flex items-center gap-2 mr-4">
+      <div className="flex items-center gap-4 px-5 h-12">
+        <div className="flex items-center gap-2 mr-2">
           <span className="text-base">🐜</span>
           <span className="font-semibold text-sm text-foreground">
             {colonyName ?? "Colony"}
           </span>
         </div>
-        <nav className="flex items-center gap-1">
+
+        {/* Project switcher — only shown on board page when projects are available */}
+        {projects && projects.length > 0 && onProjectChange && (
+          <div className="flex items-center gap-1 border-l border-border pl-4">
+            <ChevronDown className="size-3 text-muted-foreground" />
+            <select
+              value={selectedProjectId ?? ""}
+              onChange={(e) => {
+                if (e.target.value === "__new__") {
+                  onNewProject?.();
+                } else {
+                  onProjectChange(e.target.value);
+                }
+              }}
+              className="h-7 bg-transparent text-sm font-medium focus:outline-none cursor-pointer appearance-none pr-2"
+            >
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+              {onNewProject && <option value="__new__">＋ New project…</option>}
+            </select>
+          </div>
+        )}
+
+        <nav className="flex items-center gap-1 ml-auto">
           {links.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}

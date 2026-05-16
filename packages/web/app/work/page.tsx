@@ -4,152 +4,145 @@ import { Suspense, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { Nav } from "@/components/Nav";
-import { WorkItemDrawer } from "@/components/WorkItemDrawer";
+import { TaskDrawer } from "@/components/TaskDrawer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import type { PersistedWorkItem, WorkItemStatus, WorkItemSource } from "@/lib/types";
+import type { Task, TaskStatus, TaskSource } from "@/lib/types";
 import { formatRelative, formatDuration, cn } from "@/lib/utils";
-import { GitBranch, MessageSquare, Clock, User } from "lucide-react";
+import { GitBranch, MessageSquare, Clock, User, Bot } from "lucide-react";
 
-const STATUS_VARIANT: Record<WorkItemStatus, "success" | "info" | "warning" | "danger" | "secondary" | "outline"> = {
-  queued: "secondary",
-  running: "info",
+const STATUS_VARIANT: Record<TaskStatus, "success" | "info" | "warning" | "danger" | "secondary" | "outline"> = {
+  backlog: "outline",
+  todo: "secondary",
+  in_progress: "info",
+  in_review: "warning",
   done: "success",
-  failed: "danger",
-  cancelled: "outline",
 };
 
-const SOURCE_ICONS: Record<WorkItemSource, React.ComponentType<{ className?: string }>> = {
-  github_issue: GitBranch,
-  discord: MessageSquare,
-  cron: Clock,
-  manual: User,
+const STATUS_LABEL: Record<TaskStatus, string> = {
+  backlog: "Backlog", todo: "To Do", in_progress: "In Progress",
+  in_review: "In Review", done: "Done",
 };
 
-const ALL_STATUSES: WorkItemStatus[] = ["queued", "running", "done", "failed", "cancelled"];
+const SOURCE_ICONS: Record<TaskSource, React.ComponentType<{ className?: string }>> = {
+  github_issue: GitBranch, discord: MessageSquare, cron: Clock, manual: User,
+};
 
-function WorkHistoryContent() {
+const ALL_STATUSES: TaskStatus[] = ["todo", "in_progress", "in_review", "done", "backlog"];
+
+function TaskListContent() {
   const searchParams = useSearchParams();
-  const antFilter = searchParams.get("ant") ?? undefined;
-  const [statusFilter, setStatusFilter] = useState<WorkItemStatus[]>([]);
-  const [selectedItem, setSelectedItem] = useState<PersistedWorkItem | null>(null);
+  const assigneeFilter = searchParams.get("assignee") ?? undefined;
+  const [statusFilter, setStatusFilter] = useState<TaskStatus[]>([]);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   const { data: status } = useQuery({ queryKey: ["status"], queryFn: api.status });
+  const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: api.projectList });
+  const ants = status?.ants ?? [];
 
-  const { data: workItems = [], isLoading } = useQuery({
-    queryKey: ["work", antFilter, statusFilter],
-    queryFn: () =>
-      api.workList({
-        ant: antFilter,
-        status: statusFilter.length > 0 ? statusFilter : undefined,
-        limit: 200,
-      }),
+  const { data: tasks = [], isLoading } = useQuery({
+    queryKey: ["tasks-all", assigneeFilter, statusFilter],
+    queryFn: () => api.taskList({
+      assignee: assigneeFilter,
+      status: statusFilter.length > 0 ? statusFilter : undefined,
+      limit: 300,
+    }),
   });
 
-  const toggleStatus = (s: WorkItemStatus) =>
-    setStatusFilter((prev) =>
-      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
-    );
+  const toggleStatus = (s: TaskStatus) =>
+    setStatusFilter((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]);
+
+  const projectMap = new Map(projects.map((p) => [p.id, p.name]));
 
   return (
     <div className="min-h-screen flex flex-col">
       <Nav colonyName={status?.colony} />
       <main className="flex-1 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-lg font-semibold">
-            Work history{antFilter && <span className="text-muted-foreground ml-2 font-normal text-base">· {antFilter}</span>}
+        <div className="mb-4">
+          <h1 className="text-lg font-semibold mb-3">
+            Tasks
+            {assigneeFilter && (
+              <span className="text-muted-foreground ml-2 font-normal text-base">· {assigneeFilter}</span>
+            )}
           </h1>
-        </div>
-
-        <div className="flex flex-wrap gap-2 mb-4">
-          {ALL_STATUSES.map((s) => (
-            <Button
-              key={s}
-              variant={statusFilter.includes(s) ? "secondary" : "ghost"}
-              size="sm"
-              className={cn("text-xs h-7", statusFilter.includes(s) && "ring-1 ring-border")}
-              onClick={() => toggleStatus(s)}
-            >
-              <Badge variant={STATUS_VARIANT[s]} className="mr-1 text-[10px] px-1 py-0">
-                {s}
-              </Badge>
-              {workItems.filter((i) => i.status === s).length}
-            </Button>
-          ))}
+          <div className="flex flex-wrap gap-2">
+            {ALL_STATUSES.map((s) => (
+              <Button
+                key={s}
+                variant={statusFilter.includes(s) ? "secondary" : "ghost"}
+                size="sm"
+                className={cn("text-xs h-7", statusFilter.includes(s) && "ring-1 ring-border")}
+                onClick={() => toggleStatus(s)}
+              >
+                <Badge variant={STATUS_VARIANT[s]} className="mr-1 text-[10px] px-1 py-0">
+                  {STATUS_LABEL[s]}
+                </Badge>
+                {tasks.filter((t) => t.status === s).length}
+              </Button>
+            ))}
+          </div>
         </div>
 
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : workItems.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No work items found.</p>
+        ) : tasks.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No tasks found.</p>
         ) : (
           <div className="rounded-lg border border-border overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-card">
-                  <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">
-                    Title
-                  </th>
-                  <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">
-                    Ant
-                  </th>
-                  <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider hidden sm:table-cell">
-                    Source
-                  </th>
-                  <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">
-                    Duration
-                  </th>
-                  <th className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">
-                    Created
-                  </th>
+                  {["Title", "Project", "Assignee", "Source", "Status", "Created"].map((h) => (
+                    <th key={h} className="text-left px-4 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider first:pl-4 last:pr-4 hidden sm:table-cell first:table-cell last:table-cell">
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {workItems.map((item, i) => {
-                  const SourceIcon = SOURCE_ICONS[item.source];
-                  const duration =
-                    item.startedAt && item.completedAt
-                      ? formatDuration(item.startedAt, item.completedAt)
-                      : item.startedAt
-                      ? formatDuration(item.startedAt)
-                      : "—";
+                {tasks.map((task, i) => {
+                  const SourceIcon = SOURCE_ICONS[task.source];
                   return (
                     <tr
-                      key={item.id}
+                      key={task.id}
                       className={cn(
                         "border-b border-border cursor-pointer hover:bg-card/50 transition-colors",
-                        i === workItems.length - 1 && "border-b-0"
+                        i === tasks.length - 1 && "border-b-0"
                       )}
-                      onClick={() => setSelectedItem(item)}
+                      onClick={() => setSelectedTask(task)}
                     >
                       <td className="px-4 py-3">
-                        <span className="line-clamp-1 max-w-[300px]">{item.title}</span>
+                        <span className="line-clamp-1 max-w-[260px]">{task.title}</span>
                       </td>
-                      <td className="px-4 py-3 hidden md:table-cell">
-                        <code className="text-xs bg-secondary px-1.5 py-0.5 rounded">
-                          {item.antName}
-                        </code>
+                      <td className="px-4 py-3 hidden sm:table-cell text-xs text-muted-foreground">
+                        {projectMap.get(task.projectId) ?? "—"}
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell">
-                        <span className="flex items-center gap-1 text-muted-foreground text-xs">
+                        {task.assigneeType === "ant" ? (
+                          <span className="flex items-center gap-1 text-xs">
+                            <Bot className="size-3" />
+                            {task.assigneeName}
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <User className="size-3" /> Human
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 hidden sm:table-cell">
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
                           <SourceIcon className="size-3" />
-                          {item.source}
+                          {task.source}
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <Badge variant={STATUS_VARIANT[item.status]} className="text-[10px] px-1.5 py-0">
-                          {item.status}
+                        <Badge variant={STATUS_VARIANT[task.status]} className="text-[10px] px-1.5 py-0">
+                          {STATUS_LABEL[task.status]}
                         </Badge>
                       </td>
-                      <td className="px-4 py-3 hidden lg:table-cell text-xs text-muted-foreground">
-                        {duration}
-                      </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">
-                        {formatRelative(item.createdAt)}
+                        {formatRelative(task.createdAt)}
                       </td>
                     </tr>
                   );
@@ -160,19 +153,20 @@ function WorkHistoryContent() {
         )}
       </main>
 
-      <WorkItemDrawer
-        item={selectedItem}
-        open={selectedItem !== null}
-        onClose={() => setSelectedItem(null)}
+      <TaskDrawer
+        task={selectedTask}
+        open={selectedTask !== null}
+        ants={ants}
+        onClose={() => setSelectedTask(null)}
       />
     </div>
   );
 }
 
-export default function WorkHistoryPage() {
+export default function TaskListPage() {
   return (
     <Suspense>
-      <WorkHistoryContent />
+      <TaskListContent />
     </Suspense>
   );
 }
