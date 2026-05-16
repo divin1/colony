@@ -288,9 +288,58 @@ This works for all ants regardless of their `triggers` configuration. No special
 
 ---
 
+## Web dashboard
+
+Colony includes a local web dashboard for monitoring ants, assigning work on a Kanban board, and editing configuration through forms — no terminal or YAML required after initial setup.
+
+Enable it by adding `monitoring.port` to `colony.yaml`:
+
+```yaml
+monitoring:
+  port: 8080
+```
+
+Then start the web frontend in a second terminal:
+
+```bash
+bun --cwd packages/web next dev   # http://localhost:3000
+```
+
+The frontend proxies all API calls to `http://localhost:8080` (set `COLONY_API_URL` to override).
+
+To protect the dashboard with an API key, set `COLONY_API_KEY` in the runner's environment. The web frontend will prompt for the key on first load.
+
+---
+
+## MCP server (Claude Desktop / Claude Code integration)
+
+If you use Claude Desktop or Claude Code, you can manage your colony directly from Claude via the MCP server:
+
+```bash
+colony mcp --url http://localhost:8080
+```
+
+Configure once in `claude_desktop_config.json` or `.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "colony": {
+      "command": "colony",
+      "args": ["mcp", "--url", "http://localhost:8080"]
+    }
+  }
+}
+```
+
+This gives Claude tools to check ant status, queue work instructions, pause/resume ants, and stream recent output. See [mcp.md](./mcp.md) for the full reference.
+
+---
+
 ## Next steps
 
 - **Production deployment** — see [docker.md](./docker.md) to run your colony 24/7 in a container.
 - **Full config reference** — see [configuration.md](./configuration.md) for every available option.
 - **CLI reference** — see [cli.md](./cli.md) for all commands and flags.
+- **MCP integration** — see [mcp.md](./mcp.md) for Claude Desktop / Claude Code setup.
 - **More ant examples** — see `config/examples/` for a code reviewer, issue triager, and dependency updater.

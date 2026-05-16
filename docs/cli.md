@@ -16,7 +16,7 @@ This downloads the correct pre-built binary for your OS and architecture to `~/.
 
 ```bash
 # Install a specific version
-COLONY_VERSION=v0.4.0 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
+COLONY_VERSION=v0.5.0 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
 
 # Install to a custom directory
 COLONY_INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
@@ -171,6 +171,55 @@ The runner disconnects from Discord before exiting. In-progress ant sessions are
 
 ---
 
+### `colony mcp`
+
+Starts the Colony MCP server, allowing Claude Desktop, Claude Code, or any MCP-compatible host to control the colony directly via natural language.
+
+```bash
+colony mcp                              # connect to http://localhost:8080
+colony mcp --url http://localhost:9000  # custom runner URL
+colony mcp --url http://localhost:8080 --key my-api-key  # with auth
+```
+
+The MCP server communicates with the Colony runner over HTTP (`monitoring.port` must be configured in `colony.yaml`). It uses `stdin/stdout` transport — Claude Desktop spawns it as a subprocess automatically.
+
+**Options:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--url <url>` | `http://localhost:8080` | Colony HTTP API base URL |
+| `--key <key>` | — | API key (also read from `COLONY_API_KEY` env var) |
+
+**Configure in Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "colony": {
+      "command": "colony",
+      "args": ["mcp", "--url", "http://localhost:8080"]
+    }
+  }
+}
+```
+
+**Configure in Claude Code** (`.claude/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "colony": {
+      "command": "colony",
+      "args": ["mcp", "--url", "http://localhost:8080"]
+    }
+  }
+}
+```
+
+See [mcp.md](./mcp.md) for the full list of available tools and auth options.
+
+---
+
 ## Environment variables
 
 All three commands read environment variables for secret resolution. The recommended approach is to keep a `.env` file in your colony directory — it is loaded automatically:
@@ -196,6 +245,7 @@ If `--env` is not given and no `.env` exists in the colony directory, only varia
 | `DISCORD_TOKEN` | Optional | Discord bot token — for full two-way Discord integration |
 | `DISCORD_WEBHOOK_URL` | Optional | Discord incoming webhook URL — for send-only notifications |
 | `GITHUB_TOKEN` | When using GitHub | GitHub personal access token or app token |
+| `COLONY_API_KEY` | Optional | Protects the dashboard and HTTP API with a Bearer token. Set on the runner to require auth; set on the MCP server (or use `--key`) to authenticate against a protected runner. |
 
 Variables referenced in YAML as `${VAR_NAME}` must be set before running `validate` or `run`.
 

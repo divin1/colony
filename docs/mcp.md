@@ -141,6 +141,52 @@ Return recent output from an ant's sessions.
 
 ---
 
+## Authentication
+
+If your Colony dashboard is protected with an API key (`COLONY_API_KEY` set in the runner's environment), pass the key to the MCP server with `--key` or the `COLONY_API_KEY` environment variable:
+
+```bash
+colony mcp --url http://localhost:8080 --key your-api-key
+```
+
+Or via environment variable (the MCP server inherits the shell environment):
+
+```bash
+export COLONY_API_KEY=your-api-key
+colony mcp --url http://localhost:8080
+```
+
+In `claude_desktop_config.json` / `.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "colony": {
+      "command": "colony",
+      "args": ["mcp", "--url", "http://localhost:8080", "--key", "your-api-key"]
+    }
+  }
+}
+```
+
+Or use the env block to keep the key out of the args array:
+
+```json
+{
+  "mcpServers": {
+    "colony": {
+      "command": "colony",
+      "args": ["mcp", "--url", "http://localhost:8080"],
+      "env": {
+        "COLONY_API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+---
+
 ## Custom URL
 
 If Colony runs on a different host or port, pass `--url`:
@@ -165,3 +211,5 @@ If Colony runs on a different host or port, pass `--url`:
 **"Ant not found"** — The ant name is case-sensitive and must match the `name:` field in the ant's YAML file, not the filename.
 
 **Tools not appearing in Claude** — Restart Claude Desktop / Claude Code after editing the config file. Check that `colony` is on your `PATH` (`which colony`).
+
+**"401 Unauthorized"** — The runner has `COLONY_API_KEY` set but the MCP server is not sending it. Pass `--key` or set `COLONY_API_KEY` in the MCP server's environment (see Authentication above).
