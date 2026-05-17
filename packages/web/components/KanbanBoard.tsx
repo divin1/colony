@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 import {
   DndContext, DragOverlay, PointerSensor, TouchSensor,
   useSensor, useSensors, closestCenter,
@@ -75,6 +76,7 @@ export function KanbanBoard({
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addDefaultStatus, setAddDefaultStatus] = useState<TaskStatus>("backlog");
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [mobileCol, setMobileCol] = useState<TaskStatus>("todo");
 
   const { data: tasks = [] } = useQuery({
     queryKey: ["tasks", projectId],
@@ -127,15 +129,72 @@ export function KanbanBoard({
   const todoTasks = byStatus("todo");
   const todoIds = todoTasks.map((t) => t.id);
 
+  const openAdd = (status: TaskStatus) => {
+    setAddDefaultStatus(status === "backlog" ? "backlog" : "todo");
+    setAddModalOpen(true);
+  };
+
   return (
     <>
+      {/* ── Mobile view (below md) ─────────────────────────────── */}
+      <div className="md:hidden flex flex-col">
+        {/* Column tab strip */}
+        <div className="flex overflow-x-auto border-b border-border mb-3 -mx-5 px-5">
+          {COLUMNS.map((col) => {
+            const count = byStatus(col.status).length;
+            return (
+              <button
+                key={col.status}
+                onClick={() => setMobileCol(col.status)}
+                className={cn(
+                  "flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors whitespace-nowrap",
+                  mobileCol === col.status
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground"
+                )}
+              >
+                {col.label}
+                {count > 0 && (
+                  <span className="text-[10px] bg-secondary px-1.5 py-0.5 rounded-full leading-none">
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Active column */}
+        <div className="flex items-center justify-end mb-2">
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1"
+            onClick={() => openAdd(mobileCol)}>
+            <Plus className="size-3" /> Add task
+          </Button>
+        </div>
+        <div className={`flex flex-col gap-2 rounded-lg border border-border bg-card/50 p-2 min-h-[200px] ${COLUMN_ACCENT[mobileCol]}`}>
+          {byStatus(mobileCol).length === 0 ? (
+            <div className="flex items-center justify-center h-full min-h-[160px]">
+              <p className="text-xs text-muted-foreground">
+                {COLUMNS.find((c) => c.status === mobileCol)?.emptyText}
+              </p>
+            </div>
+          ) : (
+            byStatus(mobileCol).map((task) => (
+              <TaskCard key={task.id} task={task} commentCount={0}
+                onClick={() => setSelectedTask(task)} />
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* ── Desktop view (md+) ────────────────────────────────── */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        <div className="hidden md:flex gap-4 overflow-x-auto pb-4">
           {COLUMNS.map((col) => {
             const items = byStatus(col.status);
             const isTodo = col.status === "todo";
@@ -151,22 +210,13 @@ export function KanbanBoard({
                       {items.length}
                     </span>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-6"
-                    onClick={() => {
-                      setAddDefaultStatus(col.status === "backlog" ? "backlog" : "todo");
-                      setAddModalOpen(true);
-                    }}
-                  >
+                  <Button variant="ghost" size="icon" className="size-6"
+                    onClick={() => openAdd(col.status)}>
                     <Plus className="size-3.5" />
                   </Button>
                 </div>
 
-                <div
-                  className={`flex flex-col gap-2 rounded-lg border border-border bg-card/50 p-2 min-h-[200px] ${COLUMN_ACCENT[col.status]}`}
-                >
+                <div className={`flex flex-col gap-2 rounded-lg border border-border bg-card/50 p-2 min-h-[200px] ${COLUMN_ACCENT[col.status]}`}>
                   {items.length === 0 ? (
                     <div className="flex items-center justify-center h-full min-h-[160px]">
                       <p className="text-xs text-muted-foreground">{col.emptyText}</p>
@@ -174,22 +224,14 @@ export function KanbanBoard({
                   ) : isTodo ? (
                     <SortableContext items={todoIds} strategy={verticalListSortingStrategy}>
                       {todoTasks.map((task) => (
-                        <SortableTaskCard
-                          key={task.id}
-                          task={task}
-                          commentCount={0}
-                          onClick={() => setSelectedTask(task)}
-                        />
+                        <SortableTaskCard key={task.id} task={task} commentCount={0}
+                          onClick={() => setSelectedTask(task)} />
                       ))}
                     </SortableContext>
                   ) : (
                     items.map((task) => (
-                      <TaskCard
-                        key={task.id}
-                        task={task}
-                        commentCount={0}
-                        onClick={() => setSelectedTask(task)}
-                      />
+                      <TaskCard key={task.id} task={task} commentCount={0}
+                        onClick={() => setSelectedTask(task)} />
                     ))
                   )}
                 </div>
@@ -203,21 +245,12 @@ export function KanbanBoard({
         </DragOverlay>
       </DndContext>
 
-      <TaskDrawer
-        task={selectedTask}
-        open={selectedTask !== null}
-        ants={ants}
-        onClose={() => setSelectedTask(null)}
-      />
+      <TaskDrawer task={selectedTask} open={selectedTask !== null} ants={ants}
+        onClose={() => setSelectedTask(null)} />
 
-      <AddTaskModal
-        open={addModalOpen}
-        onClose={() => setAddModalOpen(false)}
-        projects={projects}
-        defaultProjectId={projectId}
-        ants={ants}
-        defaultStatus={addDefaultStatus}
-      />
+      <AddTaskModal open={addModalOpen} onClose={() => setAddModalOpen(false)}
+        projects={projects} defaultProjectId={projectId} ants={ants}
+        defaultStatus={addDefaultStatus} />
     </>
   );
 }

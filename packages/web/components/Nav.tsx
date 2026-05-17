@@ -32,7 +32,7 @@ export function Nav({
   return (
     <header className="border-b border-border bg-card sticky top-0 z-40">
       <div className="flex items-center gap-4 px-5 h-12">
-        <div className="flex items-center gap-2 mr-2">
+        <div className="flex items-center gap-2 mr-2 shrink-0">
           <span className="text-base">🐜</span>
           <span className="font-semibold text-sm text-foreground">
             {colonyName ?? "Colony"}
@@ -71,20 +71,21 @@ export function Nav({
           </div>
         )}
 
-        <nav className="flex items-center gap-1 ml-auto">
+        <nav className="flex items-center gap-0.5 ml-auto">
           {links.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
               href={href}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors",
+                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm transition-colors",
                 pathname === href || (href !== "/" && pathname.startsWith(href))
                   ? "bg-secondary text-foreground"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
               )}
+              title={label}
             >
               <Icon className="size-3.5" />
-              {label}
+              <span className="hidden sm:inline">{label}</span>
             </Link>
           ))}
         </nav>
