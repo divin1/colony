@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { api } from "@/lib/api";
 import type { RawAntConfig, AntEngine, SkillInfo } from "@/lib/types";
 import { RestartBanner } from "@/components/RestartBanner";
-import { Save, AlertCircle, CheckCircle2, Info, Trash2 } from "lucide-react";
+import { Save, AlertCircle, AlertTriangle, CheckCircle2, Info, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Flat form state — mirrors RawAntConfig but flattened for easier binding.
@@ -165,6 +165,8 @@ function SkillPicker({ value, onChange }: { value: string; onChange: (v: string)
   const paths = value.split("\n").map((s) => s.trim()).filter(Boolean);
   const knownPathSet = new Set(skills.map((s: SkillInfo) => `skills/${s.filename}`));
   const unknownPaths = paths.filter((p) => !knownPathSet.has(p));
+  // Paths that look like skills-directory files but weren't found — likely typos or deleted skills.
+  const missingSkillPaths = unknownPaths.filter((p) => /^skills\/[^/]+\.md$/.test(p));
 
   const toggle = (path: string, checked: boolean) => {
     if (checked) {
@@ -227,6 +229,17 @@ function SkillPicker({ value, onChange }: { value: string; onChange: (v: string)
             placeholder="skills/my-custom-skill.md"
           />
         </Field>
+      )}
+      {missingSkillPaths.length > 0 && (
+        <div className="flex flex-col gap-1">
+          {missingSkillPaths.map((p) => (
+            <div key={p} className="flex items-center gap-1.5 text-xs text-warning">
+              <AlertTriangle className="size-3 shrink-0" />
+              <code className="font-mono">{p}</code>
+              <span className="text-muted-foreground">— not found in skills directory</span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
