@@ -227,6 +227,7 @@ async function runAntWithSupervision(
   const pollIntervalMs = pollIntervalRaw ? parseTimeoutMs(pollIntervalRaw) : 0;
 
   const antState = createState(ant.state?.backend ?? "memory", ant.state?.path);
+  colonyState.registerAntState(ant.name, antState);
 
   const defaultPrompt = `You are ${ant.name}. ${ant.description}. Begin your work session now.`;
 

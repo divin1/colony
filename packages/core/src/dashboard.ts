@@ -636,6 +636,20 @@ export function createDashboardHandler(
         const cleared = state.clearQueue(antName);
         return jsonResponse({ ok: true, cleared });
       }
+
+      // GET /api/ants/:name/memory — last session summary
+      if (action === "memory" && req.method === "GET") {
+        if (!state.getAntStatus(antName)) return textResponse("Ant not found", 404);
+        const summary = state.getAntMemory(antName);
+        return jsonResponse({ antName, summary });
+      }
+
+      // DELETE /api/ants/:name/memory — clear last session summary
+      if (action === "memory" && req.method === "DELETE") {
+        if (!state.getAntStatus(antName)) return textResponse("Ant not found", 404);
+        state.clearAntMemory(antName);
+        return jsonResponse({ ok: true });
+      }
     }
 
     // GET / — dashboard HTML

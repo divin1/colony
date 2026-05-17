@@ -1,3 +1,5 @@
+import type { AntState } from "./state.js";
+
 export interface ReloadResult {
   added: string[];
   removed: string[];
@@ -45,6 +47,7 @@ export class ColonyState {
   private readonly entries = new Map<string, AntEntry>();
   private readonly subscribers = new Map<string, Set<(line: string) => void>>();
   private readonly eventSubscribers = new Set<(event: ColonyEvent) => void>();
+  private readonly antStates = new Map<string, AntState>();
   private readonly _configDir: string | null;
   private reloadCallback: (() => Promise<ReloadResult>) | null = null;
 
@@ -170,6 +173,21 @@ export class ColonyState {
     const entry = this.entries.get(name);
     if (!entry) return 0;
     return entry.controls.clearQueue();
+  }
+
+  registerAntState(name: string, antState: AntState): void {
+    this.antStates.set(name, antState);
+  }
+
+  getAntMemory(name: string): string | null {
+    return this.antStates.get(name)?.getLastSessionSummary(name) ?? null;
+  }
+
+  clearAntMemory(name: string): boolean {
+    const s = this.antStates.get(name);
+    if (!s) return false;
+    s.clearSessionSummary(name);
+    return true;
   }
 
   subscribeOutput(name: string, cb: (line: string) => void): () => void {

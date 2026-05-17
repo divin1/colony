@@ -7,6 +7,8 @@ export interface AntState {
   getLastSessionSummary(antName: string): string | null;
   /** Stores the closing summary for the given ant, overwriting any previous value. */
   setSessionSummary(antName: string, summary: string): void;
+  /** Removes the stored summary for the given ant. */
+  clearSessionSummary(antName: string): void;
 }
 
 class MemoryState implements AntState {
@@ -32,6 +34,10 @@ class MemoryState implements AntState {
 
   setSessionSummary(antName: string, summary: string): void {
     this.summaries.set(antName, summary);
+  }
+
+  clearSessionSummary(antName: string): void {
+    this.summaries.delete(antName);
   }
 }
 
@@ -88,6 +94,10 @@ class SQLiteState implements AntState {
        ON CONFLICT(ant_name) DO UPDATE SET summary = excluded.summary, updated_at = excluded.updated_at`,
       [antName, summary, Date.now()]
     );
+  }
+
+  clearSessionSummary(antName: string): void {
+    this.db.run("DELETE FROM session_summaries WHERE ant_name = ?", [antName]);
   }
 }
 

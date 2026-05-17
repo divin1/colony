@@ -19,9 +19,68 @@ import { formatUptime } from "@/lib/utils";
 import { api } from "@/lib/api";
 import type { Task } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, Pause, Play, Trash2, Plus, Monitor, Settings2 } from "lucide-react";
+import { ChevronLeft, Pause, Play, Trash2, Plus, Monitor, Settings2, BrainCircuit } from "lucide-react";
 
-type Tab = "monitor" | "config";
+type Tab = "monitor" | "config" | "memory";
+
+function MemoryTab({ antName }: { antName: string }) {
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ["memory", antName],
+    queryFn: () => api.antMemoryGet(antName),
+  });
+
+  const clearMutation = useMutation({
+    mutationFn: () => api.antMemoryClear(antName),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["memory", antName] }),
+  });
+
+  if (isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
+
+  const summary = data?.summary ?? null;
+
+  return (
+    <div className="max-w-2xl flex flex-col gap-4">
+      <div>
+        <h2 className="text-sm font-semibold">Session memory</h2>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          The closing summary from the last completed session, prepended to the next session's prompt.
+        </p>
+      </div>
+
+      {!summary ? (
+        <div className="rounded-lg border border-border bg-secondary/20 p-6 text-center">
+          <p className="text-sm text-muted-foreground">No memory stored yet.</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">
+            Memory is saved automatically at the end of each successful session.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <pre className="whitespace-pre-wrap rounded-lg border border-border bg-secondary/20 p-4 text-xs text-foreground font-mono leading-relaxed">
+            {summary}
+          </pre>
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-danger border-danger/30 hover:bg-danger/10"
+              onClick={() => {
+                if (confirm(`Clear memory for ${antName}? The next session will start without context.`)) {
+                  clearMutation.mutate();
+                }
+              }}
+              disabled={clearMutation.isPending}
+            >
+              <Trash2 className="size-3.5" />
+              {clearMutation.isPending ? "Clearing…" : "Clear memory"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AntDetailPage() {
   const params = useParams<{ name: string }>();
@@ -106,6 +165,7 @@ export default function AntDetailPage() {
         <div className="flex gap-1 border-b border-border mb-5">
           {([
             { id: "monitor", label: "Monitor", icon: Monitor },
+            { id: "memory", label: "Memory", icon: BrainCircuit },
             { id: "config", label: "Config", icon: Settings2 },
           ] as { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[]).map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id)}
@@ -156,6 +216,8 @@ export default function AntDetailPage() {
             </div>
           </div>
         )}
+
+        {tab === "memory" && <MemoryTab antName={antName} />}
 
         {tab === "config" && <AntConfigEditor antName={antName} />}
       </main>

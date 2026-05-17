@@ -77,6 +77,16 @@ export const api = {
   antClear: (name: string) => post(`/api/ants/${encodeURIComponent(name)}/clear`),
   antPrompt: (name: string, prompt: string) =>
     post(`/api/ants/${encodeURIComponent(name)}/prompt`, { prompt }),
+  antMemoryGet: (name: string) =>
+    get<{ antName: string; summary: string | null }>(`/api/ants/${encodeURIComponent(name)}/memory`),
+  antMemoryClear: async (name: string): Promise<void> => {
+    const res = await fetch(`/api/ants/${encodeURIComponent(name)}/memory`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    if (res.status === 401) throw new AuthError();
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  },
 
   // --- Projects ---
   projectList: () => get<Project[]>("/api/projects"),
