@@ -34,9 +34,6 @@ integrations:
   discord_webhook:
     url: ${DISCORD_WEBHOOK_URL}  # Incoming webhook URL from Discord server settings.
 
-  github:
-    token: ${GITHUB_TOKEN}       # Required only if any ant uses GitHub triggers or repos.
-
 defaults:
   poll_interval: string          # Duration: 30s | 5m | 1h. No default (run immediately).
                                  # Sleep between runs for ants with no triggers or schedule.
@@ -86,8 +83,6 @@ integrations:
   discord:
     token: ${DISCORD_TOKEN}
     guild: ACME Engineering
-  github:
-    token: ${GITHUB_TOKEN}
 defaults:
   poll_interval: 10m
   git:
@@ -213,14 +208,11 @@ The runner calls: `<binary> [args...] <prompt>`
 ```yaml
 integrations:
   discord:
-    channel: string   # Required. Discord channel name where the ant posts and listens.
-  github:
-    repos:            # Repos the ant may access. Format: owner/repo.
-      - my-org/my-repo
-      - my-org/shared-libs
+    channel: string   # Discord channel name where this ant posts and listens.
+                      # Required when the Discord integration is enabled.
 ```
 
-Every ant must have `integrations.discord.channel` — the colony runner uses it to route messages and status updates.
+When Discord is configured, each ant should have `integrations.discord.channel` — the runner uses it to route messages. If omitted, the ant's `name` is used as the channel name.
 
 ### Schedule
 
@@ -235,17 +227,14 @@ The ant wakes on each cron tick and runs one work session. It does not run conti
 
 ```yaml
 triggers:
-  - type: github_issue        # Wake when a new issue is opened in any of the ant's repos.
-    labels: [ant-ready, bug]  # Optional. Only trigger if the issue has ALL of these labels.
-                              # Omit labels to trigger on any new issue.
-  - type: discord_command     # Make the ant event-only: only run when a human messages it.
+  - type: discord_command   # Make the ant event-only: only run when a human messages it.
 ```
 
 An ant can have any number of triggers. Triggers and `schedule` can coexist — the ant runs whenever any of them fires.
 
 Ants with no triggers and no schedule run continuously, sleeping for `poll_interval` (or immediately if not set) between sessions.
 
-> **Human commands always work.** Regardless of trigger configuration, every ant listens to its Discord channel for human messages. The `discord_command` trigger only controls whether the ant runs *autonomously* between messages — it does not affect the ability to send work instructions or pause/resume the ant. See [Communicating with ants](#communicating-with-ants).
+> **Human commands always work.** Regardless of trigger configuration, every ant listens to its Discord channel for human messages. The `discord_command` trigger only controls whether the ant runs *autonomously* between messages — it does not affect the ability to send work instructions or pause/resume the ant via Discord. Task assignment through the web dashboard is always available.
 
 ### Communicating with ants
 
@@ -302,11 +291,10 @@ state:
 
 With `sqlite`, the first run creates the database; subsequent runs reuse it. The file lives in the colony directory and is preserved across container restarts when the directory is volume-mounted.
 
-The SQLite backend persists two things:
+The SQLite backend persists:
 
 | Table | Purpose |
 |---|---|
-| `seen_issues` | Tracks which GitHub issue numbers have already been processed, preventing duplicate work |
 | `session_summaries` | Stores the closing output from the last successful session; injected as context at the start of the next session so the ant resumes where it left off |
 
 Session memory works automatically — no extra config beyond setting `backend: sqlite`. At the start of each session, if a previous summary exists, it is prepended to the work prompt:
@@ -359,47 +347,6 @@ triggers:
 
 ---
 
-## Complete ant example — issue triager
-
-```yaml
-name: issue-triager
-description: Triages new GitHub issues — labels them, asks for missing steps, closes duplicates
-
-instructions: |
-  You are a triage bot for the acme/platform GitHub repository.
-
-  Work through every open issue that has the label "needs-triage":
-  1. Read the issue body carefully.
-  2. Apply one label based on the content: bug, enhancement, question, documentation, duplicate
-     Use: gh issue edit <number> --add-label <label>
-  3. If a bug report has no reproduction steps, ask for them:
-     gh issue comment <number> -b "Could you add a minimal reproduction? ..."
-  4. If the issue is a duplicate, find the original, link it, then close:
-     gh issue close <number> --comment "Duplicate of #<original>"
-  5. Remove the "needs-triage" label when done:
-     gh issue edit <number> --remove-label needs-triage
-
-  Be polite and welcoming — first-time contributors should feel encouraged, not dismissed.
-
-integrations:
-  github:
-    repos:
-      - acme/platform
-  discord:
-    channel: issue-triage
-
-triggers:
-  - type: github_issue
-    labels: [needs-triage]
-
-schedule:
-  cron: "0 9 * * 1-5"    # also run at 9 am on weekdays to catch overnight issues
-
-state:
-  backend: sqlite          # remember which issues were already triaged across restarts
-  path: ./triage-state.db
-```
-
 ## Complete ant example — dependency updater
 
 ```yaml
@@ -410,21 +357,17 @@ instructions: |
   You are a dependency maintenance bot for the acme/platform repository.
 
   Each time you run:
-  1. Clone or update the repository in a temporary directory.
-  2. Run `bun outdated` to find packages with newer versions.
-  3. For each outdated package, upgrade it: bun add <package>@latest
-  4. Run the test suite: bun test. If tests fail, revert that package and move on.
-  5. If any packages were successfully updated, create a new branch
+  1. Run `bun outdated` to find packages with newer versions.
+  2. For each outdated package, upgrade it: bun add <package>@latest
+  3. Run the test suite: bun test. If tests fail, revert that package and move on.
+  4. If any packages were successfully updated, create a new branch
      deps/auto-update-YYYY-MM-DD and commit: "chore(deps): update N packages".
-  6. Open a pull request: gh pr create --title "chore(deps): weekly dependency update"
-  7. Post a summary to Discord with the list of updated packages and a link to the PR.
+  5. Open a pull request: gh pr create --title "chore(deps): weekly dependency update"
+  6. Post a summary to Discord with the list of updated packages and a link to the PR.
 
   Do not upgrade across major versions without explicit approval.
 
 integrations:
-  github:
-    repos:
-      - acme/platform
   discord:
     channel: dependency-updates
 
@@ -448,21 +391,18 @@ instructions: |
 
   For each failed run:
   - Post the run URL and the failing job names to your Discord channel.
-  - Do not post about the same run twice.
+  - Do not post about the same run twice (track seen run IDs in a local file).
 
   If there are no failures, post nothing.
 
 integrations:
-  github:
-    repos:
-      - acme/platform
   discord:
     channel: ci-alerts
 
 poll_interval: 10m    # check every 10 minutes
 
 state:
-  backend: sqlite      # track which failed runs were already reported
+  backend: sqlite      # track which failed runs were already reported across restarts
   path: ./monitor-state.db
 ```
 

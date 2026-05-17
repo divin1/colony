@@ -7,7 +7,6 @@ Colony deploys autonomous LLM agents ("ants") that work continuously, react to e
 - **An agent engine** — at least one of:
   - **Anthropic API key** (`ANTHROPIC_API_KEY`) — for Claude-powered ants (the default). Sign up at [console.anthropic.com](https://console.anthropic.com) and create a key under **API Keys**. This is a pay-per-token account separate from any Claude.ai or Claude Code subscription — a subscription does not grant API access.
   - **Gemini API key** (`GEMINI_API_KEY`) — for Gemini-powered ants. Get a free key at [aistudio.google.com](https://aistudio.google.com) under **Get API key**. Google AI Studio has a free tier, making this the zero-cost option to get started.
-- **A GitHub token** *(optional)* — needed only if you want ants that read issues or interact with GitHub repos.
 - **Discord** *(optional)* — for remote visibility and control. Three options, in order of setup effort:
   - **Full Discord bot** (`DISCORD_TOKEN`) — two-way: ants post status updates, you send commands back. Requires bot setup (see below).
   - **Webhook** (`DISCORD_WEBHOOK_URL`) — send-only notifications posted to a Discord channel. No bot needed — just create an Incoming Webhook in your server's channel settings.
@@ -81,7 +80,6 @@ ANTHROPIC_API_KEY=your-anthropic-api-key         # required for claude-cli ants 
 GEMINI_API_KEY=your-gemini-api-key               # required for gemini-cli ants
 DISCORD_TOKEN=your-discord-bot-token             # optional — for full Discord bot integration
 DISCORD_WEBHOOK_URL=https://discord.com/api/...  # optional — for webhook-only notifications
-GITHUB_TOKEN=your-github-personal-access-token   # optional — for GitHub triggers and repos
 ```
 
 > **Secrets stay in `.env` only.** YAML files never contain tokens — they reference environment variables with `${VAR_NAME}` syntax.
@@ -111,9 +109,6 @@ integrations:
   # discord_webhook:
   #   url: ${DISCORD_WEBHOOK_URL}
 
-  github:
-    token: ${GITHUB_TOKEN}   # remove this block if you don't need GitHub
-
 defaults:
   poll_interval: 5m          # pause between runs for ants with no triggers or schedule
 ```
@@ -128,69 +123,54 @@ Each file in `ants/` defines one ant. Open `ants/worker.yaml` and replace the ex
 
 ```yaml
 name: worker
-description: Processes open GitHub issues labelled ant-ready and implements fixes
+description: Software engineer — works through tasks assigned in the Kanban board
 
 instructions: |
   You are Worker, a software engineer working on the my-org/my-repo repository.
 
-  Each time you run:
-  1. Find open issues labelled "ant-ready" using: gh issue list --label ant-ready
-  2. Pick the oldest one, read it carefully, and implement a fix.
-  3. Run the test suite (bun test) and fix any failures before committing.
-  4. Open a pull request with a clear title and description.
-  5. Post a summary of what you did to your Discord channel.
+  Each session you receive a task description. Work through it completely:
+  1. Understand the requirement. Ask for clarification in Discord if something is ambiguous.
+  2. Implement the change. Run tests (bun test) before committing.
+  3. Open a pull request with a clear title and description: gh pr create
+  4. End your session with a concise summary of what you did.
 
   Rules:
   - Never force-push to main.
   - Never merge your own PRs.
-  - If you are blocked or unsure, stop and explain in Discord rather than guessing.
+  - If you are blocked, stop and explain rather than guessing.
 
 integrations:
-  github:
-    repos:
-      - my-org/my-repo
   discord:
     channel: worker-logs    # create this channel in your Discord server
 
 triggers:
-  - type: github_issue
-    labels: [ant-ready]    # wake when a matching issue is opened
-  - type: discord_command  # also wake when you send a message in #worker-logs
+  - type: discord_command   # wake when you send a message in #worker-logs
 ```
 
 ### Key fields
 
 | Field | Purpose |
 |---|---|
-| `name` | Identifier used in Discord messages. Must be unique within the colony. |
+| `name` | Identifier used in Discord messages and logs. Must be unique within the colony. |
 | `description` | One-line purpose, included in the agent's opening prompt. |
 | `instructions` | The agent's primary directive. Write it as if briefing a new engineer. Be specific. |
 | `engine` | `claude-cli` (default), `gemini-cli`, `codex`, `opencode`, or `cli`. Selects the CLI tool for this ant. |
-| `integrations.discord.channel` | Discord channel name where the ant posts and listens. **Required.** |
-| `integrations.github.repos` | Repos the ant may access. Format: `owner/repo`. |
+| `integrations.discord.channel` | Discord channel name where the ant posts and listens. Required when Discord is configured. |
 | `schedule.cron` | Standard cron expression. Omit for event-only ants. |
 | `triggers` | Events that wake a dormant ant (see below). |
 
 ### Trigger types
 
-**`github_issue`** — wakes the ant when a new GitHub issue is opened matching the given labels. If `labels` is empty, any new issue triggers it.
-
-```yaml
-triggers:
-  - type: github_issue
-    labels: [bug, needs-fix]
-```
-
-**`discord_command`** — makes the ant event-only: it only runs when you send a message in its Discord channel (rather than running autonomously on a loop). Slash commands (`/pause`, `/stop`, `/resume`, `/start`, etc.) and the plain-text equivalents (`pause`, `stop`, `resume`, `start`) are handled at the runner level and are never forwarded as work instructions.
+**`discord_command`** — makes the ant event-only: it only runs when you send a message in its Discord channel (rather than running autonomously on a loop). Slash commands (`/pause`, `/stop`, `/resume`, `/start`, etc.) are handled by the runner and never forwarded as work.
 
 ```yaml
 triggers:
   - type: discord_command
 ```
 
-Ants can have multiple triggers. An ant with no triggers and no schedule runs continuously (sleeping for `poll_interval` between sessions).
+An ant with no triggers and no schedule runs continuously (sleeping for `poll_interval` between sessions).
 
-> **Note:** You can send messages and control commands to *any* ant through its Discord channel — the `discord_command` trigger only affects whether the ant runs autonomously between messages, not whether it listens.
+> **Note:** You can send messages and control commands to *any* ant through its Discord channel — the `discord_command` trigger only affects whether the ant runs autonomously between messages. Tasks can also be assigned through the web dashboard Kanban board at any time.
 
 ### Writing good instructions
 
@@ -290,7 +270,12 @@ This works for all ants regardless of their `triggers` configuration. No special
 
 ## Web dashboard
 
-Colony includes a local web dashboard for monitoring ants, assigning work on a Kanban board, and editing configuration through forms — no terminal or YAML required after initial setup.
+Colony includes a web dashboard for managing work and ants through a browser — no terminal or YAML required after initial setup. Key features:
+
+- **Kanban board** — create projects, add tasks (backlog → to do → in progress → in review → done), assign them to ants or yourself, drag to reorder. Ants pick up tasks automatically; move them to Done after reviewing.
+- **Ant detail** — live output stream, recent tasks, session memory viewer, config editor.
+- **Skill manager** — create and edit skill files that inject instructions into ant sessions.
+- **Config editor** — edit ant and colony YAML through forms; changes take effect on hot reload.
 
 Enable it by adding `monitoring.port` to `colony.yaml`:
 

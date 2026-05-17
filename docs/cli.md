@@ -84,7 +84,7 @@ colony init ./acme-bots  # creates ./acme-bots
 
 ```bash
 cd <dir>
-# Edit .env and fill in DISCORD_TOKEN, ANTHROPIC_API_KEY or GEMINI_API_KEY, and optionally GITHUB_TOKEN
+# Edit .env and fill in ANTHROPIC_API_KEY or GEMINI_API_KEY, and optionally DISCORD_TOKEN
 ```
 
 Edit `colony.yaml` to set your Discord guild name, then edit or replace `ants/worker.yaml` with your actual ant configuration.
@@ -244,7 +244,6 @@ If `--env` is not given and no `.env` exists in the colony directory, only varia
 | `GEMINI_API_KEY` | For `gemini-cli` ants | Read by the `gemini` CLI binary |
 | `DISCORD_TOKEN` | Optional | Discord bot token — for full two-way Discord integration |
 | `DISCORD_WEBHOOK_URL` | Optional | Discord incoming webhook URL — for send-only notifications |
-| `GITHUB_TOKEN` | When using GitHub | GitHub personal access token or app token |
 | `COLONY_API_KEY` | Optional | Protects the dashboard and HTTP API with a Bearer token. Set on the runner to require auth; set on the MCP server (or use `--key`) to authenticate against a protected runner. |
 
 Variables referenced in YAML as `${VAR_NAME}` must be set before running `validate` or `run`.

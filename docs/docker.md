@@ -64,7 +64,6 @@ Edit `my-colony/.env` and fill in your credentials:
 ```env
 ANTHROPIC_API_KEY=sk-ant-...   # required for claude-cli ants
 
-GITHUB_TOKEN=ghp_...           # optional — for GitHub triggers
 DISCORD_TOKEN=                 # optional — full Discord bot
 DISCORD_WEBHOOK_URL=           # optional — send-only webhook
 
@@ -209,7 +208,16 @@ docker compose up -d  # restart with new images
 
 ## Persistent state
 
-SQLite state files are written inside the mounted colony directory and survive container restarts automatically:
+All runtime databases are written to the mounted colony directory and survive container restarts automatically.
+
+| File | Contents |
+|---|---|
+| `colony-tasks.db` | Projects, tasks, and comments (the Kanban board) |
+| `colony-state.db` | Per-ant session summaries (used when `state.backend: sqlite` is set) |
+
+Both files are created on first run. Because the colony directory is volume-mounted to the host, data persists as long as the host directory exists. Add `*.db` to your `.gitignore` to avoid accidentally committing them.
+
+The per-ant session state backend is configured separately in each ant's YAML:
 
 ```yaml
 # ants/worker.yaml
@@ -217,8 +225,6 @@ state:
   backend: sqlite
   path: ./colony-state.db    # written to my-colony/colony-state.db on the host
 ```
-
-Work item history (`colony-work.db`) is also written to the colony directory.
 
 ---
 
