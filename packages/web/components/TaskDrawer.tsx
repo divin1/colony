@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
@@ -12,7 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { formatRelative, formatDuration } from "@/lib/utils";
 import { api } from "@/lib/api";
-import type { Task, TaskStatus, AntStatusEntry } from "@/lib/types";
+import type { Task, TaskStatus, TaskComment, AntStatusEntry } from "@/lib/types";
 import { Bot, User, GitBranch, CheckCircle, RotateCcw } from "lucide-react";
 
 const STATUS_BADGE: Record<TaskStatus, "secondary" | "info" | "warning" | "success" | "outline"> = {
@@ -45,44 +45,84 @@ export function TaskDrawer({
   const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState("");
 
-  const { data: comments = [] } = useQuery({
+  // Optimistic local overrides — reset whenever the drawer opens a different task.
+  const [pendingStatus, setPendingStatus] = useState<TaskStatus | null>(null);
+  const [pendingAssignee, setPendingAssignee] = useState<{ type: "ant" | "human"; name?: string | null } | null>(null);
+  const [pendingComments, setPendingComments] = useState<TaskComment[]>([]);
+
+  useEffect(() => {
+    setPendingStatus(null);
+    setPendingAssignee(null);
+    setPendingComments([]);
+  }, [task?.id]);
+
+  const { data: serverComments = [] } = useQuery({
     queryKey: ["comments", task?.id],
     queryFn: () => api.commentList(task!.id),
     enabled: !!task,
   });
 
+  const comments = [...serverComments, ...pendingComments];
+
   const patchMutation = useMutation({
     mutationFn: (patch: Parameters<typeof api.taskPatch>[1]) => api.taskPatch(task!.id, patch),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    onMutate: ({ status }) => {
+      if (status) setPendingStatus(status);
+    },
+    onError: () => setPendingStatus(null),
+    onSettled: () => {
+      setPendingStatus(null);
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
 
   const commentMutation = useMutation({
-    mutationFn: () => api.commentAdd(task!.id, "Human", newComment.trim()),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["comments", task?.id] });
+    mutationFn: (body: string) => api.commentAdd(task!.id, "Human", body),
+    onMutate: (body) => {
+      const optimistic: TaskComment = {
+        id: `pending-${Date.now()}`,
+        taskId: task!.id,
+        author: "Human",
+        body,
+        createdAt: Date.now(),
+      };
+      setPendingComments((prev) => [...prev, optimistic]);
       setNewComment("");
+    },
+    onError: () => setPendingComments([]),
+    onSettled: () => {
+      setPendingComments([]);
+      void queryClient.invalidateQueries({ queryKey: ["comments", task?.id] });
     },
   });
 
   const assigneeMutation = useMutation({
     mutationFn: (patch: { assigneeType: "ant" | "human"; assigneeName?: string | null }) =>
       api.taskPatch(task!.id, patch),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    onMutate: (patch) => {
+      setPendingAssignee({ type: patch.assigneeType, name: patch.assigneeName });
+    },
+    onError: () => setPendingAssignee(null),
+    onSettled: () => {
+      setPendingAssignee(null);
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
 
   if (!task) return null;
+
+  // Effective values: optimistic overrides take precedence over server data.
+  const effectiveStatus = pendingStatus ?? task.status;
+  const effectiveAssigneeType = pendingAssignee?.type ?? task.assigneeType;
+  const effectiveAssigneeName = pendingAssignee !== null ? pendingAssignee.name : task.assigneeName;
 
   const duration =
     task.startedAt && task.completedAt
       ? formatDuration(task.startedAt, task.completedAt)
       : task.startedAt ? formatDuration(task.startedAt) : null;
 
-  const canApprove = task.status === "in_review";
-  const canRequeue = task.status === "in_review" || task.status === "done";
+  const canApprove = effectiveStatus === "in_review";
+  const canRequeue = effectiveStatus === "in_review" || effectiveStatus === "done";
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
@@ -95,7 +135,7 @@ export function TaskDrawer({
                 {task.source} · {formatRelative(task.createdAt)}
               </SheetDescription>
             </div>
-            <Badge variant={STATUS_BADGE[task.status]}>{STATUS_LABEL[task.status]}</Badge>
+            <Badge variant={STATUS_BADGE[effectiveStatus]}>{STATUS_LABEL[effectiveStatus]}</Badge>
           </div>
 
           <div className="flex items-center gap-3 mt-3 flex-wrap">
@@ -103,9 +143,9 @@ export function TaskDrawer({
             <select
               className="h-7 text-xs rounded-md border border-border bg-background px-2 focus:outline-none focus:ring-1 focus:ring-ring"
               value={
-                task.assigneeType === "human"
+                effectiveAssigneeType === "human"
                   ? "human"
-                  : task.assigneeName ?? ""
+                  : effectiveAssigneeName ?? ""
               }
               onChange={(e) => {
                 const val = e.target.value;
@@ -152,7 +192,7 @@ export function TaskDrawer({
                   <RotateCcw className="size-3" /> Re-queue
                 </Button>
               )}
-              {task.status === "backlog" && (
+              {effectiveStatus === "backlog" && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -214,7 +254,7 @@ export function TaskDrawer({
           {/* Comments */}
           <div className="px-6 py-3 border-b border-border">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Comments {comments.length > 0 && `(${comments.length})`}
+              Comments {serverComments.length > 0 && `(${serverComments.length})`}
             </p>
           </div>
           <ScrollArea className="flex-1">
@@ -249,14 +289,14 @@ export function TaskDrawer({
               className="text-sm resize-none"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                  if (newComment.trim()) commentMutation.mutate();
+                  if (newComment.trim()) commentMutation.mutate(newComment.trim());
                 }
               }}
             />
             <Button
               size="sm"
               disabled={!newComment.trim() || commentMutation.isPending}
-              onClick={() => commentMutation.mutate()}
+              onClick={() => commentMutation.mutate(newComment.trim())}
             >
               Post
             </Button>
