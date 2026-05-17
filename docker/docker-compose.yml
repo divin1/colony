@@ -6,6 +6,11 @@ services:
     restart: unless-stopped
     env_file: ../.env
     volumes:
+      # The colony directory is mounted so that:
+      #   • YAML config files are read from the host
+      #   • colony-tasks.db (projects/tasks/comments) persists across restarts
+      #   • colony-state.db (session memory) persists across restarts
+      # Both databases are created on first run alongside the YAML files.
       - ../:/colony
     working_dir: /colony
     command: ["run", "."]

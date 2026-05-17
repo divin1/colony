@@ -5,30 +5,6 @@ import { tmpdir } from "os";
 import { createState } from "./state";
 
 describe("MemoryState", () => {
-  it("returns false for unseen issues", () => {
-    const state = createState("memory");
-    expect(state.hasSeenIssue("worker", 1)).toBe(false);
-  });
-
-  it("returns true after markIssueSeen", () => {
-    const state = createState("memory");
-    state.markIssueSeen("worker", 42);
-    expect(state.hasSeenIssue("worker", 42)).toBe(true);
-  });
-
-  it("is scoped per ant name", () => {
-    const state = createState("memory");
-    state.markIssueSeen("ant-a", 1);
-    expect(state.hasSeenIssue("ant-b", 1)).toBe(false);
-  });
-
-  it("is idempotent — marking twice does not throw", () => {
-    const state = createState("memory");
-    state.markIssueSeen("worker", 7);
-    state.markIssueSeen("worker", 7);
-    expect(state.hasSeenIssue("worker", 7)).toBe(true);
-  });
-
   it("returns null before any summary is stored", () => {
     const state = createState("memory");
     expect(state.getLastSessionSummary("worker")).toBeNull();
@@ -52,6 +28,13 @@ describe("MemoryState", () => {
     state.setSessionSummary("ant-a", "Summary A.");
     expect(state.getLastSessionSummary("ant-b")).toBeNull();
   });
+
+  it("clears the summary on clearSessionSummary", () => {
+    const state = createState("memory");
+    state.setSessionSummary("worker", "Some summary.");
+    state.clearSessionSummary("worker");
+    expect(state.getLastSessionSummary("worker")).toBeNull();
+  });
 });
 
 describe("SQLiteState", () => {
@@ -60,39 +43,6 @@ describe("SQLiteState", () => {
   beforeEach(() => {
     const dir = mkdtempSync(join(tmpdir(), "colony-state-test-"));
     dbPath = join(dir, "state.db");
-  });
-
-  it("returns false for unseen issues", () => {
-    const state = createState("sqlite", dbPath);
-    expect(state.hasSeenIssue("worker", 1)).toBe(false);
-  });
-
-  it("returns true after markIssueSeen", () => {
-    const state = createState("sqlite", dbPath);
-    state.markIssueSeen("worker", 42);
-    expect(state.hasSeenIssue("worker", 42)).toBe(true);
-  });
-
-  it("persists across instances (survives restart)", () => {
-    const state1 = createState("sqlite", dbPath);
-    state1.markIssueSeen("worker", 99);
-
-    // Simulate a restart by creating a fresh instance pointing at the same file.
-    const state2 = createState("sqlite", dbPath);
-    expect(state2.hasSeenIssue("worker", 99)).toBe(true);
-  });
-
-  it("is scoped per ant name", () => {
-    const state = createState("sqlite", dbPath);
-    state.markIssueSeen("ant-a", 1);
-    expect(state.hasSeenIssue("ant-b", 1)).toBe(false);
-  });
-
-  it("is idempotent — marking twice does not throw", () => {
-    const state = createState("sqlite", dbPath);
-    state.markIssueSeen("worker", 7);
-    state.markIssueSeen("worker", 7);
-    expect(state.hasSeenIssue("worker", 7)).toBe(true);
   });
 
   it("returns null before any summary is stored", () => {
@@ -121,9 +71,16 @@ describe("SQLiteState", () => {
 
   it("persists summaries across instances (survives restart)", () => {
     const state1 = createState("sqlite", dbPath);
-    state1.setSessionSummary("worker", "Completed issue #7, opened PR #8.");
+    state1.setSessionSummary("worker", "Completed task, opened PR #8.");
 
     const state2 = createState("sqlite", dbPath);
-    expect(state2.getLastSessionSummary("worker")).toBe("Completed issue #7, opened PR #8.");
+    expect(state2.getLastSessionSummary("worker")).toBe("Completed task, opened PR #8.");
+  });
+
+  it("clears the summary on clearSessionSummary", () => {
+    const state = createState("sqlite", dbPath);
+    state.setSessionSummary("worker", "Some summary.");
+    state.clearSessionSummary("worker");
+    expect(state.getLastSessionSummary("worker")).toBeNull();
   });
 });

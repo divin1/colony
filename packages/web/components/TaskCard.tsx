@@ -4,10 +4,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatRelative } from "@/lib/utils";
 import type { Task, TaskSource } from "@/lib/types";
-import { GitBranch, MessageSquare, Clock, User, Bot } from "lucide-react";
+import { MessageSquare, Clock, User, Bot } from "lucide-react";
 
 const SOURCE_ICONS: Record<TaskSource, React.ComponentType<{ className?: string }>> = {
-  github_issue: GitBranch,
   discord: MessageSquare,
   cron: Clock,
   manual: User,

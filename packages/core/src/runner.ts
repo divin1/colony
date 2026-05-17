@@ -8,11 +8,9 @@ import { createState } from "./state";
 import { loadSkill } from "./skill";
 import { ColonyState } from "./colony-state";
 import { createDashboardHandler } from "./dashboard";
-import type { GitHubIssueEvent } from "./dashboard";
 import { AntSessionError } from "./errors";
 import { log } from "./log";
 import { TaskStore } from "./task-store.js";
-import type { IssueContext } from "./task-store.js";
 
 // Extended interface the runner needs beyond ConfirmationChannel.
 // DiscordIntegration satisfies this structurally — core does not depend on @colony/discord.
@@ -36,17 +34,8 @@ export class ConsoleDiscord implements RunnerDiscord {
   on<T>(_event: string, _handler: (payload: T) => void): void {}
 }
 
-// Minimal GitHub interface the runner needs for issue polling and comments.
-export interface RunnerGitHub {
-  listIssues(
-    owner: string, repo: string, opts?: { labels?: string[] }
-  ): Promise<Array<{ number: number; title: string; body: string | null }>>;
-  createIssueComment(owner: string, repo: string, issueNumber: number, body: string): Promise<void>;
-}
-
 const BASE_RESTART_DELAY_MS = 10_000;
 const MAX_RESTART_DELAY_MS = 5 * 60 * 1000;
-const GITHUB_POLL_INTERVAL_MS = 5 * 60 * 1000;
 
 function backoffDelayMs(consecutiveCrashes: number): number {
   return Math.min(BASE_RESTART_DELAY_MS * 2 ** consecutiveCrashes, MAX_RESTART_DELAY_MS);
@@ -217,7 +206,6 @@ async function runAntWithSupervision(
   controller: AbortController,
   taskStore: TaskStore,
   defaultProjectId: string,
-  github?: RunnerGitHub
 ): Promise<void> {
   const { signal } = controller;
   const channelName = ant.integrations?.discord?.channel ?? ant.name;
@@ -293,8 +281,7 @@ async function runAntWithSupervision(
   const triggers = ant.triggers ?? [];
   const hasCron = !!ant.schedule?.cron;
   const hasDiscordTrigger = triggers.some((t) => t.type === "discord_command");
-  const hasGithubTrigger = triggers.some((t) => t.type === "github_issue");
-  const hasAnyTrigger = hasCron || hasDiscordTrigger || hasGithubTrigger;
+  const hasAnyTrigger = hasCron || hasDiscordTrigger;
 
   const startedAt = Date.now();
   let sessionsCompleted = 0;
@@ -401,55 +388,6 @@ async function runAntWithSupervision(
     });
   }
 
-  // GitHub issue polling trigger.
-  if (hasGithubTrigger && github) {
-    const githubTrigger = triggers.find((t) => t.type === "github_issue");
-    const labels = githubTrigger?.type === "github_issue" ? githubTrigger.labels : [];
-    const repos = ant.integrations?.github?.repos ?? [];
-
-    const pollGitHub = async () => {
-      for (const repoSlug of repos) {
-        const [owner, repo] = repoSlug.split("/");
-        if (!owner || !repo) continue;
-        try {
-          const issues = await github.listIssues(owner, repo, {
-            labels: labels.length > 0 ? labels : undefined,
-          });
-          for (const issue of issues) {
-            if (antState.hasSeenIssue(ant.name, issue.number)) continue;
-            antState.markIssueSeen(ant.name, issue.number);
-            const issueContext: IssueContext = { owner, repo, number: issue.number, repoSlug };
-            const description =
-              `You are ${ant.name}. A GitHub issue has been assigned:\n\n` +
-              `Repository: ${repoSlug}\n` +
-              `Issue #${issue.number}: ${issue.title}\n` +
-              `URL: https://github.com/${owner}/${repo}/issues/${issue.number}\n\n` +
-              `${issue.body ?? "(no description provided)"}\n\n` +
-              `Work through this issue. When done, end your session with a concise summary ` +
-              `of what you completed — it will be posted as a comment on the issue.`;
-            const pollTask = taskStore.createTask({
-              projectId: defaultProjectId,
-              title: `#${issue.number}: ${issue.title}`,
-              description,
-              assigneeType: "ant",
-              assigneeName: ant.name,
-              source: "github_issue",
-              issueContext,
-            });
-            colonyState.emitEvent({ type: "task", action: "created", taskId: pollTask.id });
-            wakeQueue.push();
-          }
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          await discord.send(channelId, `⚠️ **${ant.name}** GitHub poll failed: ${msg}`).catch(() => {});
-        }
-      }
-    };
-
-    pollGitHub().catch(() => {});
-    setInterval(() => pollGitHub().catch(() => {}), GITHUB_POLL_INTERVAL_MS);
-  }
-
   // Startup: if tasks already exist in todo, wake immediately.
   if (taskStore.countTodo(ant.name) > 0) {
     wakeQueue.push();
@@ -528,14 +466,6 @@ async function runAntWithSupervision(
         }
         colonyState.emitEvent({ type: "task", action: "updated", taskId: task.id });
         broadcast(`✅ **${ant.name}** completed: ${task.title}`);
-
-        if (task.issueContext && result.lastOutput && github) {
-          const { owner, repo, number } = task.issueContext;
-          log(ant.name, `posting comment on ${task.issueContext.repoSlug}#${number}`);
-          await github.createIssueComment(owner, repo, number, result.lastOutput).catch((err) => {
-            broadcast(`⚠️ **${ant.name}** failed to post GitHub comment: ${(err as Error).message}`);
-          });
-        }
       } catch (err) {
         if (isAbortError(err)) {
           if (signal.aborted) throw err;
@@ -684,7 +614,6 @@ function checkBinaries(ants: LoadedConfig["ants"]): void {
 export async function runColony(
   config: LoadedConfig,
   discord: RunnerDiscord,
-  github?: RunnerGitHub
 ): Promise<void> {
   checkDiscordChannels(config.colony, config.ants);
   checkBinaries(config.ants);
@@ -711,7 +640,7 @@ export async function runColony(
     const controller = new AbortController();
     const promise = runAntWithSupervision(
       ant, currentConfig.colony, currentConfig.configDir,
-      discord, colonyState, controller, taskStore, defaultProject.id, github
+      discord, colonyState, controller, taskStore, defaultProject.id,
     ).catch((err: Error) => log(ant.name, `supervisor exited: ${err.message}`));
     runningAnts.set(ant.name, { controller, promise });
   }
@@ -759,59 +688,14 @@ export async function runColony(
   let dashboardServer: ReturnType<typeof Bun.serve> | undefined;
   const monitorPort = config.colony.monitoring?.port;
   if (monitorPort) {
-    const onGithubWebhook = (event: GitHubIssueEvent): void => {
-      const repoSlug = event.repository.full_name;
-      for (const ant of currentConfig.ants) {
-        const triggers = ant.triggers ?? [];
-        const githubTrigger = triggers.find((t) => t.type === "github_issue");
-        if (!githubTrigger || githubTrigger.type !== "github_issue") continue;
-
-        const repos = ant.integrations?.github?.repos ?? [];
-        if (repos.length > 0 && !repos.includes(repoSlug)) continue;
-
-        const triggerLabels = githubTrigger.labels;
-        if (triggerLabels.length > 0) {
-          const eventLabels = event.action === "labeled" && event.label
-            ? [event.label.name]
-            : event.issue.labels.map((l) => l.name);
-          if (!triggerLabels.some((l) => eventLabels.includes(l))) continue;
-        }
-
-        const { login: owner } = event.repository.owner;
-        const repo = event.repository.name;
-        const issue = event.issue;
-        const issueContext: IssueContext = { owner, repo, number: issue.number, repoSlug };
-        const description =
-          `You are ${ant.name}. A GitHub issue has been assigned:\n\n` +
-          `Repository: ${repoSlug}\n` +
-          `Issue #${issue.number}: ${issue.title}\n` +
-          `URL: ${issue.html_url}\n\n` +
-          `${issue.body ?? "(no description provided)"}\n\n` +
-          `Work through this issue. When done, end your session with a concise summary ` +
-          `of what you completed — it will be posted as a comment on the issue.`;
-
-        const ghTask = taskStore.createTask({
-          projectId: defaultProject.id,
-          title: `#${issue.number}: ${issue.title}`,
-          description, assigneeType: "ant", assigneeName: ant.name,
-          source: "github_issue", issueContext,
-        });
-        colonyState.emitEvent({ type: "task", action: "created", taskId: ghTask.id });
-        colonyState.wake(ant.name);
-      }
-    };
-
     dashboardServer = Bun.serve({
       port: monitorPort,
       fetch: createDashboardHandler(colonyState, {
         apiKey: process.env.COLONY_API_KEY,
-        webhookSecret: config.colony.integrations?.github?.webhook_secret,
-        onGithubWebhook,
         taskStore,
       }),
     });
     console.log(`Dashboard: http://localhost:${monitorPort}`);
-    console.log(`Dashboard will be available at http://localhost:${monitorPort} once running.`);
   }
 
   for (const ant of config.ants) startAnt(ant);

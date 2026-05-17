@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import type { Task, TaskStatus, TaskSource } from "@/lib/types";
 import { formatRelative, formatDuration, cn } from "@/lib/utils";
-import { GitBranch, MessageSquare, Clock, User, Bot } from "lucide-react";
+import { MessageSquare, Clock, User, Bot } from "lucide-react";
 
 const STATUS_VARIANT: Record<TaskStatus, "success" | "info" | "warning" | "danger" | "secondary" | "outline"> = {
   backlog: "outline",
@@ -26,7 +26,7 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
 };
 
 const SOURCE_ICONS: Record<TaskSource, React.ComponentType<{ className?: string }>> = {
-  github_issue: GitBranch, discord: MessageSquare, cron: Clock, manual: User,
+  discord: MessageSquare, cron: Clock, manual: User,
 };
 
 const ALL_STATUSES: TaskStatus[] = ["todo", "in_progress", "in_review", "done", "backlog"];

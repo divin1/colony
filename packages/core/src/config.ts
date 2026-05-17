@@ -43,14 +43,6 @@ export const ColonyConfigSchema = z.object({
           url: EnvString,
         })
         .optional(),
-      github: z
-        .object({
-          token: EnvString,
-          // Secret used to verify X-Hub-Signature-256 on incoming GitHub webhooks.
-          // Set this to the same value you configure in GitHub's webhook settings.
-          webhook_secret: EnvString.optional(),
-        })
-        .optional(),
     })
     .optional(),
   defaults: z
@@ -79,10 +71,6 @@ export type ColonyConfig = z.infer<typeof ColonyConfigSchema>;
 // --- ants/<name>.yaml ---
 
 const TriggerSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("github_issue"),
-    labels: z.array(z.string()).default([]),
-  }),
   z.object({ type: z.literal("discord_command") }),
 ]);
 
@@ -101,11 +89,6 @@ export const AntConfigSchema = z.object({
   instructions: z.string(),
   integrations: z
     .object({
-      github: z
-        .object({
-          repos: z.array(z.string()).default([]),
-        })
-        .optional(),
       discord: z
         .object({
           channel: z.string(),
@@ -245,7 +228,6 @@ export const RawColonyConfigSchema = z.object({
     .object({
       discord: z.object({ token: z.string(), guild: z.string() }).optional(),
       discord_webhook: z.object({ url: z.string() }).optional(),
-      github: z.object({ token: z.string(), webhook_secret: z.string().optional() }).optional(),
     })
     .optional(),
   defaults: z

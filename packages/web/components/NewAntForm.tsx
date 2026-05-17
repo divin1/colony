@@ -21,10 +21,7 @@ interface FormState {
   cliArgs: string;
   pollInterval: string;
   discordChannel: string;
-  githubRepos: string;
   skills: string;
-  githubTrigger: boolean;
-  githubLabels: string;
   discordCommandTrigger: boolean;
   cronSchedule: string;
 }
@@ -38,25 +35,15 @@ const BLANK: FormState = {
   cliArgs: "",
   pollInterval: "",
   discordChannel: "",
-  githubRepos: "",
   skills: "",
-  githubTrigger: false,
-  githubLabels: "",
   discordCommandTrigger: false,
   cronSchedule: "",
 };
 
 function toRawConfig(f: FormState): RawAntConfig {
   const triggers: RawAntConfig["triggers"] = [];
-  if (f.githubTrigger) {
-    triggers.push({
-      type: "github_issue",
-      labels: f.githubLabels.split(",").map((s) => s.trim()).filter(Boolean),
-    });
-  }
   if (f.discordCommandTrigger) triggers.push({ type: "discord_command" });
 
-  const repos = f.githubRepos.split("\n").map((s) => s.trim()).filter(Boolean);
   const skills = f.skills.split("\n").map((s) => s.trim()).filter(Boolean);
 
   const config: RawAntConfig = {
@@ -76,10 +63,8 @@ function toRawConfig(f: FormState): RawAntConfig {
   if (f.cronSchedule.trim()) config.schedule = { cron: f.cronSchedule.trim() };
   if (triggers.length > 0) config.triggers = triggers;
   if (skills.length > 0) config.skills = skills;
-  if (f.discordChannel.trim() || repos.length > 0) {
-    config.integrations = {};
-    if (f.discordChannel.trim()) config.integrations.discord = { channel: f.discordChannel.trim() };
-    if (repos.length > 0) config.integrations.github = { repos };
+  if (f.discordChannel.trim()) {
+    config.integrations = { discord: { channel: f.discordChannel.trim() } };
   }
   return config;
 }
@@ -285,29 +270,6 @@ export function NewAntForm() {
         <label className="flex items-start gap-3 cursor-pointer group">
           <input
             type="checkbox"
-            checked={form.githubTrigger}
-            onChange={(e) => set("githubTrigger", e.target.checked)}
-            className="mt-0.5 accent-primary"
-          />
-          <div>
-            <p className="text-sm font-medium group-hover:text-foreground">GitHub Issues</p>
-            <p className="text-xs text-muted-foreground">Wake when a matching issue is opened or labelled.</p>
-          </div>
-        </label>
-        {form.githubTrigger && (
-          <Field label="Issue labels (comma-separated)" hint="Blank = all issues.">
-            <Input
-              value={form.githubLabels}
-              onChange={(e) => set("githubLabels", e.target.value)}
-              placeholder="bug, help wanted"
-              className="ml-6 w-72"
-            />
-          </Field>
-        )}
-
-        <label className="flex items-start gap-3 cursor-pointer group">
-          <input
-            type="checkbox"
             checked={form.discordCommandTrigger}
             onChange={(e) => set("discordCommandTrigger", e.target.checked)}
             className="mt-0.5 accent-primary"
@@ -329,15 +291,6 @@ export function NewAntForm() {
             onChange={(e) => set("discordChannel", e.target.value)}
             placeholder="colony-worker"
             className="w-64"
-          />
-        </Field>
-        <Field label="GitHub repos" hint="One owner/repo per line.">
-          <Textarea
-            value={form.githubRepos}
-            onChange={(e) => set("githubRepos", e.target.value)}
-            rows={3}
-            className="font-mono text-xs w-72"
-            placeholder={"acme/backend\nacme/frontend"}
           />
         </Field>
       </Section>

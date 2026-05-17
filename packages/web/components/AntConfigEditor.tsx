@@ -24,10 +24,7 @@ interface FormState {
   cliArgs: string;
   pollInterval: string;
   discordChannel: string;
-  githubRepos: string;     // newline-separated
   skills: string;          // newline-separated
-  githubTrigger: boolean;
-  githubLabels: string;    // comma-separated
   discordCommandTrigger: boolean;
   cronSchedule: string;
   stateBackend: "memory" | "sqlite";
@@ -35,14 +32,6 @@ interface FormState {
 }
 
 function toFormState(c: RawAntConfig): FormState {
-  const githubTrigger = c.triggers?.some((t) => t.type === "github_issue") ?? false;
-  const githubLabels =
-    (
-      c.triggers?.find(
-        (t): t is { type: "github_issue"; labels?: string[] } => t.type === "github_issue"
-      )?.labels ?? []
-    ).join(", ");
-
   return {
     description: c.description ?? "",
     instructions: c.instructions ?? "",
@@ -51,10 +40,7 @@ function toFormState(c: RawAntConfig): FormState {
     cliArgs: (c.cli?.args ?? []).join("\n"),
     pollInterval: c.poll_interval ?? "",
     discordChannel: c.integrations?.discord?.channel ?? "",
-    githubRepos: (c.integrations?.github?.repos ?? []).join("\n"),
     skills: (c.skills ?? []).join("\n"),
-    githubTrigger,
-    githubLabels,
     discordCommandTrigger: c.triggers?.some((t) => t.type === "discord_command") ?? false,
     cronSchedule: c.schedule?.cron ?? "",
     stateBackend: c.state?.backend ?? "memory",
@@ -64,23 +50,10 @@ function toFormState(c: RawAntConfig): FormState {
 
 function toRawConfig(name: string, f: FormState): RawAntConfig {
   const triggers: RawAntConfig["triggers"] = [];
-  if (f.githubTrigger) {
-    triggers.push({
-      type: "github_issue",
-      labels: f.githubLabels
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-    });
-  }
   if (f.discordCommandTrigger) {
     triggers.push({ type: "discord_command" });
   }
 
-  const repos = f.githubRepos
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean);
   const skills = f.skills
     .split("\n")
     .map((s) => s.trim())
@@ -108,14 +81,8 @@ function toRawConfig(name: string, f: FormState): RawAntConfig {
   if (triggers.length > 0) config.triggers = triggers;
   if (skills.length > 0) config.skills = skills;
 
-  if (f.discordChannel.trim() || repos.length > 0) {
-    config.integrations = {};
-    if (f.discordChannel.trim()) {
-      config.integrations.discord = { channel: f.discordChannel.trim() };
-    }
-    if (repos.length > 0) {
-      config.integrations.github = { repos };
-    }
+  if (f.discordChannel.trim()) {
+    config.integrations = { discord: { channel: f.discordChannel.trim() } };
   }
 
   if (f.stateBackend === "sqlite") {
@@ -447,35 +414,6 @@ export function AntConfigEditor({ antName }: { antName: string }) {
         <label className="flex items-start gap-3 cursor-pointer group">
           <input
             type="checkbox"
-            checked={form.githubTrigger}
-            onChange={(e) => set("githubTrigger", e.target.checked)}
-            className="mt-0.5 accent-primary"
-          />
-          <div>
-            <p className="text-sm font-medium group-hover:text-foreground">GitHub Issues</p>
-            <p className="text-xs text-muted-foreground">
-              Wake when a matching issue is opened or labelled.
-            </p>
-          </div>
-        </label>
-
-        {form.githubTrigger && (
-          <Field
-            label="Issue labels (comma-separated)"
-            hint="Blank = all issues. e.g. bug, help wanted"
-          >
-            <Input
-              value={form.githubLabels}
-              onChange={(e) => set("githubLabels", e.target.value)}
-              placeholder="bug, help wanted"
-              className="ml-6 w-72"
-            />
-          </Field>
-        )}
-
-        <label className="flex items-start gap-3 cursor-pointer group">
-          <input
-            type="checkbox"
             checked={form.discordCommandTrigger}
             onChange={(e) => set("discordCommandTrigger", e.target.checked)}
             className="mt-0.5 accent-primary"
@@ -499,15 +437,6 @@ export function AntConfigEditor({ antName }: { antName: string }) {
             onChange={(e) => set("discordChannel", e.target.value)}
             placeholder="colony-worker"
             className="w-64"
-          />
-        </Field>
-        <Field label="GitHub repos" hint="One owner/repo per line. e.g. acme/backend">
-          <Textarea
-            value={form.githubRepos}
-            onChange={(e) => set("githubRepos", e.target.value)}
-            rows={3}
-            className="font-mono text-xs w-72"
-            placeholder={"acme/backend\nacme/frontend"}
           />
         </Field>
       </Section>

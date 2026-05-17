@@ -7,7 +7,7 @@ export interface SkillInfo {
 }
 export type TaskStatus = "backlog" | "todo" | "in_progress" | "in_review" | "done";
 export type AssigneeType = "ant" | "human";
-export type TaskSource = "manual" | "github_issue" | "cron" | "discord";
+export type TaskSource = "manual" | "cron" | "discord";
 
 export interface AntStatusEntry {
   name: string;
@@ -43,7 +43,6 @@ export interface Task {
   assigneeName: string | null;
   position: number;
   source: TaskSource;
-  issueContext: { owner: string; repo: string; number: number; repoSlug: string } | null;
   lastOutput: string | null;
   createdAt: number;
   updatedAt: number;
@@ -73,12 +72,8 @@ export interface RawAntConfig {
   logging?: { lm_output?: "discord" | "console" | "both" };
   skills?: string[];
   schedule?: { cron: string };
-  triggers?: Array<
-    | { type: "github_issue"; labels?: string[] }
-    | { type: "discord_command" }
-  >;
+  triggers?: Array<{ type: "discord_command" }>;
   integrations?: {
-    github?: { repos?: string[]; webhook_secret?: string };
     discord?: { channel?: string };
   };
 }
@@ -88,7 +83,6 @@ export interface RawColonyConfig {
   integrations?: {
     discord?: { token: string; guild: string };
     discord_webhook?: { url: string };
-    github?: { token: string; webhook_secret?: string };
   };
   defaults?: {
     poll_interval?: string;

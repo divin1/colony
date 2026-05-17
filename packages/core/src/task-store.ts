@@ -1,13 +1,10 @@
 import { randomUUID } from "crypto";
 import { Database } from "bun:sqlite";
 import { join } from "path";
-import type { IssueContext } from "./work-store.js";
-
-export type { IssueContext };
 
 export type TaskStatus = "backlog" | "todo" | "in_progress" | "in_review" | "done";
 export type AssigneeType = "ant" | "human";
-export type TaskSource = "manual" | "github_issue" | "cron" | "discord";
+export type TaskSource = "manual" | "cron" | "discord";
 
 export interface Project {
   id: string;
@@ -27,7 +24,6 @@ export interface Task {
   assigneeName: string | null;
   position: number;
   source: TaskSource;
-  issueContext: IssueContext | null;
   lastOutput: string | null;
   createdAt: number;
   updatedAt: number;
@@ -49,7 +45,7 @@ interface RawProject {
 interface RawTask {
   id: string; project_id: string; title: string; description: string; status: string;
   assignee_type: string; assignee_name: string | null; position: number; source: string;
-  issue_context: string | null; last_output: string | null;
+  last_output: string | null;
   created_at: number; updated_at: number; started_at: number | null; completed_at: number | null;
 }
 interface RawComment {
@@ -65,7 +61,6 @@ function parseTask(r: RawTask): Task {
     id: r.id, projectId: r.project_id, title: r.title, description: r.description,
     status: r.status as TaskStatus, assigneeType: r.assignee_type as AssigneeType,
     assigneeName: r.assignee_name, position: r.position, source: r.source as TaskSource,
-    issueContext: r.issue_context ? (JSON.parse(r.issue_context) as IssueContext) : null,
     lastOutput: r.last_output, createdAt: r.created_at, updatedAt: r.updated_at,
     startedAt: r.started_at, completedAt: r.completed_at,
   };
@@ -114,7 +109,6 @@ export class TaskStore {
         assignee_name  TEXT,
         position       INTEGER NOT NULL DEFAULT 0,
         source         TEXT NOT NULL DEFAULT 'manual',
-        issue_context  TEXT,
         last_output    TEXT,
         created_at     INTEGER NOT NULL,
         updated_at     INTEGER NOT NULL,
@@ -205,7 +199,6 @@ export class TaskStore {
     assigneeType: AssigneeType;
     assigneeName?: string;
     source?: TaskSource;
-    issueContext?: IssueContext;
     status?: TaskStatus;
   }): Task {
     const id = randomUUID();
@@ -213,7 +206,6 @@ export class TaskStore {
     const status = opts.status ?? "todo";
     const assigneeName = opts.assigneeName ?? null;
     const source = opts.source ?? "manual";
-    const issueContextJson = opts.issueContext ? JSON.stringify(opts.issueContext) : null;
 
     // Position: end of this ant/status group
     const pos = (this.db
@@ -224,17 +216,16 @@ export class TaskStore {
 
     this.db.run(
       `INSERT INTO tasks (id, project_id, title, description, status, assignee_type, assignee_name,
-         position, source, issue_context, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         position, source, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [id, opts.projectId, opts.title, opts.description, status, opts.assigneeType,
-       assigneeName, pos, source, issueContextJson, now, now]
+       assigneeName, pos, source, now, now]
     );
 
     return {
       id, projectId: opts.projectId, title: opts.title, description: opts.description,
       status, assigneeType: opts.assigneeType, assigneeName, position: pos, source,
-      issueContext: opts.issueContext ?? null, lastOutput: null,
-      createdAt: now, updatedAt: now, startedAt: null, completedAt: null,
+      lastOutput: null, createdAt: now, updatedAt: now, startedAt: null, completedAt: null,
     };
   }
 

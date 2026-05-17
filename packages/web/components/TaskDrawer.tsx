@@ -13,7 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { formatRelative, formatDuration } from "@/lib/utils";
 import { api } from "@/lib/api";
 import type { Task, TaskStatus, TaskComment, AntStatusEntry } from "@/lib/types";
-import { Bot, User, GitBranch, CheckCircle, RotateCcw } from "lucide-react";
+import { Bot, User, CheckCircle, RotateCcw } from "lucide-react";
 
 const STATUS_BADGE: Record<TaskStatus, "secondary" | "info" | "warning" | "success" | "outline"> = {
   backlog: "outline",
@@ -234,21 +234,6 @@ export function TaskDrawer({
               </ScrollArea>
               <Separator />
             </>
-          )}
-
-          {/* GitHub issue link */}
-          {task.issueContext && (
-            <div className="px-6 py-2 border-b border-border text-xs text-muted-foreground flex items-center gap-1">
-              <GitBranch className="size-3" />
-              <a
-                href={`https://github.com/${task.issueContext.owner}/${task.issueContext.repo}/issues/${task.issueContext.number}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-info hover:underline"
-              >
-                {task.issueContext.repoSlug}#{task.issueContext.number}
-              </a>
-            </div>
           )}
 
           {/* Comments */}

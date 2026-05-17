@@ -20,7 +20,6 @@ interface FormState {
   discordToken: string;
   discordGuild: string;
   discordWebhookUrl: string;
-  githubToken: string;
 }
 
 function toFormState(c: RawColonyConfig): FormState {
@@ -33,7 +32,6 @@ function toFormState(c: RawColonyConfig): FormState {
     discordToken: c.integrations?.discord?.token ?? "",
     discordGuild: c.integrations?.discord?.guild ?? "",
     discordWebhookUrl: c.integrations?.discord_webhook?.url ?? "",
-    githubToken: c.integrations?.github?.token ?? "",
   };
 }
 
@@ -59,8 +57,7 @@ function toRawConfig(f: FormState): RawColonyConfig {
 
   const hasDiscord = f.discordToken.trim() && f.discordGuild.trim();
   const hasWebhook = f.discordWebhookUrl.trim();
-  const hasGithub = f.githubToken.trim();
-  if (hasDiscord || hasWebhook || hasGithub) {
+  if (hasDiscord || hasWebhook) {
     config.integrations = {};
     if (hasDiscord) {
       config.integrations.discord = {
@@ -70,9 +67,6 @@ function toRawConfig(f: FormState): RawColonyConfig {
     }
     if (hasWebhook) {
       config.integrations.discord_webhook = { url: f.discordWebhookUrl.trim() };
-    }
-    if (hasGithub) {
-      config.integrations.github = { token: f.githubToken.trim() };
     }
   }
 
@@ -278,20 +272,6 @@ export function ColonyConfigEditor() {
             value={form.discordWebhookUrl}
             onChange={(e) => set("discordWebhookUrl", e.target.value)}
             placeholder="${DISCORD_WEBHOOK_URL}"
-            className="font-mono text-sm w-72"
-          />
-        </Field>
-      </Section>
-
-      <Separator />
-
-      {/* GitHub */}
-      <Section title="GitHub integration">
-        <Field label="Personal access token">
-          <Input
-            value={form.githubToken}
-            onChange={(e) => set("githubToken", e.target.value)}
-            placeholder="${GITHUB_TOKEN}"
             className="font-mono text-sm w-72"
           />
         </Field>

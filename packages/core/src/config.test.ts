@@ -92,30 +92,6 @@ describe("AntConfigSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("parses a github_issue trigger with labels", () => {
-    const result = AntConfigSchema.safeParse({
-      name: "worker",
-      description: "Does work",
-      instructions: "Do it.",
-      triggers: [{ type: "github_issue", labels: ["bug"] }],
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("defaults labels to [] on github_issue trigger", () => {
-    const result = AntConfigSchema.safeParse({
-      name: "worker",
-      description: "Does work",
-      instructions: "Do it.",
-      triggers: [{ type: "github_issue" }],
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      const trigger = result.data.triggers?.[0];
-      expect(trigger?.type === "github_issue" && trigger.labels).toEqual([]);
-    }
-  });
-
   it("rejects an unknown trigger type", () => {
     const result = AntConfigSchema.safeParse({
       name: "worker",
