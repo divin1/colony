@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+## [0.6.0] — 2026-05-17
+
+### Added
+
+- **Project & task management** — replaces the simple work-item queue with a full project model. Tasks belong to projects; manage several projects simultaneously from the Kanban board. Tasks can be assigned to ants or humans. Five columns: Backlog (human staging — ants ignore it), To Do, In Progress, In Review, Done. Human approval gate: ants move tasks to In Review on completion; a human moves them to Done. `colony-tasks.db` (SQLite) stores `projects`, `tasks`, `task_comments`.
+- **Kanban board UI** — five-column board scoped to a selected project. Task cards show assignee chip, source icon, and comment count. Drag-to-reorder in the To Do column. Tab-strip layout on mobile (single column view below `md` breakpoint).
+- **Task detail drawer** — status badge, assignee dropdown (ant or human), description, session summary, comment thread with add-comment form; Approve / Re-queue / Move to To Do quick actions. Optimistic updates: status, assignee, and new comments apply instantly and revert on error.
+- **Project settings page** (`/projects/:id`) — rename, recolor (preset swatches), delete project; accessible via the gear icon in the nav project switcher.
+- **Skill management UI** (`/skills`) — create, edit, and delete skill files from the dashboard. Skill picker in the ant config editor shows available skills as checkboxes; per-path warning when a configured `skills/*.md` path is not found on disk.
+- **Session memory viewer** — "Memory" tab on the ant detail page shows the stored session summary and allows clearing it. `GET/DELETE /api/ants/:name/memory` endpoints.
+- **Real-time push (SSE)** — `GET /api/events` emits `task`, `project`, and `ant-state` change events to all connected clients. All mutations in the dashboard and runner emit events. Web frontend subscribes via `EventSource` and invalidates TanStack Query caches on arrival. Global polling reduced from 5 s to 30 s (fallback only).
+- **Mid-session interrupt** — `pause` now terminates the running agent process immediately (SIGTERM + 5 s SIGKILL escalation) rather than waiting for the current session to finish. Interrupted sessions return to `todo` status; no crash counter increment, no backoff.
+- **Docker** — two-service `docker-compose.yml` (`runner` + `web`); `Dockerfile.web` using Next.js standalone output for a lean image; `docker/.env.example`; `.dockerignore`.
+- `"idle"` added to `AntRuntimeState` — ant is waiting for work (distinct from `"paused"` which is human-triggered).
+- `*.db` added to `.gitignore` — SQLite databases are runtime state, not source.
+
+### Changed
+
+- **Supervisor loop is pull-based** — ants call `TaskStore.listTodo(antName)` on each iteration; `PromiseQueue<void>` carries only wake signals. Discord commands, cron ticks, and manual prompts all create tasks rather than pushing to a per-ant queue.
+- Task lifecycle updated: `todo → in_progress` on pickup; `in_progress → in_review` on success (not `done` — human approval required); back to `todo` on failure or interrupt.
+- `ColonyState.AntControlHandles` slimmed: `pushPrompt`, `cancelWorkItem`, `reorderWorkItem`, `getWorkStore` removed; `wake()` and `clearQueue()` remain.
+- `DashboardOptions` interface replaces the positional `apiKey?` parameter on `createDashboardHandler`.
+- Nav link text hidden below `sm` breakpoint (icon-only with tooltip).
+
+### Removed
+
+- **GitHub Issues integration** — `github_issue` trigger type, issue polling, `POST /api/webhooks/github` webhook, `integrations.github` from colony and ant config schemas, `@colony/github` package, `GITHUB_TOKEN` env var. Ants can still interact with GitHub via CLI tools (`gh`, `git`) within their sessions.
+- `WorkStore` / `colony-work.db` — replaced by `TaskStore` / `colony-tasks.db` (fresh start, no migration).
+- `hasSeenIssue` / `markIssueSeen` from `AntState`; `seen_issues` SQLite table.
+- `issueContext` field from tasks.
+
 ## [0.5.0] — 2026-05-16
 
 ### Added
