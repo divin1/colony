@@ -197,6 +197,43 @@ export function createDashboardHandler(
       return jsonResponse(state.getStatus());
     }
 
+    // GET /api/events — SSE stream of colony-level events (tasks, projects, ant state)
+    if (path === "/api/events" && req.method === "GET") {
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          const send = (event: object) => {
+            try {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+            } catch { /* client disconnected */ }
+          };
+
+          // Send a heartbeat comment every 30s to keep the connection alive through proxies.
+          const heartbeat = setInterval(() => {
+            try { controller.enqueue(encoder.encode(": heartbeat\n\n")); } catch { /* gone */ }
+          }, 30_000);
+
+          const unsub = state.subscribeEvents(send);
+
+          req.signal.addEventListener("abort", () => {
+            unsub();
+            clearInterval(heartbeat);
+            try { controller.close(); } catch { /* already closed */ }
+          });
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          ...CORS_HEADERS,
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
+        },
+      });
+    }
+
     // POST /api/reload — hot reload config without restarting the runner
     if (path === "/api/reload" && req.method === "POST") {
       try {
@@ -224,6 +261,7 @@ export function createDashboardHandler(
         typeof body.description === "string" ? body.description : undefined,
         typeof body.color === "string" ? body.color : undefined
       );
+      state.emitEvent({ type: "project", action: "created", projectId: project.id });
       return jsonResponse(project, 201);
     }
 
@@ -243,10 +281,12 @@ export function createDashboardHandler(
           description: typeof body.description === "string" ? body.description : undefined,
           color: "color" in body ? (body.color as string | null) : undefined,
         });
+        if (ok) state.emitEvent({ type: "project", action: "updated", projectId });
         return ok ? jsonResponse({ ok: true }) : textResponse("Not found", 404);
       }
       if (req.method === "DELETE") {
         taskStore.deleteProject(projectId);
+        state.emitEvent({ type: "project", action: "deleted", projectId });
         return jsonResponse({ ok: true });
       }
     }
@@ -282,6 +322,7 @@ export function createDashboardHandler(
         source: (body.source as TaskSource) ?? "manual",
         status: (body.status as TaskStatus) ?? "backlog",
       });
+      state.emitEvent({ type: "task", action: "created", taskId: task.id });
       if (task.assigneeType === "ant" && task.assigneeName) {
         state.wake(task.assigneeName);
       }
@@ -312,6 +353,7 @@ export function createDashboardHandler(
         });
         if (typeof body.status === "string") taskStore.setStatus(taskId, body.status as TaskStatus);
         const updated = taskStore.getTask(taskId)!;
+        state.emitEvent({ type: "task", action: "updated", taskId });
         if (updated.assigneeType === "ant" && updated.assigneeName && updated.status === "todo") {
           state.wake(updated.assigneeName);
         }
@@ -332,6 +374,7 @@ export function createDashboardHandler(
           });
         }
         const updated = taskStore.getTask(taskId)!;
+        state.emitEvent({ type: "task", action: "updated", taskId });
         if (updated.assigneeType === "ant" && updated.assigneeName && updated.status === "todo") {
           state.wake(updated.assigneeName);
         }
@@ -340,6 +383,7 @@ export function createDashboardHandler(
 
       if (req.method === "DELETE") {
         taskStore.deleteTask(taskId);
+        state.emitEvent({ type: "task", action: "deleted", taskId });
         return jsonResponse({ ok: true });
       }
     }
@@ -358,6 +402,7 @@ export function createDashboardHandler(
         if (typeof body.body !== "string" || !body.body) return textResponse("body is required", 400);
         if (!taskStore.getTask(taskId)) return textResponse("Not found", 404);
         const comment = taskStore.addComment(taskId, body.author, body.body);
+        state.emitEvent({ type: "task", action: "updated", taskId });
         return jsonResponse(comment, 201);
       }
     }
@@ -366,6 +411,7 @@ export function createDashboardHandler(
     if (commentDeleteRoute && req.method === "DELETE") {
       if (!taskStore) return textResponse("Not found", 404);
       const deleted = taskStore.deleteComment(decodeURIComponent(commentDeleteRoute[2]));
+      if (deleted) state.emitEvent({ type: "task", action: "updated", taskId: decodeURIComponent(commentDeleteRoute[1]) });
       return deleted ? jsonResponse({ ok: true }) : textResponse("Not found", 404);
     }
 

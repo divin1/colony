@@ -371,7 +371,7 @@ async function runAntWithSupervision(
       colonyState.resume(ant.name);
     } else {
       // Create a task for the Discord message and wake the ant.
-      taskStore.createTask({
+      const discordTask = taskStore.createTask({
         projectId: defaultProjectId,
         title: `${payload.author}: ${text.slice(0, 60)}`,
         description: `You are ${ant.name}. A human operator (${payload.author}) sent you this message: "${text}"`,
@@ -379,6 +379,7 @@ async function runAntWithSupervision(
         assigneeName: ant.name,
         source: "discord",
       });
+      colonyState.emitEvent({ type: "task", action: "created", taskId: discordTask.id });
       wakeQueue.push();
     }
   });
@@ -386,7 +387,7 @@ async function runAntWithSupervision(
   // Cron trigger.
   if (hasCron) {
     new Cron(ant.schedule!.cron, () => {
-      taskStore.createTask({
+      const cronTask = taskStore.createTask({
         projectId: defaultProjectId,
         title: `${ant.name} — scheduled run`,
         description: defaultPrompt,
@@ -394,6 +395,7 @@ async function runAntWithSupervision(
         assigneeName: ant.name,
         source: "cron",
       });
+      colonyState.emitEvent({ type: "task", action: "created", taskId: cronTask.id });
       wakeQueue.push();
     });
   }
@@ -424,7 +426,7 @@ async function runAntWithSupervision(
               `${issue.body ?? "(no description provided)"}\n\n` +
               `Work through this issue. When done, end your session with a concise summary ` +
               `of what you completed — it will be posted as a comment on the issue.`;
-            taskStore.createTask({
+            const pollTask = taskStore.createTask({
               projectId: defaultProjectId,
               title: `#${issue.number}: ${issue.title}`,
               description,
@@ -433,6 +435,7 @@ async function runAntWithSupervision(
               source: "github_issue",
               issueContext,
             });
+            colonyState.emitEvent({ type: "task", action: "created", taskId: pollTask.id });
             wakeQueue.push();
           }
         } catch (err) {
@@ -466,7 +469,7 @@ async function runAntWithSupervision(
           if (pollIntervalMs > 0) {
             await sleepInterruptible(pollIntervalMs, signal);
           }
-          taskStore.createTask({
+          const autoTask = taskStore.createTask({
             projectId: defaultProjectId,
             title: `${ant.name} — autonomous session`,
             description: defaultPrompt,
@@ -474,6 +477,7 @@ async function runAntWithSupervision(
             assigneeName: ant.name,
             source: "cron",
           });
+          colonyState.emitEvent({ type: "task", action: "created", taskId: autoTask.id });
           continue;
         } else {
           // Event-driven ant: wait for a wake signal.
@@ -488,6 +492,7 @@ async function runAntWithSupervision(
       colonyState.setState(ant.name, "running");
       taskStore.setStatus(task.id, "in_progress", { startedAt: Date.now() });
       taskStore.addComment(task.id, ant.name, "🐜 Started session.");
+      colonyState.emitEvent({ type: "task", action: "updated", taskId: task.id });
 
       sessionController = new AbortController();
       try {
@@ -520,6 +525,7 @@ async function runAntWithSupervision(
           taskStore.addComment(task.id, ant.name, result.lastOutput);
           antState.setSessionSummary(ant.name, result.lastOutput);
         }
+        colonyState.emitEvent({ type: "task", action: "updated", taskId: task.id });
         broadcast(`✅ **${ant.name}** completed: ${task.title}`);
 
         if (task.issueContext && result.lastOutput && github) {
@@ -535,6 +541,7 @@ async function runAntWithSupervision(
           // Session interrupted by pause — push task back to todo and re-wake after resume.
           taskStore.setStatus(task.id, "todo");
           taskStore.addComment(task.id, ant.name, "⏸️ Session paused. Task returned to queue.");
+          colonyState.emitEvent({ type: "task", action: "updated", taskId: task.id });
           wakeQueue.push();
           continue;
         }
@@ -546,6 +553,7 @@ async function runAntWithSupervision(
         // All failures: task back to todo; retry after backoff.
         taskStore.setStatus(task.id, "todo");
         taskStore.addComment(task.id, ant.name, `❌ Session failed: ${errMsg}. Task returned to queue.`);
+        colonyState.emitEvent({ type: "task", action: "updated", taskId: task.id });
 
         if (err instanceof AntSessionError) {
           switch (err.category) {
@@ -781,12 +789,13 @@ export async function runColony(
           `Work through this issue. When done, end your session with a concise summary ` +
           `of what you completed — it will be posted as a comment on the issue.`;
 
-        taskStore.createTask({
+        const ghTask = taskStore.createTask({
           projectId: defaultProject.id,
           title: `#${issue.number}: ${issue.title}`,
           description, assigneeType: "ant", assigneeName: ant.name,
           source: "github_issue", issueContext,
         });
+        colonyState.emitEvent({ type: "task", action: "created", taskId: ghTask.id });
         colonyState.wake(ant.name);
       }
     };

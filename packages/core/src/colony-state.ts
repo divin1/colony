@@ -7,6 +7,11 @@ export interface ReloadResult {
 // "idle" = waiting for work (no tasks in queue); distinct from "paused" (human-paused).
 export type AntRuntimeState = "starting" | "idle" | "running" | "paused" | "crashed" | "backoff";
 
+export type ColonyEvent =
+  | { type: "task"; action: "created" | "updated" | "deleted"; taskId: string }
+  | { type: "project"; action: "created" | "updated" | "deleted"; projectId: string }
+  | { type: "ant-state"; name: string; state: AntRuntimeState };
+
 export interface AntStatusEntry {
   name: string;
   engine: string;
@@ -39,6 +44,7 @@ interface AntEntry {
 export class ColonyState {
   private readonly entries = new Map<string, AntEntry>();
   private readonly subscribers = new Map<string, Set<(line: string) => void>>();
+  private readonly eventSubscribers = new Set<(event: ColonyEvent) => void>();
   private readonly _configDir: string | null;
   private reloadCallback: (() => Promise<ReloadResult>) | null = null;
 
@@ -76,9 +82,23 @@ export class ColonyState {
     this.subscribers.set(name, new Set());
   }
 
+  emitEvent(event: ColonyEvent): void {
+    for (const cb of this.eventSubscribers) {
+      try { cb(event); } catch { /* subscriber gone */ }
+    }
+  }
+
+  subscribeEvents(cb: (event: ColonyEvent) => void): () => void {
+    this.eventSubscribers.add(cb);
+    return () => this.eventSubscribers.delete(cb);
+  }
+
   setState(name: string, state: AntRuntimeState): void {
     const entry = this.entries.get(name);
-    if (entry) entry.status.state = state;
+    if (entry) {
+      entry.status.state = state;
+      this.emitEvent({ type: "ant-state", name, state });
+    }
   }
 
   incrementSessions(name: string, type: "completed" | "crashed"): void {

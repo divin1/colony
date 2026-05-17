@@ -3,6 +3,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { isAuthError, storeKey, clearKey } from "@/lib/auth";
+import { useColonyEvents } from "@/lib/useColonyEvents";
+
+function ConnectedApp({ children }: { children: ReactNode }) {
+  useColonyEvents();
+  return <>{children}</>;
+}
 
 type Phase = "checking" | "ready" | "login";
 
@@ -84,5 +90,5 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return <ConnectedApp>{children}</ConnectedApp>;
 }
