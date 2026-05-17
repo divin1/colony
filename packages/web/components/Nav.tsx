@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Bug, BookOpen, Settings, ChevronDown } from "lucide-react";
+import { LayoutDashboard, Bug, BookOpen, Settings, ChevronDown, SlidersHorizontal } from "lucide-react";
 import type { Project } from "@/lib/types";
 
 const links = [
@@ -59,6 +59,15 @@ export function Nav({
               ))}
               {onNewProject && <option value="__new__">＋ New project…</option>}
             </select>
+            {selectedProjectId && (
+              <Link
+                href={`/projects/${encodeURIComponent(selectedProjectId)}`}
+                className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                title="Project settings"
+              >
+                <SlidersHorizontal className="size-3" />
+              </Link>
+            )}
           </div>
         )}
 
