@@ -239,24 +239,28 @@ Full web application for managing Colony without touching YAML or a terminal.
 - [x] Work item persistence — SQLite (`colony-work.db`); full lifecycle tracking
 - [x] Config CRUD API — `GET/PUT /api/config`, `GET/POST/PUT/DELETE /api/config/ants/:name`
 
-### Phase 14 — Real-time push (planned)
+### Phase 14 — Real-time push ✅ (complete)
 
-Replace 5-second polling with server-sent events for board and status updates. The ant output stream already uses SSE; extend the pattern to board-level events.
+Replace 5-second polling with server-sent events for board and status updates.
 
-- [ ] `GET /api/events` — SSE stream that emits `task`, `project`, and `ant-state` change events
-- [ ] `TaskStore` and `ColonyState` emit events after mutations (observer pattern or simple callbacks)
-- [ ] Web dashboard subscribes and updates TanStack Query cache on event, eliminating polling for board, task list, and ant status
-- [ ] Auth: `?key=` query param (same pattern as existing output SSE)
+- [x] `ColonyEvent` union type (`task` / `project` / `ant-state`) in `colony-state.ts`
+- [x] `emitEvent()` / `subscribeEvents()` added to `ColonyState`; `setState()` auto-emits `ant-state`
+- [x] `GET /api/events` SSE endpoint with 30s keepalive heartbeat; auth via `?key=` query param
+- [x] `dashboard.ts` emits events after every task/project create, update, delete, and comment mutation
+- [x] `runner.ts` emits events after every runner-initiated task creation and status transition
+- [x] `useColonyEvents` hook (web): subscribes to `GET /api/events`; invalidates `["tasks"]`, `["projects"]`, or `["status"]` on each event
+- [x] `AuthGate` renders `ConnectedApp` wrapper that activates the hook once authenticated
+- [x] Global `refetchInterval` reduced from 5s to 30s (SSE is now the real-time path; polling is a fallback)
 
-### Phase 15 — UX polish (planned)
+### Phase 15 — UX polish ✅ (complete)
 
 Small-scale improvements across the web dashboard.
 
-- [ ] Project settings page — rename, change color, delete project from the UI
-- [ ] Session memory viewer — view and clear per-ant session summaries stored in SQLite
-- [ ] Optimistic updates — drag-reorder and status transitions update the cache immediately; revert on API error
-- [ ] Skill path validation in ant config — warn (not block) when a configured skill path doesn't exist
-- [ ] Mobile layout — responsive Kanban columns (horizontal scroll or stacked view)
+- [x] Project settings page (`/projects/[id]`) — rename, recolor (10 presets + clear), delete with confirmation; gear icon in Nav project switcher links to it
+- [x] Session memory viewer — "Memory" tab on ant detail page; shows stored session summary; "Clear memory" button with confirmation; `GET/DELETE /api/ants/:name/memory` endpoints; `clearSessionSummary()` on `AntState`
+- [x] Optimistic updates in `TaskDrawer` — status transitions, assignee changes, and new comments update instantly via `onMutate`; revert on error via `onError`; drag-reorder in `KanbanBoard` was already optimistic
+- [x] Skill path validation — `SkillPicker` warns per-path with `⚠` when a `skills/*.md` path is configured but not found in the skills directory
+- [x] Mobile layout — `Nav` hides link text below `sm` (icons only, with `title` tooltip); `KanbanBoard` renders a tab-strip + single-column view below `md`, full horizontal layout on `md+`
 
 ---
 
