@@ -8,7 +8,7 @@ export default defineConfig({
   base,
   title: "Colony",
   description:
-    "A framework for deploying autonomous LLM agents that work continuously and check in with you before taking irreversible actions.",
+    "Open-source framework for deploying autonomous AI agents. Run Claude, Gemini, or any CLI agent as a supervised process. Kanban task management, resilient supervisor, web dashboard.",
 
   // Default to dark; user can toggle.
   appearance: "dark",
@@ -32,6 +32,12 @@ export default defineConfig({
 
   head: [
     ["link", { rel: "icon", href: `${base}favicon.svg`, type: "image/svg+xml" }],
+    ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:site_name", content: "Colony" }],
+    ["meta", { name: "twitter:card", content: "summary" }],
+    ["meta", { name: "twitter:title", content: "Colony — Autonomous AI Agent Framework" }],
+    ["meta", { name: "twitter:description", content: "Deploy autonomous AI agents powered by Claude, Gemini, or any CLI tool. Kanban task management, resilient supervisor, web dashboard." }],
+    ["meta", { name: "theme-color", content: "#0a0a0a" }],
   ],
 
   themeConfig: {
@@ -41,6 +47,7 @@ export default defineConfig({
       { text: "Configuration", link: "/configuration" },
       { text: "CLI", link: "/cli" },
       { text: "Docker", link: "/docker" },
+      { text: "MCP", link: "/mcp" },
     ],
 
     // Sidebar.
@@ -57,6 +64,7 @@ export default defineConfig({
           { text: "Configuration", link: "/configuration" },
           { text: "CLI", link: "/cli" },
           { text: "Docker", link: "/docker" },
+          { text: "MCP server", link: "/mcp" },
           { text: "Supervisor behavior", link: "/supervisor" },
         ],
       },

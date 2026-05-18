@@ -398,6 +398,141 @@
   border-radius: 8px !important;
 }
 
+/* ---------- Home content section (below features) ---------- */
+
+.home-content {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 64px 24px 96px;
+  font-size: 0.9375rem;
+  line-height: 1.75;
+  color: var(--vp-c-text-2);
+}
+
+.home-content h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--vp-c-text-1);
+  margin-top: 3rem;
+  margin-bottom: 0.75rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--vp-c-divider);
+}
+
+.home-content h2:first-of-type {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.home-content p {
+  margin-bottom: 1rem;
+  color: var(--vp-c-text-2);
+}
+
+.home-content strong {
+  color: var(--vp-c-text-1);
+  font-weight: 500;
+}
+
+.home-content hr {
+  border: none;
+  border-top: 1px solid var(--vp-c-divider);
+  margin: 2.5rem 0;
+}
+
+.home-content div[class*="language-"] {
+  border-radius: 6px !important;
+  border: 1px solid var(--vp-c-divider) !important;
+  background: var(--vp-code-block-bg) !important;
+  margin: 1.25rem 0 !important;
+}
+
+.home-content div[class*="language-"] code {
+  background: transparent !important;
+  border: none !important;
+  font-size: 0.8125rem !important;
+}
+
+.home-content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  margin: 1.25rem 0;
+}
+
+.home-content th {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+  border-bottom: 1px solid var(--vp-c-divider);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.home-content td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--vp-c-divider);
+  color: var(--vp-c-text-2);
+  vertical-align: top;
+}
+
+.home-content td:first-child {
+  font-weight: 500;
+  color: var(--vp-c-text-1);
+  white-space: nowrap;
+}
+
+.home-content tr:last-child td {
+  border-bottom: none;
+}
+
+.home-content code {
+  font-size: 0.8125em;
+  background: var(--vp-code-bg);
+  border-radius: 4px;
+  padding: 0.15em 0.4em;
+  border: 1px solid var(--vp-c-divider);
+  color: var(--vp-c-text-1);
+}
+
+/* Doc links list */
+.doc-links ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.5rem;
+}
+
+.doc-links li {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+  transition: border-color 0.15s;
+}
+
+.doc-links li:hover {
+  border-color: var(--vp-c-border);
+}
+
+.doc-links li a {
+  display: block;
+  padding: 0.75rem 1rem;
+  color: var(--vp-c-text-1) !important;
+  text-decoration: none !important;
+  font-size: 0.875rem;
+}
+
+.doc-links li a strong {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 0.125rem;
+}
+
 /* ---------- Home page ---------- */
 .VPHero .name {
   font-size: clamp(2rem, 5vw, 3.25rem);
