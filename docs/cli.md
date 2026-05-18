@@ -16,7 +16,7 @@ This downloads the correct pre-built binary for your OS and architecture to `~/.
 
 ```bash
 # Install a specific version
-COLONY_VERSION=v0.5.0 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
+COLONY_VERSION=v0.6.0 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
 
 # Install to a custom directory
 COLONY_INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
@@ -108,7 +108,7 @@ colony validate . --env .env           # load .env before validating
 ```
 ✓ Colony "my-colony" — config is valid.
   2 ant(s) configured:
-  • worker → #worker-logs: Processes GitHub issues labelled ant-ready
+  • worker → #worker-logs: Works through tasks assigned in the Kanban board
   • reviewer → #pr-reviews: Reviews open pull requests
 ```
 

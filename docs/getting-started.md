@@ -176,7 +176,7 @@ An ant with no triggers and no schedule runs continuously (sleeping for `poll_in
 
 Instructions are injected as additional context into the agent's system prompt. A few principles:
 
-- **Be concrete.** Name the exact commands the ant should run (`gh issue list --label ant-ready`, not "look at GitHub issues").
+- **Be concrete.** Name the exact commands the ant should run (`gh pr list --state open`, not "check for open PRs").
 - **Define constraints.** Tell the ant what it must never do. "Never force-push" and "never merge your own PRs" prevent expensive accidents.
 - **Set the exit condition.** Describe what "done" looks like for one work session so the ant knows when to stop and report.
 - **Give it a name and role.** `You are Worker, a software engineer responsible for…` gives the model a clearer frame to work from than a generic prompt.
@@ -196,7 +196,7 @@ Example output:
 ```
 ✓ Colony "my-colony" — config is valid.
   1 ant(s) configured:
-  • worker → #worker-logs: Processes open GitHub issues labelled ant-ready and implements fixes
+  • worker → #worker-logs: Software engineer — works through tasks assigned in the Kanban board
 ```
 
 If a variable is missing or a field is invalid, `validate` exits with a clear error pointing to the problem. Fix all errors before proceeding.

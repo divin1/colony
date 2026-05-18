@@ -4,8 +4,6 @@ integrations:
   discord:
     token: ${DISCORD_TOKEN}
     guild: ACME Engineering
-  github:
-    token: ${GITHUB_TOKEN}
 
 defaults:
   poll_interval: 5m

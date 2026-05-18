@@ -22,15 +22,11 @@ instructions: |
   Never approve a PR that contains hardcoded secrets or disabled type checks.
 
 integrations:
-  github:
-    repos:
-      - acme/platform
-      - acme/shared-libs
   discord:
     channel: pr-reviews
 
 triggers:
-  - type: github_issue
-    labels:
-      - needs-review
-  - type: discord_command
+  - type: discord_command   # wake when someone asks for a review in #pr-reviews
+
+schedule:
+  cron: "0 9 * * 1-5"      # also sweep for unreviewed PRs on weekday mornings

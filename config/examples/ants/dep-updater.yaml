@@ -21,9 +21,6 @@ instructions: |
   If any update requires code changes beyond lock-file updates, open a separate issue instead.
 
 integrations:
-  github:
-    repos:
-      - acme/platform
   discord:
     channel: dependency-updates
 
