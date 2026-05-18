@@ -21,13 +21,13 @@ features:
     details: Send work instructions, pause, resume, or query status from any ant's Discord channel. Slash commands are handled instantly — no LLM round-trip, no tokens consumed.
   - icon: ⚡
     title: Event-driven or scheduled
-    details: Wake ants on GitHub issues, Discord commands, or cron schedules. Ants with no triggers run continuously, sleeping between sessions.
+    details: Wake ants on Discord commands or cron schedules. Ants with no triggers run continuously, sleeping between sessions. Assign work at any time via the Kanban board.
   - icon: 🔄
     title: Resilient supervisor
     details: Each ant runs in its own supervisor loop. Crashes are classified — rate limits wait for reset, billing/auth errors pause and alert you, transient failures use exponential backoff. A crash in one ant never affects others.
   - icon: 🐳
     title: Docker-first deployment
-    details: One container per colony. Mount your config directory as a volume, pass secrets via env file, and get 24/7 autonomous operation.
+    details: Two-service compose setup (runner + web dashboard). Mount your config directory as a volume, pass secrets via env file, and get 24/7 autonomous operation with a persistent Kanban board.
   - icon: 🔌
     title: Multi-engine support
     details: Run ants on claude, gemini, codex, opencode, or any CLI tool that takes a prompt. Set engine per ant — mix and match in the same colony.

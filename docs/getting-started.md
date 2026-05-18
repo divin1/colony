@@ -223,8 +223,7 @@ Stop with Ctrl+C — the runner disconnects from Discord gracefully.
 
 Open `#worker-logs` in Discord. As the ant works you will see:
 - Text responses from Claude as it narrates its work
-- Confirmation requests (see below) for dangerous actions
-- `✅ **worker** completed its work session.` when the run finishes
+- `✅ **worker** completed: <task title>` when the session finishes
 
 If something goes wrong, the supervisor posts a message and responds based on the type of error:
 

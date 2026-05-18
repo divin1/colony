@@ -160,7 +160,7 @@ colony run . --env .env          # load .env before starting
 Received SIGINT — disconnecting…
 ```
 
-The runner disconnects from Discord before exiting. In-progress ant sessions are not interrupted cleanly (the SDK session is dropped), so prefer sending SIGTERM when the ant is idle.
+The runner disconnects from Discord before exiting. Any in-progress ant session receives SIGTERM; SIGKILL is escalated after 5 seconds if the process has not exited. Prefer shutting down when ants are idle if you want sessions to complete naturally before stopping.
 
 **Exit codes:**
 

@@ -1,8 +1,6 @@
 # Colony
 
-Colony is a framework for deploying autonomous LLM-based agents. Each ant is an agent session — powered by [Claude](https://github.com/anthropics/claude-agent-sdk) or [Gemini](https://ai.google.dev/gemini-api) — configured to do work autonomously while you focus on other things.
-
-Ants can maintain software projects, write blog posts, process data, or do anything an LLM agent can do &mdash; guided by a YAML config file and reporting back to you via Discord.
+Colony is a framework for deploying autonomous LLM-based agents. Each **ant** is an agent session driven by a CLI tool (claude, gemini, codex, or your own binary), configured via YAML, and managed by a persistent supervisor process. Ants can maintain software projects, write code, process data, or do anything an LLM agent can do — working continuously from a Kanban board while you stay in control.
 
 **[Documentation](https://divin1.github.io/colony/)** · [Getting started](https://divin1.github.io/colony/getting-started) · [Configuration reference](https://divin1.github.io/colony/configuration) · [Docker](https://divin1.github.io/colony/docker)
 
@@ -12,7 +10,7 @@ Ants can maintain software projects, write blog posts, process data, or do anyth
 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
 ```
 
-Downloads a standalone binary to `~/.local/bin/colony`. No dependencies required.
+Downloads a standalone binary to `~/.local/bin/colony`. No runtime dependencies required.
 
 See [docs/cli.md](docs/cli.md) for manual download, Windows instructions, and other options.
 
@@ -21,241 +19,210 @@ See [docs/cli.md](docs/cli.md) for manual download, Windows instructions, and ot
 ## Core Concepts
 
 ### Ant
-An **ant** is an agent session (Claude or Gemini) running in-process with a defined purpose. Each ant:
-- Is declared in a YAML config file (name, instructions, integrations, schedule)
-- Runs autonomously: on a schedule, in response to events, on human command, or from its own backlog
-- Reports its activity to Discord; optionally asks for human approval before dangerous actions
-- Has access to only the tools and repos it needs
+An **ant** is an agent session running as a supervised CLI subprocess. Each ant:
+- Is declared in a YAML config file (name, instructions, engine, schedule, triggers)
+- Runs autonomously: on a cron schedule, on Discord command, or continuously
+- Picks up tasks from the Kanban board; reports progress and results
+- Has its own Discord channel for status updates and human commands (optional)
 
 ### Colony
-A **colony** is a group of ants deployed together under a shared configuration. A colony can contain multiple specialized ants (one per project) or a single generalist ant.
+A **colony** is a group of ants deployed together under a shared configuration. A colony can contain multiple specialized ants (one per project, role, or workflow) or a single generalist.
 
 ### Colony Runner
-The **colony runner** is the host process that manages the Agent SDK sessions for all ants in a colony. It reads the colony config, starts each ant as an in-process Agent SDK session, bridges messages between ants and external integrations, and restarts ants that fail.
+The **colony runner** is the host process that manages all ants. It reads YAML configs, spawns each ant's CLI binary as a child process, streams output, bridges integrations, and supervises restart behavior on failure.
+
+---
 
 ## How It Works
 
 ```
-Human (Discord)
-       ↕
-Colony Runner
-       ↕
-Ant (Claude or Gemini agent session, running in-process)
-       ↕
-External services (GitHub, etc.)
+Human (web dashboard or Discord)
+              ↕
+        Colony Runner
+              ↕
+  Ant (CLI subprocess: claude, gemini, …)
+              ↕
+     External services (git, gh, etc.)
 ```
 
-1. You define your ants in YAML config files inside a colony directory
-2. You deploy the colony via Docker (or run it locally with the CLI)
-3. The colony runner starts each ant as an Agent SDK session with its instructions
-4. Each ant enters its work loop: polling for tasks, reacting to events, or waiting for human commands
-5. When a dangerous action is detected, Colony applies the ant's autonomy policy: ask Discord (`human`), auto-approve (`full`), or auto-deny (`strict`)
-6. Ants report progress, results, and errors to their designated Discord channel
+1. Define ants in YAML inside a colony directory
+2. Deploy via Docker (or run locally with `colony run`)
+3. The runner spawns each ant's CLI binary, streams its output, and manages its lifecycle
+4. Assign tasks through the web dashboard's Kanban board — ants pick them up automatically
+5. Ants report progress to Discord; humans review completed work before marking it done
+6. The web dashboard shows live output, task status, and lets you edit config without restarting
+
+---
 
 ## Ant Configuration
 
 Each ant is declared in a single YAML file:
 
 ```yaml
-name: alice
-description: Maintains the my-app repository — reviews issues, implements fixes, opens PRs
+name: worker
+description: Software engineer — implements tasks from the Kanban board
+
+engine: claude-cli   # "claude-cli" (default) | "gemini-cli" | "codex" | "opencode" | "cli"
 
 instructions: |
-  You are Alice, a software engineer responsible for the my-app repository.
-  Review open GitHub issues labelled 'ant-ready', implement fixes, and open PRs.
-  Always run the test suite before opening a PR. Never force-push to main.
-
-engine: claude       # "claude" (default) | "gemini"
-autonomy: human      # "human" (default) | "full" | "strict"
-                     # human:  dangerous actions forwarded to Discord for approval
-                     # full:   fully autonomous, no confirmation prompts
-                     # strict: dangerous actions auto-denied, no Discord contact
+  You are Worker, a software engineer for the acme/platform repository.
+  Each session you receive a task. Implement it, run the tests, and open a PR.
+  Never force-push to main. Never merge your own PRs.
 
 integrations:
-  github:
-    repos:
-      - my-org/my-app
   discord:
-    channel: alice-logs      # channel where alice posts updates and asks for confirmation
-
-schedule:
-  cron: "0 9 * * 1-5"        # start working at 9 am on weekdays
+    channel: worker-logs   # optional — where the ant posts updates
 
 triggers:
-  - type: github_issue        # wake up when a matching issue is opened
-    labels: [ant-ready]
-  # discord_command trigger makes the ant event-only (no autonomous loop).
-  # All ants accept human messages/commands regardless of this setting.
+  - type: discord_command  # only run when a human sends a message (event-only mode)
+  # omit triggers entirely for continuous/cron-based operation
+
+schedule:
+  cron: "0 9 * * 1-5"     # optionally also run on a schedule
+
+skills:
+  - skills/code-review-standards.md   # optional instruction files injected at session start
+
+state:
+  backend: sqlite          # persist session memory across restarts
+  path: ./worker-state.db
 ```
 
 ### Colony-Level Config
 
-Shared settings (tokens, default integrations, global defaults) live in a top-level `colony.yaml`:
+Shared settings live in `colony.yaml`:
 
 ```yaml
 name: my-colony
 
 integrations:
-  discord:
+  discord:                 # optional
     token: ${DISCORD_TOKEN}
     guild: my-server
-  github:
-    token: ${GITHUB_TOKEN}
 
 defaults:
-  confirmation_timeout: 30m   # treat no Discord reaction within 30 min as deny
+  poll_interval: 5m
+  git:
+    user_name: "Your Name"
+    user_email: "you@example.com"
+
+monitoring:
+  port: 8080               # enables web dashboard at http://localhost:8080
 ```
+
+---
 
 ## Human ↔ Ant Communication
 
-Each ant has a dedicated Discord channel.
+### Web Dashboard (primary)
 
-### Ant → Human
+Enable the dashboard with `monitoring.port` in `colony.yaml`, then open `http://localhost:3000` (or use `docker compose up` which starts the web service automatically).
 
-The ant posts to the channel as it works:
-- Status: `🐜 starting`, `✅ session complete`
-- Crash and error notifications with context-specific messages:
-  - `❌ crashed: … Restarting in Ns…` (transient errors — exponential backoff: 10s → 20s → 40s… cap 5 min)
-  - `⏳ rate limited. Resuming in Ns…` (rate limit — waits until the limit resets)
-  - `💳 billing error — check Anthropic account. Pausing until resumed.`
-  - `🔐 auth failed — check credentials. Pausing until resumed.`
-  - `💰 USD budget cap exceeded. Pausing until resumed.`
-  - `🚫 permanent error: … Restarting in Ns…` (invalid request, structured output retries)
-- Narration: the ant's own text output describing what it's doing
-- Confirmation requests when a dangerous action is detected (requires ✅/❌ reaction)
-- Pause/resume acks: `⏸️ will pause after current session`, `▶️ resuming`
+- **Kanban board** — create projects, add tasks (Backlog → To Do → In Progress → In Review → Done), assign to ants or yourself; ants pick up To Do tasks automatically
+- **Ant detail** — live output stream, recent tasks, session memory, config editor
+- **Skill manager** — create and edit skill files that inject instructions into ant sessions
+- **MCP** — control Colony from Claude Desktop or Claude Code via `colony mcp`
 
-### Human → Ant
+### Discord (optional)
 
-Write in the ant's channel at any time — no special configuration needed.
+Each ant listens to its configured Discord channel. Write there at any time.
 
-**Slash commands** are intercepted by the colony runner and answered immediately (no tokens consumed):
+**Slash commands** are intercepted by the runner and answered immediately — no tokens consumed:
 
 | Command | Effect |
 |---|---|
 | `/help` | List available commands |
-| `/status` | Current state (running / paused) and queue depth |
-| `/stats` or `/usage` | Uptime and session statistics |
-| `/pause` or `/stop` | Pause after the current session |
+| `/status` | Current state and queue depth |
+| `/stats` | Uptime and session statistics |
+| `/pause` or `/stop` | Pause before the next task |
 | `/resume` or `/start` | Resume a paused ant |
-| `/clear` | Discard all queued work items |
+| `/clear` | Move all queued tasks back to backlog |
 
-**Any other message** is forwarded to the ant as a work instruction. If the ant is paused, it auto-resumes.
+**Any other message** is queued as a task for the ant. If paused, it auto-resumes.
 
-Example:
-```
-you:   Fix the failing auth tests
-ant:   ▶️ **alice** resuming.
-ant:   Starting on the failing auth tests…
-```
+### Status messages posted by ants
 
-React ✅ or ❌ to approve or deny a confirmation request.
-
-### Autonomy and Confirmation
-
-Each ant's `autonomy` setting controls what happens when a dangerous action is detected (`git push`, `rm -rf`, `sudo`, pipe-to-shell, SQL drops, etc.):
-
-| `autonomy` | Behaviour |
+| Emoji | Event |
 |---|---|
-| `human` | Pauses and posts a Discord message with ✅/❌ reactions. Timeout = deny. |
-| `full` | Auto-approves everything. No Discord prompts. |
-| `strict` | Auto-denies everything flagged. No Discord prompts. |
+| 🐜 | Ant starting |
+| ✅ | Session completed successfully |
+| ❌ | Transient crash — exponential backoff (10 s → 20 s → 40 s… cap 5 min) |
+| ⏳ | Rate limited — waits until reset |
+| 🚫 | Permanent error — backoff then retry |
+| 💳 | Billing error — paused until human sends `/resume` |
+| 🔐 | Auth error — paused until human sends `/resume` |
+| 💰 | Budget cap hit — paused until human sends `/resume` |
+| ⏸️ | Pause acknowledged |
+| ▶️ | Resuming |
 
-Additional rules — specific tools or bash patterns that should always be flagged — are configured separately in the `confirmation` block.
-
-## Documentation
-
-- [Getting started](https://divin1.github.io/colony/getting-started) — install, scaffold, configure, and run your first colony
-- [Configuration reference](https://divin1.github.io/colony/configuration) — all `colony.yaml` and `ants/*.yaml` options with examples
-- [CLI reference](https://divin1.github.io/colony/cli) — `colony init`, `validate`, `run`
-- [Docker deployment](https://divin1.github.io/colony/docker) — docker compose and docker run, persistent state, multi-colony setups
+---
 
 ## Deployment
 
-Colony is designed to run in Docker. Install the CLI first (`curl … | sh`), scaffold a colony directory, then containerize it. You do not need to clone or build the repository.
-
-A typical colony layout:
+Colony runs in Docker. Install the CLI, scaffold a colony directory, then use the two-service compose setup (runner + web dashboard):
 
 ```
 my-colony/
-  colony.yaml             # colony-level config and shared settings
+  colony.yaml
   ants/
-    alice.yaml            # ant config
-    bob.yaml              # ant config
-  .env                    # secrets (DISCORD_TOKEN, GITHUB_TOKEN, etc.)
+    worker.yaml
+  .env             # ANTHROPIC_API_KEY, DISCORD_TOKEN, COLONY_API_KEY, etc.
+  docker-compose.yml
 ```
-
-To build and run with Docker:
 
 ```bash
-docker build -f docker/Dockerfile -t colony .
-docker run --env-file .env -v $(pwd):/colony -w /colony colony run .
+docker compose build
+docker compose up -d
 ```
 
-Or with docker-compose from inside the `docker/` directory:
+Open **http://localhost:3000**. Set `COLONY_API_KEY` in `.env` to protect the dashboard with a Bearer token.
 
-```bash
-docker compose up
-```
+See [Docker deployment guide](docs/docker.md) for full instructions including persistent state, multi-colony setups, and config hot-reload.
+
+---
 
 ## CLI
 
-The `colony` CLI manages colonies from your terminal:
-
 ```
-colony init [dir]         # scaffold a new colony directory (default: ./my-colony)
-colony validate [dir]     # validate colony and ant config files
-colony run [dir]          # start the colony runner (all ants)
+colony init [dir]       # scaffold a new colony directory
+colony validate [dir]   # validate config without starting
+colony run [dir]        # start the colony runner
+colony mcp              # start the MCP server for Claude Desktop / Claude Code
+colony version          # show current version
+colony update           # download the latest binary
 ```
 
-See [CLI reference](https://divin1.github.io/colony/cli) for installation instructions and full command reference.
+See [CLI reference](docs/cli.md) for all options and flags.
+
+---
 
 ## Feature Matrix
 
-| Feature | Status | Notes |
-|---|---|---|
-| Colony runner & supervisor | ✅ Available | Crash recovery, typed errors, exponential backoff, pause/resume |
-| Claude Agent SDK engine | ✅ Available | In-process agent sessions with hook support |
-| Gemini Gen AI SDK engine | ✅ Available | In-process `@google/genai` loop, `engine: gemini` |
-| Autonomy levels | ✅ Available | `human`, `full`, `strict` |
-| Confirmation flow | ✅ Available | Discord reactions, timeout, dangerous action detection |
-| Cron scheduling | ✅ Available | Standard cron expressions via `schedule.cron` |
-| Config validation (Zod) | ✅ Available | Env var interpolation, fail-fast on invalid config |
-| State persistence | ✅ Available | Memory and SQLite backends |
-| PostToolUse logging | ✅ Available | Configurable: `off`, `impactful`, `all` |
-| Discord integration | ✅ Available | Messages, reactions, slash commands, confirmations |
-| GitHub integration | 🔄 Partial | List issues, post comments, issue polling triggers |
-| GitHub PR creation | 📋 Planned | Ants can use `gh` CLI as a workaround |
-| GitHub webhooks | 📋 Planned | Currently polls every 5 minutes |
-| Backlog management | 📋 Planned | Auto-discover tasks from GitHub/Linear |
-| Session interruption | 📋 Planned | Commands take effect after current session completes |
-| Session persistence | 📋 Planned | Ants restart without prior context (`persistSession: false`) |
-| Slack integration | 📋 Planned | Alternative to Discord |
-| Linear integration | 📋 Planned | Read issues as ant backlog |
-| Health check endpoint | 📋 Planned | HTTP endpoint for Docker monitoring |
-| CLI: init / validate / run | ✅ Available | Scaffold, check config, start colony |
-| CLI: version / update | ✅ Available | Binary distribution with auto-update |
-| Docker deployment | ✅ Available | Dockerfile, docker-compose, docs |
-| Install script | ✅ Available | `curl \| sh` for Linux, macOS, WSL |
+| Feature | Status |
+|---|---|
+| Colony runner & supervisor | ✅ |
+| Typed error classification (rate limit, billing, auth, budget, transient, permanent) | ✅ |
+| Exponential backoff | ✅ |
+| Mid-session interrupt (SIGTERM on pause) | ✅ |
+| `claude-cli` engine (NDJSON stream parsing) | ✅ |
+| `gemini-cli`, `codex`, `opencode`, custom `cli` engines | ✅ |
+| Cron scheduling | ✅ |
+| Discord command trigger | ✅ |
+| Discord integration (optional) | ✅ |
+| Discord webhook (send-only, no bot) | ✅ |
+| Web dashboard (Kanban, config editor, live output) | ✅ |
+| Project & task management | ✅ |
+| Skill management UI | ✅ |
+| Session memory (SQLite) | ✅ |
+| Real-time SSE push | ✅ |
+| API key auth | ✅ |
+| Hot reload | ✅ |
+| MCP server (Claude Desktop / Claude Code) | ✅ |
+| Docker two-service deployment | ✅ |
+| CLI binary distribution + auto-update | ✅ |
+| Config validation (Zod, env interpolation) | ✅ |
 
-## Roadmap
-
-- [x] Colony runner: ant lifecycle management (spawn, monitor, restart)
-- [x] Typed error classification with exponential backoff and blocking-error handling
-- [x] Claude Agent SDK session integration
-- [x] Gemini Gen AI SDK engine (`engine: gemini`, in-process `@google/genai` loop)
-- [x] Autonomy levels: `human`, `full`, `strict`
-- [x] Discord integration: message send/receive, confirmation reactions, human commands (pause/resume/instruct)
-- [x] Discord slash commands: `/help`, `/status`, `/stats`, `/pause`, `/resume`, `/clear`
-- [x] GitHub integration: issue reading, comment creation, issue polling triggers
-- [x] Cron scheduling for ants
-- [x] CLI: `init`, `validate`, `run`
-- [x] Docker / docker-compose deployment support
-- [x] Configurable PostToolUse logging (`"off"` / `"impactful"` / `"all"`)
-- [ ] Backlog management: auto-discover tasks from GitHub Issues
-- [ ] GitHub webhook triggers (replace polling)
-- [ ] Slack integration
-- [ ] Linear integration
+---
 
 ## License
 
