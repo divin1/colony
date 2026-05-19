@@ -692,6 +692,41 @@
   color: var(--vp-c-text-1);
 }
 
+/* ---------- Hero version badge ---------- */
+.version-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 5px 12px 5px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--vp-c-divider);
+  background: var(--vp-c-bg-soft);
+  font-size: 12.5px;
+  text-decoration: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.version-badge:hover {
+  border-color: var(--vp-c-brand-1);
+  background: var(--vp-c-bg-mute);
+}
+
+.version-tag {
+  background: var(--vp-c-brand-1);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+
+.version-label {
+  color: var(--vp-c-text-2);
+  font-weight: 500;
+}
+
 /* ---------- Hero install command ---------- */
 .install-command {
   display: inline-flex;

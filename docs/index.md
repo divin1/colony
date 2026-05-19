@@ -76,22 +76,11 @@ There is no in-process SDK, no confirmation flow, no per-action approval prompt.
 
 ---
 
-## Install
+## Quick start
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
-```
-
-Installs the `colony` binary to `~/.local/bin/colony` and the web UI to `~/.local/share/colony/web/`. No runtime dependencies — not even Bun or Node.
-
-```bash
-colony --version
 colony init ./my-colony   # scaffold a colony directory
 ```
-
----
-
-## Quick start
 
 **`colony.yaml`** — colony-level config:
 
