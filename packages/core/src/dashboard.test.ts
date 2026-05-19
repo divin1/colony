@@ -40,21 +40,10 @@ describe("createDashboardHandler", () => {
     expect(body.ants).toHaveLength(1);
   });
 
-  it("GET / returns HTML dashboard", async () => {
+  it("GET / returns 404 when no webRoot configured", async () => {
     const handler = createDashboardHandler(makeState());
     const res = await handler(req("GET", "/"));
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/html");
-    const html = await res.text();
-    expect(html).toContain("<!DOCTYPE html>");
-    expect(html).toContain("/api/status");
-  });
-
-  it("GET /dashboard also returns HTML", async () => {
-    const handler = createDashboardHandler(makeState());
-    const res = await handler(req("GET", "/dashboard"));
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(res.status).toBe(404);
   });
 
   it("POST /api/ants/:name/pause returns ok", async () => {
@@ -160,11 +149,11 @@ describe("createDashboardHandler — auth", () => {
     expect(res.status).toBe(204);
   });
 
-  it("serves the HTML dashboard without auth even when apiKey is set", async () => {
+  it("GET / returns 404 (not 401) when no webRoot set even with apiKey", async () => {
     const handler = createDashboardHandler(makeState(), { apiKey: "secret" });
     const res = await handler(req("GET", "/"));
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/html");
+    // Non-API path; no auth gate. Without webRoot, falls through to 404.
+    expect(res.status).toBe(404);
   });
 
   it("CORS headers include Authorization", async () => {

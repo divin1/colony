@@ -116,7 +116,7 @@ monitoring:
 
 ### Web Dashboard (primary)
 
-Enable the dashboard with `monitoring.port` in `colony.yaml`, then open `http://localhost:3000` (or use `docker compose up` which starts the web service automatically).
+Enable the dashboard with `monitoring.port` in `colony.yaml`, then open `http://localhost:8080`.
 
 - **Kanban board** — create projects, add tasks (Backlog → To Do → In Progress → In Review → Done), assign to ants or yourself; ants pick up To Do tasks automatically
 - **Ant detail** — live output stream, recent tasks, session memory, config editor
@@ -175,7 +175,7 @@ docker compose build
 docker compose up -d
 ```
 
-Open **http://localhost:3000**. Set `COLONY_API_KEY` in `.env` to protect the dashboard with a Bearer token.
+Open **http://localhost:8080**. Set `COLONY_API_KEY` in `.env` to protect the dashboard with a Bearer token.
 
 See [Docker deployment guide](docs/docker.md) for full instructions including persistent state, multi-colony setups, and config hot-reload.
 

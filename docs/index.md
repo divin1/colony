@@ -141,7 +141,7 @@ COLONY_API_KEY=your-secret     # protects the dashboard API
 
 ```bash
 colony run .
-# open http://localhost:3000 (or http://localhost:8080 for the raw API)
+# open http://localhost:8080
 ```
 
 Add tasks to the **Kanban board** in the dashboard. Ants pick them up automatically, work through them, and move them to **In Review**. You move them to **Done** when you're happy with the result.

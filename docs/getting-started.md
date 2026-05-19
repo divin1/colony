@@ -283,13 +283,7 @@ monitoring:
   port: 8080
 ```
 
-Then start the web frontend in a second terminal:
-
-```bash
-bun --cwd packages/web next dev   # http://localhost:3000
-```
-
-The frontend proxies all API calls to `http://localhost:8080` (set `COLONY_API_URL` to override).
+Then open **http://localhost:8080** — the full Kanban dashboard is served from the same port as the API.
 
 To protect the dashboard with an API key, set `COLONY_API_KEY` in the runner's environment. The web frontend will prompt for the key on first load.
 

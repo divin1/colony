@@ -47,7 +47,7 @@ If neither `discord` nor `discord_webhook` is configured, all output goes to the
 ```yaml
 # Optional: local web dashboard
 monitoring:
-  port: 3000   # opens http://localhost:3000 with a live status dashboard
+  port: 8080   # opens http://localhost:8080 with the full web dashboard
 ```
 
 ### Minimal example (console only — no messaging)

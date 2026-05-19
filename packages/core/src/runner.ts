@@ -1,5 +1,7 @@
 import { Cron } from "croner";
-import { join } from "path";
+import { join, dirname } from "path";
+import { existsSync } from "fs";
+import { homedir } from "os";
 import { runAnt } from "./ant";
 import type { ConfirmationChannel } from "./hooks";
 import type { LoadedConfig, AntConfig, ColonyConfig } from "./config";
@@ -611,6 +613,20 @@ function checkBinaries(ants: LoadedConfig["ants"]): void {
   }
 }
 
+function resolveWebRoot(): string | undefined {
+  if (process.env.COLONY_WEB_ROOT) return process.env.COLONY_WEB_ROOT;
+  // XDG data dir: ~/.local/share/colony/web/ (standard Linux install location)
+  const xdg = join(homedir(), ".local", "share", "colony", "web");
+  if (existsSync(join(xdg, "index.html"))) return xdg;
+  // Adjacent to the binary (custom or Windows install: binary dir + /web/)
+  const binWeb = join(dirname(process.execPath), "web");
+  if (existsSync(join(binWeb, "index.html"))) return binWeb;
+  // Dev mode: packages/web/out/ relative to cwd (monorepo root)
+  const devWeb = join(process.cwd(), "packages", "web", "out");
+  if (existsSync(join(devWeb, "index.html"))) return devWeb;
+  return undefined;
+}
+
 export async function runColony(
   config: LoadedConfig,
   discord: RunnerDiscord,
@@ -688,14 +704,17 @@ export async function runColony(
   let dashboardServer: ReturnType<typeof Bun.serve> | undefined;
   const monitorPort = config.colony.monitoring?.port;
   if (monitorPort) {
+    const webRoot = resolveWebRoot();
     dashboardServer = Bun.serve({
       port: monitorPort,
       fetch: createDashboardHandler(colonyState, {
         apiKey: process.env.COLONY_API_KEY,
         taskStore,
+        webRoot,
       }),
     });
-    console.log(`Dashboard: http://localhost:${monitorPort}`);
+    const webNote = webRoot ? "" : " (API only — web UI not found; build packages/web or set COLONY_WEB_ROOT)";
+    console.log(`Dashboard: http://localhost:${monitorPort}${webNote}`);
   }
 
   for (const ant of config.ants) startAnt(ant);

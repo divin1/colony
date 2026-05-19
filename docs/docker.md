@@ -1,6 +1,6 @@
 # Docker Deployment
 
-Docker is the recommended way to run a colony in production. A single `docker compose up -d` starts both the Colony runner and the web dashboard, with automatic restarts on crash or host reboot.
+Docker is the recommended way to run a colony in production. A single `docker compose up -d` starts the Colony runner (API + web dashboard bundled together) with automatic restarts on crash or host reboot.
 
 ## Prerequisites
 
@@ -10,14 +10,15 @@ Docker is the recommended way to run a colony in production. A single `docker co
 
 ---
 
-## Services
+## Architecture
 
-| Service | What it runs | Default port |
-|---|---|---|
-| `runner` | Colony runner — ant supervisor, HTTP API | 8080 (internal only) |
-| `web` | Next.js dashboard — Kanban board, config editor, live output | 3000 (host-exposed) |
+A single container handles everything:
 
-The `web` service proxies all `/api/*` calls to `http://runner:8080` over the internal Docker network. The runner's port is not exposed to the host by default; open your browser at **http://localhost:3000**.
+| What it runs | Port |
+|---|---|
+| Colony runner — ant supervisor, HTTP API, **web dashboard** | 8080 (host-exposed) |
+
+The web UI (Kanban board, config editor, live output) is served directly from the same port as the API. No separate web service or reverse proxy required.
 
 ---
 
@@ -27,7 +28,6 @@ The `web` service proxies all `/api/*` calls to `http://runner:8080` over the in
 colony/          ← cloned Colony repo
   docker/
     Dockerfile
-    Dockerfile.web
     docker-compose.yml
     .env.example
 my-colony/       ← your colony directory (mounted at runtime)
@@ -78,11 +78,11 @@ COLONY_API_KEY=your-secret-here
 cp colony/docker/docker-compose.yml my-colony/docker-compose.yml
 ```
 
-Edit the `context:` paths to point at the Colony repo:
+Edit the `context:` path to point at the Colony repo:
 
 ```yaml
 services:
-  runner:
+  colony:
     build:
       context: ../colony          # path to the cloned Colony repo
       dockerfile: docker/Dockerfile
@@ -91,19 +91,8 @@ services:
     volumes:
       - .:/colony
     working_dir: /colony
-    command: ["run", "."]
-
-  web:
-    build:
-      context: ../colony
-      dockerfile: docker/Dockerfile.web
-    restart: unless-stopped
-    environment:
-      COLONY_API_URL: http://runner:8080
-    depends_on:
-      - runner
     ports:
-      - "3000:3000"
+      - "8080:8080"
 ```
 
 ### 4. Build and start
@@ -114,39 +103,18 @@ docker compose build   # first time, or after pulling a new Colony version
 docker compose up -d
 ```
 
-Open **http://localhost:3000**. If `COLONY_API_KEY` is set in `.env`, the dashboard will prompt for the key on first load.
+Open **http://localhost:8080**. If `COLONY_API_KEY` is set in `.env`, the dashboard will prompt for the key on first load.
 
 ### 5. Tail logs
 
 ```bash
-docker compose logs -f           # all services
-docker compose logs -f runner    # runner only
-docker compose logs -f web       # web only
+docker compose logs -f           # all output
 ```
 
 ### 6. Stop
 
 ```bash
 docker compose down
-```
-
----
-
-## Running without the web dashboard
-
-If you only want the runner (no dashboard), use a single-service compose file or `docker run` directly:
-
-```bash
-cd colony
-docker build -f docker/Dockerfile -t colony-runner:latest .
-
-docker run -d \
-  --name my-colony \
-  --restart unless-stopped \
-  --env-file /path/to/my-colony/.env \
-  -v /path/to/my-colony:/colony \
-  -w /colony \
-  colony-runner:latest run .
 ```
 
 ---
@@ -158,22 +126,8 @@ Set `COLONY_API_KEY` in `.env` to protect the HTTP API and web dashboard with a 
 If you also use the MCP server (`colony mcp`), pass the same key:
 
 ```bash
-colony mcp --url http://your-host:3000 --key your-secret-here
+colony mcp --url http://your-host:8080 --key your-secret-here
 # or via env: export COLONY_API_KEY=your-secret-here
-```
-
-> **Note:** The web service does not need `COLONY_API_KEY` itself. The browser sends the Bearer token directly to the runner through the Next.js proxy.
-
----
-
-## Exposing the raw API
-
-The runner's port 8080 is internal by default. To expose it to the host (e.g. for direct API access or a remote MCP server), uncomment in `docker-compose.yml`:
-
-```yaml
-  runner:
-    ports:
-      - "8080:8080"
 ```
 
 ---
@@ -188,7 +142,7 @@ The colony directory is mounted as a volume, so config changes take effect after
 To restart all ants:
 
 ```bash
-docker compose restart runner
+docker compose restart colony
 ```
 
 ---
@@ -200,8 +154,8 @@ cd colony
 git pull
 bun install           # update lockfile if deps changed
 
-docker compose build  # rebuild both images
-docker compose up -d  # restart with new images
+docker compose build  # rebuild image
+docker compose up -d  # restart with new image
 ```
 
 ---
@@ -251,13 +205,13 @@ Each runs on its own port:
 ```yaml
 # acme/docker-compose.yml
 services:
-  web:
+  colony:
     ports:
-      - "3001:3000"   # acme dashboard on :3001
+      - "8081:8080"   # acme dashboard on :8081
 
 # internal/docker-compose.yml
 services:
-  web:
+  colony:
     ports:
-      - "3002:3000"   # internal dashboard on :3002
+      - "8082:8080"   # internal dashboard on :8082
 ```
