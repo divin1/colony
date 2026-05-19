@@ -27,8 +27,7 @@ export default defineConfig({
     },
   },
 
-  // Don't emit dead link warnings as errors in CI.
-  ignoreDeadLinks: false,
+  ignoreDeadLinks: "localhostLinks",
 
   head: [
     ["link", { rel: "icon", href: `${base}favicon.svg`, type: "image/svg+xml" }],

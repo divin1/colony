@@ -691,3 +691,50 @@
   background: rgba(255, 255, 255, 0.12);
   color: var(--vp-c-text-1);
 }
+
+/* ---------- Hero install command ---------- */
+.install-command {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--vp-c-divider);
+  background: var(--vp-c-bg-soft);
+  font-size: 13px;
+  max-width: 100%;
+}
+
+.install-text {
+  font-family: var(--vp-font-family-mono);
+  color: var(--vp-c-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+.install-copy {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--vp-c-text-3);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  padding: 0;
+  font-size: 13px;
+}
+
+.install-copy:hover {
+  color: var(--vp-c-text-1);
+  background: var(--vp-c-bg-mute);
+}
