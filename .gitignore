@@ -15,3 +15,4 @@ packages/web/next-env.d.ts
 # Colony runtime data — persisted via Docker volume, not tracked in git
 *.db
 colony
+debug/
