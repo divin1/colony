@@ -10,6 +10,7 @@ docs/.vitepress/dist/
 
 # Next.js
 packages/web/.next/
+packages/web/out/
 packages/web/next-env.d.ts
 
 # Colony runtime data — persisted via Docker volume, not tracked in git

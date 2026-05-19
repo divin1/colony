@@ -1,5 +1,6 @@
 BUN       := $(shell which bun || echo ~/.bun/bin/bun)
 INSTALL   := $(HOME)/.local/bin/colony
+WEB_DIR   := $(HOME)/.local/share/colony/web
 OUTFILE   := colony
 
 # Detect platform
@@ -14,7 +15,7 @@ endif
 
 TARGET := bun-$(_OS)-$(_ARCH)
 
-.PHONY: build install clean
+.PHONY: build build-web install clean
 
 ## Build the colony binary for the current platform
 build:
@@ -24,13 +25,23 @@ build:
 		--outfile $(OUTFILE)
 	@echo "Built: $(OUTFILE) ($(TARGET))"
 
-## Build and replace the installed colony binary
-install: build
+## Build the web UI static files
+build-web:
+	cd packages/web && $(BUN) run build
+	@echo "Built: packages/web/out/"
+
+## Build binary + web UI and install both
+install: build build-web
 	@mkdir -p $(dir $(INSTALL))
 	cp $(OUTFILE) $(INSTALL)
 	@echo "Installed: $(INSTALL)"
+	@mkdir -p $(WEB_DIR)
+	rm -rf $(WEB_DIR)
+	cp -r packages/web/out $(WEB_DIR)
+	@echo "Installed: $(WEB_DIR)"
 	@$(INSTALL) --version
 
-## Remove the local build artifact
+## Remove local build artifacts
 clean:
 	rm -f $(OUTFILE)
+	rm -rf packages/web/out packages/web/.next
