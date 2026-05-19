@@ -51,7 +51,7 @@ features:
     details: Live output stream, Kanban board, skill manager, session memory viewer, and a config editor — no YAML editing required after the initial setup.
   - icon: 💬
     title: Discord (optional)
-    details: Send work instructions, pause, resume, or query status from any ant's Discord channel. Or skip it entirely — Colony works fine with just the web dashboard.
+    details: Full bot mode — send instructions, pause, resume, or query status from Discord. Webhook mode — receive notifications only. Or skip Discord entirely; the web dashboard covers everything.
   - icon: 🔌
     title: MCP server
     details: Control Colony from Claude Desktop or Claude Code via the built-in MCP server. Check status, queue tasks, stream output — all from your AI assistant.
