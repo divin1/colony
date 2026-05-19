@@ -10,13 +10,13 @@ The `colony` CLI is the primary tool for scaffolding, validating, and running co
 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
 ```
 
-This downloads the correct pre-built binary for your OS and architecture to `~/.local/bin/colony`. No dependencies required — not even Bun.
+This downloads a tarball for your OS and architecture, installs the `colony` binary to `~/.local/bin/colony`, and unpacks the web UI to `~/.local/share/colony/web/`. No dependencies required — not even Bun.
 
 **Options:**
 
 ```bash
 # Install a specific version
-COLONY_VERSION=v0.6.0 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
+COLONY_VERSION=v0.7.0 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
 
 # Install to a custom directory
 COLONY_INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
@@ -31,21 +31,25 @@ source ~/.bashrc
 
 ### Manual download
 
-Download a pre-built binary directly from [GitHub Releases](https://github.com/divin1/colony/releases/latest):
+Download a tarball directly from [GitHub Releases](https://github.com/divin1/colony/releases/latest):
 
-| Platform | Binary |
+| Platform | Tarball |
 |---|---|
-| Linux x64 | `colony-linux-x64` |
-| Linux arm64 | `colony-linux-arm64` |
-| macOS Apple Silicon | `colony-darwin-arm64` |
-| macOS Intel | `colony-darwin-x64` |
-| Windows x64 | `colony-windows-x64.exe` |
+| Linux x64 | `colony-linux-x64.tar.gz` |
+| Linux arm64 | `colony-linux-arm64.tar.gz` |
+| macOS Apple Silicon | `colony-darwin-arm64.tar.gz` |
+| macOS Intel | `colony-darwin-x64.tar.gz` |
+| Windows x64 | `colony-windows-x64.exe.tar.gz` |
+
+Each tarball contains the `colony` binary and a `web/` directory with the pre-built dashboard UI.
 
 ```bash
 # Example: Linux x64
-curl -fsSL https://github.com/divin1/colony/releases/latest/download/colony-linux-x64 \
-  -o /usr/local/bin/colony
-chmod +x /usr/local/bin/colony
+curl -fsSL https://github.com/divin1/colony/releases/latest/download/colony-linux-x64.tar.gz \
+  | tar -xz
+install -m755 colony ~/.local/bin/colony
+mkdir -p ~/.local/share/colony
+mv web ~/.local/share/colony/web
 ```
 
 SHA256 checksums are provided in `checksums.txt` on each release.
