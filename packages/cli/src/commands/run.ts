@@ -1,7 +1,6 @@
 import { Command } from "@commander-js/extra-typings";
 import { loadConfig, runColony, ConsoleDiscord, type RunnerDiscord } from "@colony/core";
 import { DiscordIntegration } from "@colony/discord";
-import { GitHubIntegration } from "@colony/github";
 import { join } from "node:path";
 import { loadEnvFile, tryLoadEnvFile } from "../load-env";
 
@@ -76,10 +75,6 @@ export const runCommand = new Command("run")
       console.log("No Discord integration configured — all output goes to the console.");
     }
 
-    // --- Wire up GitHub ---
-    const githubConfig = config.colony.integrations?.github;
-    const github = githubConfig ? new GitHubIntegration(githubConfig) : undefined;
-
     // Graceful shutdown on Ctrl+C or SIGTERM.
     const shutdown = (signal: string) => {
       console.log(`\nReceived ${signal} — disconnecting…`);
@@ -94,7 +89,7 @@ export const runCommand = new Command("run")
     );
 
     try {
-      await runColony(config, discord, github);
+      await runColony(config, discord);
     } catch (err) {
       console.error(`Fatal: ${(err as Error).message}`);
       await discord.disconnect().catch(() => {});

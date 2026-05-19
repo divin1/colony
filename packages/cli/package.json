@@ -10,7 +10,6 @@
   "dependencies": {
     "@colony/core": "workspace:*",
     "@colony/discord": "workspace:*",
-    "@colony/github": "workspace:*",
     "@colony/mcp": "workspace:*",
     "commander": "latest",
     "@commander-js/extra-typings": "latest"
