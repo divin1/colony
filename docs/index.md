@@ -59,7 +59,7 @@ features:
     linkText: MCP reference
   - icon: 🐳
     title: Docker-first
-    details: Two-service compose setup — runner and web dashboard. Mount your colony directory as a volume; databases persist across restarts automatically.
+    details: Single-service compose — one container serves the API and web dashboard. Mount your colony directory as a volume; databases persist across restarts automatically.
     link: /docker
     linkText: Docker guide
 ---
@@ -82,7 +82,7 @@ There is no in-process SDK, no confirmation flow, no per-action approval prompt.
 curl -fsSL https://raw.githubusercontent.com/divin1/colony/main/install.sh | sh
 ```
 
-Installs a standalone binary to `~/.local/bin/colony`. No runtime dependencies — not even Bun or Node.
+Installs the `colony` binary to `~/.local/bin/colony` and the web UI to `~/.local/share/colony/web/`. No runtime dependencies — not even Bun or Node.
 
 ```bash
 colony --version
@@ -168,7 +168,7 @@ Add tasks to the **Kanban board** in the dashboard. Ants pick them up automatica
 - **[Getting started](/getting-started)** — install, scaffold, configure, and run your first colony
 - **[Configuration reference](/configuration)** — every `colony.yaml` and `ants/*.yaml` option with examples
 - **[CLI reference](/cli)** — `init`, `validate`, `run`, `mcp`, `version`, `update`
-- **[Docker deployment](/docker)** — two-service compose, persistent state, multi-colony setups
+- **[Docker deployment](/docker)** — single-service compose, persistent state, multi-colony setups
 - **[Supervisor behavior](/supervisor)** — error categories, backoff, and blocking-error recovery
 - **[MCP server](/mcp)** — control Colony from Claude Desktop or Claude Code
 
