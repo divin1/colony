@@ -1,12 +1,12 @@
 # Colony — Project Plan
 
-_Last updated: 2026-05-16_ (0.6.0)
+_Last updated: 2026-05-19_ (0.7.0)
 
 ---
 
 ## Current State
 
-v0.6.0 is in progress. On top of v0.5.0, Colony now has a full project/task management model (replacing the old work-item queue), mid-session interrupt, GitHub webhooks, and a skill management UI. The web dashboard is the primary control plane.
+v0.7.0. Colony now has a full project/task management model, mid-session interrupt, skill management UI, real-time SSE push, and — as of v0.7.0 — a fully integrated single-port web dashboard. Running `colony run .` serves both the API and the Kanban web UI from one port. No separate web process or Docker required for the full experience.
 
 ### What is fully implemented
 
@@ -27,9 +27,9 @@ v0.6.0 is in progress. On top of v0.5.0, Colony now has a full project/task mana
 | PLAN.md convention | ✅ | Injected into every ant's system prompt |
 | Git identity | ✅ | Injected into every ant's system prompt from colony.yaml defaults |
 | CLI: init / validate / run / update / mcp | ✅ | Full CLI surface, including self-update and MCP server |
-| Docker deployment | ✅ | Dockerfile + docker-compose; no SDK deps required |
-| CLI binary distribution | ✅ | `bun build --compile`, GitHub Actions release workflow, install.sh |
-| Web dashboard | ✅ | Next.js 16, 5-column Kanban, config editor, live SSE output, auth gate |
+| Docker deployment | ✅ | Single-service Dockerfile + docker-compose; web UI bundled in image |
+| CLI binary distribution | ✅ | `bun build --compile`, GitHub Actions release workflow, tarball install.sh |
+| Web dashboard | ✅ | Next.js 16 static export, served by Bun runner on same port as API |
 | Project & task management | ✅ | SQLite (`colony-tasks.db`); projects, tasks, comments; pull-model runner |
 | Skill management | ✅ | CRUD API + web UI; `/skills` list + editor; skill picker in ant config editor |
 | Hot reload | ✅ | `POST /api/reload` — diffs and restarts changed ants without runner restart |
@@ -57,7 +57,7 @@ v0.6.0 is in progress. On top of v0.5.0, Colony now has a full project/task mana
 - **Core:** runner helpers, config, errors, state, claude-cli engine, dashboard (including auth, skills, tasks, projects), task-store, colony-state
 - **CLI:** `init`, `validate`, `run` commands
 - **Integrations:** Discord, GitHub, MCP fully tested
-- ~295 tests pass (`bun test`)
+- ~272 tests pass (`bun test`)
 
 ---
 
@@ -261,6 +261,20 @@ Small-scale improvements across the web dashboard.
 - [x] Optimistic updates in `TaskDrawer` — status transitions, assignee changes, and new comments update instantly via `onMutate`; revert on error via `onError`; drag-reorder in `KanbanBoard` was already optimistic
 - [x] Skill path validation — `SkillPicker` warns per-path with `⚠` when a `skills/*.md` path is configured but not found in the skills directory
 - [x] Mobile layout — `Nav` hides link text below `sm` (icons only, with `title` tooltip); `KanbanBoard` renders a tab-strip + single-column view below `md`, full horizontal layout on `md+`
+
+### Phase 16 — Single-port web dashboard ✅ (complete)
+
+`colony run .` now serves both the API and the full Kanban web UI from the same port. No separate Next.js process or Docker required.
+
+- [x] Next.js static export (`output: "export"`, `trailingSlash: true`) — web app builds to `packages/web/out/`
+- [x] Dynamic routes (`/ants/[name]`, `/projects/[id]`, `/skills/[filename]`) — server wrapper with `generateStaticParams` returning a placeholder; SPA fallback in Bun server handles real routes
+- [x] `serveStatic()` in `dashboard.ts` — MIME-type-aware file server with SPA fallback (`index.html` for unknown non-`/api/` paths)
+- [x] `resolveWebRoot()` in `runner.ts` — checks `COLONY_WEB_ROOT` env → `~/.local/share/colony/web/` → binary-adjacent `web/` → `packages/web/out/` (dev)
+- [x] Removed inline `DASHBOARD_HTML` fallback (~300-line status page)
+- [x] Docker simplified to single service — `Dockerfile` multi-stage (builds web, copies to `/app/web`); `docker-compose.yml` single `colony` service on `:8080`; `Dockerfile.web` deleted
+- [x] Release tarballs — `release.yml` builds web first, packages `colony` binary + `web/` as `.tar.gz` per platform
+- [x] `install.sh` — extracts binary to `~/.local/bin/colony`, web UI to `~/.local/share/colony/web/`
+- [x] Docs and version bump to 0.7.0
 
 ---
 

@@ -43,7 +43,7 @@ Verify:
 colony --version
 ```
 
-> **Windows:** Download `colony-windows-x64.exe` from the [latest release](https://github.com/divin1/colony/releases/latest) and add it to a directory on your PATH.
+> **Windows:** Download `colony-windows-x64.exe.tar.gz` from the [latest release](https://github.com/divin1/colony/releases/latest), extract the binary and `web/` directory, and add the binary to a directory on your PATH.
 
 ---
 
