@@ -618,7 +618,7 @@
 
 /* Home sections */
 .VPHomeHero {
-  padding: 64px 24px 48px !important;
+  padding: 80px 24px 48px !important;
 }
 
 .VPHomeFeatures {
@@ -697,6 +697,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  margin-top: 8px;
   margin-bottom: 16px;
   padding: 5px 12px 5px 6px;
   border-radius: 999px;
