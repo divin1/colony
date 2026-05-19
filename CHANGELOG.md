@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-05-19
+
+### Added
+
+- **Single-port web dashboard** — `colony run .` now serves the full Kanban web UI from the same port as the HTTP API (default `8080`). No separate Next.js server or Docker required. The binary auto-detects the web root: `COLONY_WEB_ROOT` env var → `~/.local/share/colony/web/` (XDG install) → `web/` adjacent to the binary → `packages/web/out/` (dev/monorepo).
+- **Static export** — web UI builds to `packages/web/out/` via `next build` (`output: "export"`). Dynamic routes (`/ants/[name]`, `/projects/[id]`, `/skills/[filename]`) use server wrappers with `generateStaticParams` + SPA fallback in the Bun server for unknown paths.
+- **Static file server in Bun** — `createDashboardHandler` accepts `webRoot?: string`; serves files with correct MIME types and falls back to `index.html` for any non-`/api/` path not matching a static file.
+
+### Changed
+
+- **Docker simplified to one service** — removed the separate `web` service and `Dockerfile.web`. A single `colony` container now serves both the API and the dashboard. Port 8080 is now host-exposed by default.
+- **Release tarballs** — GitHub release artifacts are now `.tar.gz` archives (`colony-linux-x64.tar.gz`, etc.) containing the binary and `web/` directory, replacing bare binaries.
+- **Install script** — `install.sh` now extracts a tarball, installs the binary to `~/.local/bin/colony`, and installs the web UI to `~/.local/share/colony/web/`.
+- Removed inline `DASHBOARD_HTML` fallback (~300-line status page); replaced by the full React dashboard.
+
+### Docs
+
+- `docs/docker.md` rewritten for single-service setup; port 3000 and `COLONY_API_URL` references removed.
+- `docs/getting-started.md`, `docs/index.md`, `docs/configuration.md`, `README.md` — all dashboard URLs updated from `:3000` to `:8080`.
+- `docs/cli.md` — install instructions updated for tarball format; manual download table updated.
+
 ## [0.6.0] — 2026-05-17
 
 ### Added
