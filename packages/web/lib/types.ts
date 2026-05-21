@@ -18,6 +18,8 @@ export interface AntStatusEntry {
   sessionsCrashed: number;
   startedAt: number;
   recentOutput: string[];
+  currentTaskId: string | null;
+  lastError: string | null;
 }
 
 export interface ColonyStatus {
@@ -67,6 +69,7 @@ export interface RawAntConfig {
   instructions: string;
   engine?: AntEngine;
   cli?: { binary: string; args?: string[] };
+  claude?: { model?: string; reasoning_effort?: "low" | "medium" | "high" };
   poll_interval?: string;
   state?: { backend?: "memory" | "sqlite"; path?: string };
   logging?: { lm_output?: "discord" | "console" | "both" };
