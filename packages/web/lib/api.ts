@@ -98,12 +98,13 @@ export const api = {
   projectDelete: (id: string) => deleteReq(`/api/projects/${encodeURIComponent(id)}`),
 
   // --- Tasks ---
-  taskList: (params?: { project?: string; assigneeType?: AssigneeType; assignee?: string; status?: TaskStatus[]; limit?: number }) => {
+  taskList: (params?: { project?: string; assigneeType?: AssigneeType; assignee?: string; status?: TaskStatus[]; label?: string; limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.project) q.set("project", params.project);
     if (params?.assigneeType) q.set("assigneeType", params.assigneeType);
     if (params?.assignee) q.set("assignee", params.assignee);
     if (params?.status?.length) q.set("status", params.status.join(","));
+    if (params?.label) q.set("label", params.label);
     if (params?.limit) q.set("limit", String(params.limit));
     const qs = q.toString();
     return get<Task[]>(`/api/tasks${qs ? "?" + qs : ""}`);
@@ -111,12 +112,12 @@ export const api = {
   taskCreate: (body: {
     projectId: string; title: string; description?: string;
     assigneeType?: AssigneeType; assigneeName?: string;
-    source?: string; status?: TaskStatus; priority?: TaskPriority;
+    source?: string; status?: TaskStatus; priority?: TaskPriority; labels?: string[];
   }) => postJson<Task>("/api/tasks", body),
   taskGet: (id: string) => get<Task>(`/api/tasks/${encodeURIComponent(id)}`),
   taskUpdate: (id: string, body: Partial<Pick<Task, "title" | "description" | "assigneeType" | "assigneeName" | "projectId" | "status">>) =>
     put(`/api/tasks/${encodeURIComponent(id)}`, body),
-  taskPatch: async (id: string, patch: { status?: TaskStatus; position?: number; assigneeType?: AssigneeType; assigneeName?: string | null; priority?: TaskPriority }): Promise<Task> => {
+  taskPatch: async (id: string, patch: { status?: TaskStatus; position?: number; assigneeType?: AssigneeType; assigneeName?: string | null; priority?: TaskPriority; labels?: string[] }): Promise<Task> => {
     const res = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: authHeaders({ "Content-Type": "application/json" }),

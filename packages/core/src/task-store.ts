@@ -22,6 +22,7 @@ export interface Task {
   description: string;
   status: TaskStatus;
   priority: TaskPriority;
+  labels: string[];
   assigneeType: AssigneeType;
   assigneeName: string | null;
   position: number;
@@ -46,7 +47,7 @@ interface RawProject {
 }
 interface RawTask {
   id: string; project_id: string; title: string; description: string; status: string;
-  priority: string;
+  priority: string; labels: string | null;
   assignee_type: string; assignee_name: string | null; position: number; source: string;
   last_output: string | null;
   created_at: number; updated_at: number; started_at: number | null; completed_at: number | null;
@@ -60,9 +61,12 @@ function parseProject(r: RawProject): Project {
 }
 
 function parseTask(r: RawTask): Task {
+  let labels: string[] = [];
+  try { labels = r.labels ? (JSON.parse(r.labels) as string[]) : []; } catch { /* ignore */ }
   return {
     id: r.id, projectId: r.project_id, title: r.title, description: r.description,
     status: r.status as TaskStatus, priority: (r.priority ?? "normal") as TaskPriority,
+    labels,
     assigneeType: r.assignee_type as AssigneeType,
     assigneeName: r.assignee_name, position: r.position, source: r.source as TaskSource,
     lastOutput: r.last_output, createdAt: r.created_at, updatedAt: r.updated_at,
@@ -84,6 +88,7 @@ export interface TaskListFilter {
   assigneeType?: AssigneeType;
   assigneeName?: string;
   status?: TaskStatus[];
+  label?: string;
   limit?: number;
   offset?: number;
 }
@@ -128,12 +133,13 @@ export class TaskStore {
         created_at INTEGER NOT NULL
       );
     `);
-    // Migration: add priority column to existing databases.
+    // Migrations for existing databases.
     try {
       this.db.exec("ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal'");
-    } catch {
-      // Column already exists — migration already applied.
-    }
+    } catch { /* already exists */ }
+    try {
+      this.db.exec("ALTER TABLE tasks ADD COLUMN labels TEXT");
+    } catch { /* already exists */ }
   }
 
   // --- Projects ---
@@ -211,13 +217,16 @@ export class TaskStore {
     source?: TaskSource;
     status?: TaskStatus;
     priority?: TaskPriority;
+    labels?: string[];
   }): Task {
     const id = randomUUID();
     const now = Date.now();
     const status = opts.status ?? "todo";
     const priority = opts.priority ?? "normal";
+    const labels = opts.labels ?? [];
     const assigneeName = opts.assigneeName ?? null;
     const source = opts.source ?? "manual";
+    const labelsJson = labels.length ? JSON.stringify(labels) : null;
 
     // Position: end of this ant/status group
     const pos = (this.db
@@ -227,16 +236,16 @@ export class TaskStore {
       .get(opts.projectId, status, assigneeName)?.m ?? -1) + 1;
 
     this.db.run(
-      `INSERT INTO tasks (id, project_id, title, description, status, priority, assignee_type, assignee_name,
+      `INSERT INTO tasks (id, project_id, title, description, status, priority, labels, assignee_type, assignee_name,
          position, source, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, opts.projectId, opts.title, opts.description, status, priority, opts.assigneeType,
-       assigneeName, pos, source, now, now]
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, opts.projectId, opts.title, opts.description, status, priority, labelsJson,
+       opts.assigneeType, assigneeName, pos, source, now, now]
     );
 
     return {
       id, projectId: opts.projectId, title: opts.title, description: opts.description,
-      status, priority, assigneeType: opts.assigneeType, assigneeName, position: pos, source,
+      status, priority, labels, assigneeType: opts.assigneeType, assigneeName, position: pos, source,
       lastOutput: null, createdAt: now, updatedAt: now, startedAt: null, completedAt: null,
     };
   }
@@ -247,7 +256,7 @@ export class TaskStore {
   }
 
   listTasks(filter: TaskListFilter = {}): Task[] {
-    const { projectId, assigneeType, assigneeName, status, limit = 100, offset = 0 } = filter;
+    const { projectId, assigneeType, assigneeName, status, label, limit = 100, offset = 0 } = filter;
     const conditions: string[] = [];
     const params: unknown[] = [];
 
@@ -257,6 +266,11 @@ export class TaskStore {
     if (status?.length) {
       conditions.push(`status IN (${status.map(() => "?").join(",")})`);
       params.push(...status);
+    }
+    // SQLite JSON label filter: match tasks where the labels array contains the given string.
+    if (label) {
+      conditions.push(`labels IS NOT NULL AND labels LIKE ?`);
+      params.push(`%${label.replace(/[%_]/g, "\\$&")}%`);
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -271,7 +285,7 @@ export class TaskStore {
   }
 
   updateTask(id: string, updates: {
-    title?: string; description?: string; priority?: TaskPriority;
+    title?: string; description?: string; priority?: TaskPriority; labels?: string[];
     assigneeType?: AssigneeType; assigneeName?: string | null; projectId?: string;
   }): boolean {
     const sets: string[] = ["updated_at = ?"];
@@ -279,6 +293,7 @@ export class TaskStore {
     if (updates.title !== undefined) { sets.push("title = ?"); params.push(updates.title); }
     if (updates.description !== undefined) { sets.push("description = ?"); params.push(updates.description); }
     if (updates.priority !== undefined) { sets.push("priority = ?"); params.push(updates.priority); }
+    if (updates.labels !== undefined) { sets.push("labels = ?"); params.push(updates.labels.length ? JSON.stringify(updates.labels) : null); }
     if (updates.assigneeType !== undefined) { sets.push("assignee_type = ?"); params.push(updates.assigneeType); }
     if ("assigneeName" in updates) { sets.push("assignee_name = ?"); params.push(updates.assigneeName ?? null); }
     if (updates.projectId !== undefined) { sets.push("project_id = ?"); params.push(updates.projectId); }

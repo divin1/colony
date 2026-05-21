@@ -271,6 +271,7 @@ export function createDashboardHandler(
         assigneeType: (url.searchParams.get("assigneeType") ?? undefined) as AssigneeType | undefined,
         assigneeName: url.searchParams.get("assignee") ?? undefined,
         status: statusParam ? (statusParam.split(",") as TaskStatus[]) : undefined,
+        label: url.searchParams.get("label") ?? undefined,
         limit: parseInt(url.searchParams.get("limit") ?? "200", 10),
         offset: parseInt(url.searchParams.get("offset") ?? "0", 10),
       };
@@ -292,6 +293,7 @@ export function createDashboardHandler(
         source: (body.source as TaskSource) ?? "manual",
         status: (body.status as TaskStatus) ?? "backlog",
         priority: (body.priority as TaskPriority) ?? "normal",
+        labels: Array.isArray(body.labels) ? (body.labels as string[]) : [],
       });
       state.emitEvent({ type: "task", action: "created", taskId: task.id });
       if (task.assigneeType === "ant" && task.assigneeName) {
@@ -319,6 +321,7 @@ export function createDashboardHandler(
           title: typeof body.title === "string" ? body.title : undefined,
           description: typeof body.description === "string" ? body.description : undefined,
           priority: body.priority as TaskPriority | undefined,
+          labels: Array.isArray(body.labels) ? (body.labels as string[]) : undefined,
           assigneeType: body.assigneeType as AssigneeType | undefined,
           assigneeName: "assigneeName" in body ? (body.assigneeName as string | null) : undefined,
           projectId: typeof body.projectId === "string" ? body.projectId : undefined,
@@ -339,11 +342,12 @@ export function createDashboardHandler(
         if (!t) return textResponse("Not found", 404);
         if (typeof body.status === "string") taskStore.setStatus(taskId, body.status as TaskStatus);
         if (typeof body.position === "number") taskStore.reorder(taskId, body.position);
-        if ("assigneeType" in body || "assigneeName" in body || "priority" in body) {
+        if ("assigneeType" in body || "assigneeName" in body || "priority" in body || "labels" in body) {
           taskStore.updateTask(taskId, {
             assigneeType: body.assigneeType as AssigneeType | undefined,
             assigneeName: "assigneeName" in body ? (body.assigneeName as string | null) : undefined,
             priority: body.priority as TaskPriority | undefined,
+            labels: Array.isArray(body.labels) ? (body.labels as string[]) : undefined,
           });
         }
         const updated = taskStore.getTask(taskId)!;

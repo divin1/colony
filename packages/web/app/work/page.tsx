@@ -35,6 +35,7 @@ function TaskListContent() {
   const searchParams = useSearchParams();
   const assigneeFilter = searchParams.get("assignee") ?? undefined;
   const [statusFilter, setStatusFilter] = useState<TaskStatus[]>([]);
+  const [labelFilter, setLabelFilter] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   const { data: status } = useQuery({ queryKey: ["status"], queryFn: api.status });
@@ -42,16 +43,24 @@ function TaskListContent() {
   const ants = status?.ants ?? [];
 
   const { data: tasks = [], isLoading } = useQuery({
-    queryKey: ["tasks-all", assigneeFilter, statusFilter],
+    queryKey: ["tasks-all", assigneeFilter, statusFilter, labelFilter],
     queryFn: () => api.taskList({
       assignee: assigneeFilter,
       status: statusFilter.length > 0 ? statusFilter : undefined,
+      label: labelFilter ?? undefined,
       limit: 300,
     }),
   });
 
   const toggleStatus = (s: TaskStatus) =>
     setStatusFilter((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]);
+
+  // Collect all unique labels from loaded tasks (unfiltered view for filter chips)
+  const { data: allTasks = [] } = useQuery({
+    queryKey: ["tasks-all", assigneeFilter],
+    queryFn: () => api.taskList({ assignee: assigneeFilter, limit: 300 }),
+  });
+  const allLabels = [...new Set(allTasks.flatMap((t) => t.labels))].sort();
 
   const projectMap = new Map(projects.map((p) => [p.id, p.name]));
 
@@ -82,6 +91,24 @@ function TaskListContent() {
               </Button>
             ))}
           </div>
+          {allLabels.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {allLabels.map((l) => (
+                <button
+                  key={l}
+                  onClick={() => setLabelFilter((prev) => prev === l ? null : l)}
+                  className={cn(
+                    "text-[11px] px-2 py-0.5 rounded-full border transition-colors",
+                    labelFilter === l
+                      ? "bg-secondary border-border text-foreground"
+                      : "border-border/50 text-muted-foreground hover:border-border hover:text-foreground"
+                  )}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {isLoading ? (
@@ -114,6 +141,15 @@ function TaskListContent() {
                     >
                       <td className="px-4 py-3">
                         <span className="line-clamp-1 max-w-[260px]">{task.title}</span>
+                        {task.labels.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {task.labels.map((l) => (
+                              <span key={l} className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground leading-none">
+                                {l}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell text-xs text-muted-foreground">
                         {projectMap.get(task.projectId) ?? "—"}

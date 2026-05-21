@@ -43,6 +43,7 @@ export interface Task {
   description: string;
   status: TaskStatus;
   priority: TaskPriority;
+  labels: string[];
   assigneeType: AssigneeType;
   assigneeName: string | null;
   position: number;

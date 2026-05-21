@@ -49,12 +49,16 @@ export function TaskDrawer({
   const [pendingStatus, setPendingStatus] = useState<TaskStatus | null>(null);
   const [pendingAssignee, setPendingAssignee] = useState<{ type: "ant" | "human"; name?: string | null } | null>(null);
   const [pendingPriority, setPendingPriority] = useState<TaskPriority | null>(null);
+  const [pendingLabels, setPendingLabels] = useState<string[] | null>(null);
+  const [labelInput, setLabelInput] = useState("");
   const [pendingComments, setPendingComments] = useState<TaskComment[]>([]);
 
   useEffect(() => {
     setPendingStatus(null);
     setPendingAssignee(null);
     setPendingPriority(null);
+    setPendingLabels(null);
+    setLabelInput("");
     setPendingComments([]);
   }, [task?.id]);
 
@@ -68,14 +72,16 @@ export function TaskDrawer({
 
   const patchMutation = useMutation({
     mutationFn: (patch: Parameters<typeof api.taskPatch>[1]) => api.taskPatch(task!.id, patch),
-    onMutate: ({ status, priority }) => {
+    onMutate: ({ status, priority, labels }) => {
       if (status) setPendingStatus(status);
       if (priority) setPendingPriority(priority);
+      if (labels) setPendingLabels(labels);
     },
-    onError: () => { setPendingStatus(null); setPendingPriority(null); },
+    onError: () => { setPendingStatus(null); setPendingPriority(null); setPendingLabels(null); },
     onSettled: () => {
       setPendingStatus(null);
       setPendingPriority(null);
+      setPendingLabels(null);
       void queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
@@ -120,6 +126,18 @@ export function TaskDrawer({
   const effectiveAssigneeType = pendingAssignee?.type ?? task.assigneeType;
   const effectiveAssigneeName = pendingAssignee !== null ? pendingAssignee.name : task.assigneeName;
   const effectivePriority = pendingPriority ?? task.priority;
+  const effectiveLabels = pendingLabels ?? task.labels;
+
+  const addLabel = (raw: string) => {
+    const label = raw.trim().toLowerCase().replace(/\s+/g, "-");
+    if (!label || effectiveLabels.includes(label)) return;
+    const next = [...effectiveLabels, label];
+    patchMutation.mutate({ labels: next });
+  };
+
+  const removeLabel = (label: string) => {
+    patchMutation.mutate({ labels: effectiveLabels.filter((l) => l !== label) });
+  };
 
   const duration =
     task.startedAt && task.completedAt
@@ -224,6 +242,40 @@ export function TaskDrawer({
         </SheetHeader>
 
         <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Labels */}
+          <div className="px-6 py-3 border-b border-border flex flex-wrap items-center gap-1.5">
+            {effectiveLabels.map((l) => (
+              <span
+                key={l}
+                className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground"
+              >
+                {l}
+                <button
+                  type="button"
+                  className="hover:text-foreground transition-colors leading-none"
+                  onClick={() => removeLabel(l)}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <input
+              type="text"
+              value={labelInput}
+              onChange={(e) => setLabelInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault();
+                  addLabel(labelInput);
+                  setLabelInput("");
+                }
+              }}
+              onBlur={() => { if (labelInput.trim()) { addLabel(labelInput); setLabelInput(""); } }}
+              placeholder={effectiveLabels.length === 0 ? "Add label…" : "+"}
+              className="text-[11px] bg-transparent border-none outline-none text-muted-foreground placeholder:text-muted-foreground/40 w-20 min-w-0"
+            />
+          </div>
+
           {/* Description */}
           {task.description && (
             <>

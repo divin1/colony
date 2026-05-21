@@ -37,6 +37,15 @@ export function TaskCard({
           <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground leading-none">LOW</span>
         )}
       </div>
+      {task.labels.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2">
+          {task.labels.map((l) => (
+            <span key={l} className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground leading-none">
+              {l}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
         {task.assigneeType === "ant" && task.assigneeName ? (
           <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-0.5">
