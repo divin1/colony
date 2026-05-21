@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Bug, BookOpen, Settings, ChevronDown, SlidersHorizontal } from "lucide-react";
+import { LayoutDashboard, Bug, ListTodo, BookOpen, Settings, ChevronDown, SlidersHorizontal } from "lucide-react";
 import type { Project } from "@/lib/types";
 
 const links = [
   { href: "/", label: "Board", icon: LayoutDashboard },
   { href: "/ants", label: "Ants", icon: Bug },
+  { href: "/work", label: "Work", icon: ListTodo },
   { href: "/skills", label: "Skills", icon: BookOpen },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
