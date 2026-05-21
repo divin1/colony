@@ -437,6 +437,12 @@ async function runAntWithSupervision(
       taskStore.addComment(task.id, ant.name, "🐜 Started session.");
       colonyState.emitEvent({ type: "task", action: "updated", taskId: task.id });
 
+      const sessionStartedAt = Date.now();
+      const sessionLines: string[] = [];
+      const unsubSession = colonyState.subscribeOutput(ant.name, (line) => {
+        sessionLines.push(line);
+      });
+
       sessionController = new AbortController();
       try {
         const skillTexts: string[] = [];
@@ -463,6 +469,12 @@ async function runAntWithSupervision(
         log(ant.name, "session completed");
 
         colonyState.setCurrentTask(ant.name, null);
+        unsubSession();
+        antState.saveSession({
+          antName: ant.name, taskTitle: task.title, status: "completed",
+          summary: result.lastOutput ?? null, output: sessionLines,
+          startedAt: sessionStartedAt, endedAt: Date.now(),
+        });
         taskStore.setStatus(task.id, "in_review", { completedAt: Date.now() });
         if (result.lastOutput) {
           taskStore.setOutput(task.id, result.lastOutput);
@@ -476,6 +488,12 @@ async function runAntWithSupervision(
           if (signal.aborted) throw err;
           // Session interrupted by pause — push task back to todo and re-wake after resume.
           colonyState.setCurrentTask(ant.name, null);
+          unsubSession();
+          antState.saveSession({
+            antName: ant.name, taskTitle: task.title, status: "paused",
+            summary: null, output: sessionLines,
+            startedAt: sessionStartedAt, endedAt: Date.now(),
+          });
           taskStore.setStatus(task.id, "todo");
           taskStore.addComment(task.id, ant.name, "⏸️ Session paused. Task returned to queue.");
           colonyState.emitEvent({ type: "task", action: "updated", taskId: task.id });
@@ -486,8 +504,14 @@ async function runAntWithSupervision(
         sessionsCrashed++;
         colonyState.incrementSessions(ant.name, "crashed");
         colonyState.setCurrentTask(ant.name, null);
+        unsubSession();
         const errMsg = err instanceof Error ? err.message : String(err);
         colonyState.setLastError(ant.name, errMsg);
+        antState.saveSession({
+          antName: ant.name, taskTitle: task.title, status: "crashed",
+          summary: errMsg, output: sessionLines,
+          startedAt: sessionStartedAt, endedAt: Date.now(),
+        });
 
         // All failures: task back to todo; retry after backoff.
         taskStore.setStatus(task.id, "todo");

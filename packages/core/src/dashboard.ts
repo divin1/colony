@@ -614,6 +614,20 @@ export function createDashboardHandler(
         return jsonResponse({ ok: true, cleared });
       }
 
+      // GET /api/ants/:name/sessions — session history list (no output)
+      if (action === "sessions" && req.method === "GET") {
+        if (!state.getAntStatus(antName)) return textResponse("Ant not found", 404);
+        return jsonResponse(state.listAntSessions(antName));
+      }
+
+      // GET /api/ants/:name/sessions/:id — single session with full output
+      const sessionRoute = path.match(/^\/api\/ants\/([^/]+)\/sessions\/([^/]+)$/);
+      if (sessionRoute) {
+        const sId = decodeURIComponent(sessionRoute[2]);
+        const session = state.getAntSession(sId);
+        return session ? jsonResponse(session) : textResponse("Not found", 404);
+      }
+
       // GET /api/ants/:name/memory — last session summary
       if (action === "memory" && req.method === "GET") {
         if (!state.getAntStatus(antName)) return textResponse("Ant not found", 404);

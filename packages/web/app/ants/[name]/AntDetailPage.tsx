@@ -19,9 +19,10 @@ import { formatUptime } from "@/lib/utils";
 import { api } from "@/lib/api";
 import type { Task } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, Pause, Play, Trash2, Plus, Monitor, Settings2, BrainCircuit } from "lucide-react";
+import { ChevronLeft, Pause, Play, Trash2, Plus, Monitor, Settings2, BrainCircuit, History, CheckCircle2, XCircle, PauseCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { formatDuration } from "@/lib/utils";
 
-type Tab = "monitor" | "config" | "memory";
+type Tab = "monitor" | "memory" | "history" | "config";
 
 function MemoryTab({ antName }: { antName: string }) {
   const queryClient = useQueryClient();
@@ -78,6 +79,84 @@ function MemoryTab({ antName }: { antName: string }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+const STATUS_ICON = {
+  completed: CheckCircle2,
+  crashed: XCircle,
+  paused: PauseCircle,
+} as const;
+
+const STATUS_COLOR = {
+  completed: "text-success",
+  crashed: "text-danger",
+  paused: "text-warning",
+} as const;
+
+function HistoryTab({ antName }: { antName: string }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const { data: sessions = [], isLoading } = useQuery({
+    queryKey: ["sessions", antName],
+    queryFn: () => api.antSessionList(antName),
+  });
+
+  const { data: detail } = useQuery({
+    queryKey: ["session", expandedId],
+    queryFn: () => api.antSessionGet(antName, expandedId!),
+    enabled: !!expandedId,
+  });
+
+  if (isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
+
+  if (sessions.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-secondary/20 p-6 text-center">
+        <p className="text-sm text-muted-foreground">No sessions recorded yet.</p>
+        <p className="text-xs text-muted-foreground/60 mt-1">Sessions are saved after each completed, crashed, or paused run.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2 max-w-3xl">
+      {sessions.map((s) => {
+        const Icon = STATUS_ICON[s.status];
+        const isOpen = expandedId === s.id;
+        return (
+          <div key={s.id} className="rounded-lg border border-border overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/30 transition-colors text-left"
+              onClick={() => setExpandedId(isOpen ? null : s.id)}
+            >
+              <Icon className={cn("size-4 shrink-0", STATUS_COLOR[s.status])} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{s.taskTitle ?? "No task"}</p>
+                <p className="text-xs text-muted-foreground">
+                  {new Date(s.startedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                  {" · "}
+                  {formatDuration(s.startedAt, s.endedAt)}
+                </p>
+              </div>
+              {isOpen ? <ChevronDown className="size-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="size-3.5 text-muted-foreground shrink-0" />}
+            </button>
+            {isOpen && (
+              <div className="border-t border-border">
+                {detail?.output && detail.output.length > 0 ? (
+                  <pre className="px-4 py-3 text-xs font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto bg-secondary/10">
+                    {detail.output.join("\n")}
+                  </pre>
+                ) : (
+                  <p className="px-4 py-3 text-xs text-muted-foreground">No output recorded.</p>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -166,6 +245,7 @@ export default function AntDetailPage() {
           {([
             { id: "monitor", label: "Monitor", icon: Monitor },
             { id: "memory", label: "Memory", icon: BrainCircuit },
+            { id: "history", label: "History", icon: History },
             { id: "config", label: "Config", icon: Settings2 },
           ] as { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[]).map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id)}
@@ -218,6 +298,8 @@ export default function AntDetailPage() {
         )}
 
         {tab === "memory" && <MemoryTab antName={antName} />}
+
+        {tab === "history" && <HistoryTab antName={antName} />}
 
         {tab === "config" && <AntConfigEditor antName={antName} />}
       </main>

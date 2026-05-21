@@ -1,4 +1,4 @@
-import type { AntState } from "./state.js";
+import type { AntState, SessionRecord } from "./state.js";
 
 export interface ReloadResult {
   added: string[];
@@ -201,6 +201,18 @@ export class ColonyState {
     if (!s) return false;
     s.clearSessionSummary(name);
     return true;
+  }
+
+  listAntSessions(name: string): Omit<SessionRecord, "output">[] {
+    return this.antStates.get(name)?.listSessions(name) ?? [];
+  }
+
+  getAntSession(id: string): SessionRecord | null {
+    for (const s of this.antStates.values()) {
+      const session = s.getSession(id);
+      if (session) return session;
+    }
+    return null;
   }
 
   subscribeOutput(name: string, cb: (line: string) => void): () => void {

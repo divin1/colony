@@ -1,4 +1,4 @@
-import type { ColonyStatus, Project, Task, TaskComment, TaskStatus, TaskPriority, AssigneeType, SkillInfo, RawColonyConfig, RawAntConfig } from "./types";
+import type { ColonyStatus, Project, Task, TaskComment, TaskStatus, TaskPriority, AssigneeType, SkillInfo, RawColonyConfig, RawAntConfig, SessionRecord, SessionDetail } from "./types";
 import { AuthError, getStoredKey } from "./auth";
 
 const BASE = "";
@@ -79,6 +79,10 @@ export const api = {
     post(`/api/ants/${encodeURIComponent(name)}/prompt`, { prompt }),
   antMemoryGet: (name: string) =>
     get<{ antName: string; summary: string | null }>(`/api/ants/${encodeURIComponent(name)}/memory`),
+  antSessionList: (name: string) =>
+    get<SessionRecord[]>(`/api/ants/${encodeURIComponent(name)}/sessions`),
+  antSessionGet: (name: string, id: string) =>
+    get<SessionDetail>(`/api/ants/${encodeURIComponent(name)}/sessions/${encodeURIComponent(id)}`),
   antMemoryClear: async (name: string): Promise<void> => {
     const res = await fetch(`/api/ants/${encodeURIComponent(name)}/memory`, {
       method: "DELETE",

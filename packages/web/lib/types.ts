@@ -84,6 +84,20 @@ export interface RawAntConfig {
   };
 }
 
+export interface SessionRecord {
+  id: string;
+  antName: string;
+  taskTitle: string | null;
+  status: "completed" | "crashed" | "paused";
+  summary: string | null;
+  startedAt: number;
+  endedAt: number;
+}
+
+export interface SessionDetail extends SessionRecord {
+  output: string[];
+}
+
 export interface RawColonyConfig {
   name: string;
   integrations?: {
