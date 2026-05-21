@@ -6,6 +6,7 @@ export interface SkillInfo {
   description: string;
 }
 export type TaskStatus = "backlog" | "todo" | "in_progress" | "in_review" | "done";
+export type TaskPriority = "high" | "normal" | "low";
 export type AssigneeType = "ant" | "human";
 export type TaskSource = "manual" | "cron" | "discord";
 
@@ -41,6 +42,7 @@ export interface Task {
   title: string;
   description: string;
   status: TaskStatus;
+  priority: TaskPriority;
   assigneeType: AssigneeType;
   assigneeName: string | null;
   position: number;

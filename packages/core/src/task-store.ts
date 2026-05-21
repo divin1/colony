@@ -5,6 +5,7 @@ import { join } from "path";
 export type TaskStatus = "backlog" | "todo" | "in_progress" | "in_review" | "done";
 export type AssigneeType = "ant" | "human";
 export type TaskSource = "manual" | "cron" | "discord";
+export type TaskPriority = "high" | "normal" | "low";
 
 export interface Project {
   id: string;
@@ -20,6 +21,7 @@ export interface Task {
   title: string;
   description: string;
   status: TaskStatus;
+  priority: TaskPriority;
   assigneeType: AssigneeType;
   assigneeName: string | null;
   position: number;
@@ -44,6 +46,7 @@ interface RawProject {
 }
 interface RawTask {
   id: string; project_id: string; title: string; description: string; status: string;
+  priority: string;
   assignee_type: string; assignee_name: string | null; position: number; source: string;
   last_output: string | null;
   created_at: number; updated_at: number; started_at: number | null; completed_at: number | null;
@@ -59,7 +62,8 @@ function parseProject(r: RawProject): Project {
 function parseTask(r: RawTask): Task {
   return {
     id: r.id, projectId: r.project_id, title: r.title, description: r.description,
-    status: r.status as TaskStatus, assigneeType: r.assignee_type as AssigneeType,
+    status: r.status as TaskStatus, priority: (r.priority ?? "normal") as TaskPriority,
+    assigneeType: r.assignee_type as AssigneeType,
     assigneeName: r.assignee_name, position: r.position, source: r.source as TaskSource,
     lastOutput: r.last_output, createdAt: r.created_at, updatedAt: r.updated_at,
     startedAt: r.started_at, completedAt: r.completed_at,
@@ -124,6 +128,12 @@ export class TaskStore {
         created_at INTEGER NOT NULL
       );
     `);
+    // Migration: add priority column to existing databases.
+    try {
+      this.db.exec("ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal'");
+    } catch {
+      // Column already exists — migration already applied.
+    }
   }
 
   // --- Projects ---
@@ -200,10 +210,12 @@ export class TaskStore {
     assigneeName?: string;
     source?: TaskSource;
     status?: TaskStatus;
+    priority?: TaskPriority;
   }): Task {
     const id = randomUUID();
     const now = Date.now();
     const status = opts.status ?? "todo";
+    const priority = opts.priority ?? "normal";
     const assigneeName = opts.assigneeName ?? null;
     const source = opts.source ?? "manual";
 
@@ -215,16 +227,16 @@ export class TaskStore {
       .get(opts.projectId, status, assigneeName)?.m ?? -1) + 1;
 
     this.db.run(
-      `INSERT INTO tasks (id, project_id, title, description, status, assignee_type, assignee_name,
+      `INSERT INTO tasks (id, project_id, title, description, status, priority, assignee_type, assignee_name,
          position, source, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, opts.projectId, opts.title, opts.description, status, opts.assigneeType,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, opts.projectId, opts.title, opts.description, status, priority, opts.assigneeType,
        assigneeName, pos, source, now, now]
     );
 
     return {
       id, projectId: opts.projectId, title: opts.title, description: opts.description,
-      status, assigneeType: opts.assigneeType, assigneeName, position: pos, source,
+      status, priority, assigneeType: opts.assigneeType, assigneeName, position: pos, source,
       lastOutput: null, createdAt: now, updatedAt: now, startedAt: null, completedAt: null,
     };
   }
@@ -259,13 +271,14 @@ export class TaskStore {
   }
 
   updateTask(id: string, updates: {
-    title?: string; description?: string;
+    title?: string; description?: string; priority?: TaskPriority;
     assigneeType?: AssigneeType; assigneeName?: string | null; projectId?: string;
   }): boolean {
     const sets: string[] = ["updated_at = ?"];
     const params: unknown[] = [Date.now()];
     if (updates.title !== undefined) { sets.push("title = ?"); params.push(updates.title); }
     if (updates.description !== undefined) { sets.push("description = ?"); params.push(updates.description); }
+    if (updates.priority !== undefined) { sets.push("priority = ?"); params.push(updates.priority); }
     if (updates.assigneeType !== undefined) { sets.push("assignee_type = ?"); params.push(updates.assigneeType); }
     if ("assigneeName" in updates) { sets.push("assignee_name = ?"); params.push(updates.assigneeName ?? null); }
     if (updates.projectId !== undefined) { sets.push("project_id = ?"); params.push(updates.projectId); }
@@ -336,7 +349,9 @@ export class TaskStore {
   listTodo(antName: string): Task[] {
     return this.db
       .query<RawTask, [string]>(
-        "SELECT * FROM tasks WHERE assignee_type = 'ant' AND assignee_name = ? AND status = 'todo' ORDER BY position ASC, created_at ASC"
+        `SELECT * FROM tasks WHERE assignee_type = 'ant' AND assignee_name = ? AND status = 'todo'
+         ORDER BY CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END ASC,
+                  position ASC, created_at ASC`
       )
       .all(antName)
       .map(parseTask);

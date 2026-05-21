@@ -1,4 +1,4 @@
-import type { ColonyStatus, Project, Task, TaskComment, TaskStatus, AssigneeType, SkillInfo, RawColonyConfig, RawAntConfig } from "./types";
+import type { ColonyStatus, Project, Task, TaskComment, TaskStatus, TaskPriority, AssigneeType, SkillInfo, RawColonyConfig, RawAntConfig } from "./types";
 import { AuthError, getStoredKey } from "./auth";
 
 const BASE = "";
@@ -111,12 +111,12 @@ export const api = {
   taskCreate: (body: {
     projectId: string; title: string; description?: string;
     assigneeType?: AssigneeType; assigneeName?: string;
-    source?: string; status?: TaskStatus;
+    source?: string; status?: TaskStatus; priority?: TaskPriority;
   }) => postJson<Task>("/api/tasks", body),
   taskGet: (id: string) => get<Task>(`/api/tasks/${encodeURIComponent(id)}`),
   taskUpdate: (id: string, body: Partial<Pick<Task, "title" | "description" | "assigneeType" | "assigneeName" | "projectId" | "status">>) =>
     put(`/api/tasks/${encodeURIComponent(id)}`, body),
-  taskPatch: async (id: string, patch: { status?: TaskStatus; position?: number; assigneeType?: AssigneeType; assigneeName?: string | null }): Promise<Task> => {
+  taskPatch: async (id: string, patch: { status?: TaskStatus; position?: number; assigneeType?: AssigneeType; assigneeName?: string | null; priority?: TaskPriority }): Promise<Task> => {
     const res = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: authHeaders({ "Content-Type": "application/json" }),

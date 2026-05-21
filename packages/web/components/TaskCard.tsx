@@ -28,7 +28,15 @@ export function TaskCard({
       className="p-3 cursor-pointer hover:border-muted-foreground/30 transition-colors"
       onClick={onClick}
     >
-      <p className="text-sm font-medium leading-snug line-clamp-2 mb-2">{task.title}</p>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <p className="text-sm font-medium leading-snug line-clamp-2">{task.title}</p>
+        {task.priority === "high" && (
+          <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-danger/15 text-danger leading-none">HIGH</span>
+        )}
+        {task.priority === "low" && (
+          <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground leading-none">LOW</span>
+        )}
+      </div>
       <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
         {task.assigneeType === "ant" && task.assigneeName ? (
           <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-0.5">

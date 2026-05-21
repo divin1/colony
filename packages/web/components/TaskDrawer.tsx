@@ -12,7 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { formatRelative, formatDuration } from "@/lib/utils";
 import { api } from "@/lib/api";
-import type { Task, TaskStatus, TaskComment, AntStatusEntry } from "@/lib/types";
+import type { Task, TaskStatus, TaskPriority, TaskComment, AntStatusEntry } from "@/lib/types";
 import { Bot, User, CheckCircle, RotateCcw } from "lucide-react";
 
 const STATUS_BADGE: Record<TaskStatus, "secondary" | "info" | "warning" | "success" | "outline"> = {
@@ -48,11 +48,13 @@ export function TaskDrawer({
   // Optimistic local overrides — reset whenever the drawer opens a different task.
   const [pendingStatus, setPendingStatus] = useState<TaskStatus | null>(null);
   const [pendingAssignee, setPendingAssignee] = useState<{ type: "ant" | "human"; name?: string | null } | null>(null);
+  const [pendingPriority, setPendingPriority] = useState<TaskPriority | null>(null);
   const [pendingComments, setPendingComments] = useState<TaskComment[]>([]);
 
   useEffect(() => {
     setPendingStatus(null);
     setPendingAssignee(null);
+    setPendingPriority(null);
     setPendingComments([]);
   }, [task?.id]);
 
@@ -66,12 +68,14 @@ export function TaskDrawer({
 
   const patchMutation = useMutation({
     mutationFn: (patch: Parameters<typeof api.taskPatch>[1]) => api.taskPatch(task!.id, patch),
-    onMutate: ({ status }) => {
+    onMutate: ({ status, priority }) => {
       if (status) setPendingStatus(status);
+      if (priority) setPendingPriority(priority);
     },
-    onError: () => setPendingStatus(null),
+    onError: () => { setPendingStatus(null); setPendingPriority(null); },
     onSettled: () => {
       setPendingStatus(null);
+      setPendingPriority(null);
       void queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
@@ -115,6 +119,7 @@ export function TaskDrawer({
   const effectiveStatus = pendingStatus ?? task.status;
   const effectiveAssigneeType = pendingAssignee?.type ?? task.assigneeType;
   const effectiveAssigneeName = pendingAssignee !== null ? pendingAssignee.name : task.assigneeName;
+  const effectivePriority = pendingPriority ?? task.priority;
 
   const duration =
     task.startedAt && task.completedAt
@@ -162,6 +167,17 @@ export function TaskDrawer({
                   🐜 {a.name}
                 </option>
               ))}
+            </select>
+
+            {/* Priority selector */}
+            <select
+              className="h-7 text-xs rounded-md border border-border bg-background px-2 focus:outline-none focus:ring-1 focus:ring-ring"
+              value={effectivePriority}
+              onChange={(e) => patchMutation.mutate({ priority: e.target.value as TaskPriority })}
+            >
+              <option value="high">↑ High</option>
+              <option value="normal">— Normal</option>
+              <option value="low">↓ Low</option>
             </select>
 
             {duration && (

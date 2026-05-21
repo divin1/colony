@@ -3,7 +3,7 @@ import { join, resolve as resolvePath } from "path";
 import { parse as parseYaml } from "yaml";
 import type { ColonyState } from "./colony-state.js";
 import { TaskStore, taskTitle } from "./task-store.js";
-import type { TaskStatus, AssigneeType, TaskSource } from "./task-store.js";
+import type { TaskStatus, AssigneeType, TaskSource, TaskPriority } from "./task-store.js";
 import {
   readRawColonyYaml,
   readRawAntYamls,
@@ -291,6 +291,7 @@ export function createDashboardHandler(
         assigneeName: typeof body.assigneeName === "string" ? body.assigneeName : undefined,
         source: (body.source as TaskSource) ?? "manual",
         status: (body.status as TaskStatus) ?? "backlog",
+        priority: (body.priority as TaskPriority) ?? "normal",
       });
       state.emitEvent({ type: "task", action: "created", taskId: task.id });
       if (task.assigneeType === "ant" && task.assigneeName) {
@@ -317,6 +318,7 @@ export function createDashboardHandler(
         taskStore.updateTask(taskId, {
           title: typeof body.title === "string" ? body.title : undefined,
           description: typeof body.description === "string" ? body.description : undefined,
+          priority: body.priority as TaskPriority | undefined,
           assigneeType: body.assigneeType as AssigneeType | undefined,
           assigneeName: "assigneeName" in body ? (body.assigneeName as string | null) : undefined,
           projectId: typeof body.projectId === "string" ? body.projectId : undefined,
@@ -337,10 +339,11 @@ export function createDashboardHandler(
         if (!t) return textResponse("Not found", 404);
         if (typeof body.status === "string") taskStore.setStatus(taskId, body.status as TaskStatus);
         if (typeof body.position === "number") taskStore.reorder(taskId, body.position);
-        if ("assigneeType" in body || "assigneeName" in body) {
+        if ("assigneeType" in body || "assigneeName" in body || "priority" in body) {
           taskStore.updateTask(taskId, {
             assigneeType: body.assigneeType as AssigneeType | undefined,
             assigneeName: "assigneeName" in body ? (body.assigneeName as string | null) : undefined,
+            priority: body.priority as TaskPriority | undefined,
           });
         }
         const updated = taskStore.getTask(taskId)!;
