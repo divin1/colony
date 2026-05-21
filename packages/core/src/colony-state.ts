@@ -23,6 +23,8 @@ export interface AntStatusEntry {
   sessionsCrashed: number;
   startedAt: number;
   recentOutput: string[];
+  currentTaskId: string | null;
+  lastError: string | null;
 }
 
 export interface AntControlHandles {
@@ -79,6 +81,7 @@ export class ColonyState {
         name, engine, state: "starting", queueSize: 0,
         sessionsCompleted: 0, sessionsCrashed: 0,
         startedAt: Date.now(), recentOutput: [],
+        currentTaskId: null, lastError: null,
       },
       controls,
     });
@@ -173,6 +176,16 @@ export class ColonyState {
     const entry = this.entries.get(name);
     if (!entry) return 0;
     return entry.controls.clearQueue();
+  }
+
+  setCurrentTask(name: string, taskId: string | null): void {
+    const entry = this.entries.get(name);
+    if (entry) entry.status.currentTaskId = taskId;
+  }
+
+  setLastError(name: string, error: string | null): void {
+    const entry = this.entries.get(name);
+    if (entry) entry.status.lastError = error;
   }
 
   registerAntState(name: string, antState: AntState): void {

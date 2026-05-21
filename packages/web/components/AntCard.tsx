@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,20 @@ import { formatUptime } from "@/lib/utils";
 import { api } from "@/lib/api";
 import type { AntStatusEntry } from "@/lib/types";
 import { Pause, Play, Trash2 } from "lucide-react";
+
+function CurrentTask({ taskId, state }: { taskId: string | null; state: AntStatusEntry["state"] }) {
+  const { data: task } = useQuery({
+    queryKey: ["task", taskId],
+    queryFn: () => api.taskGet(taskId!),
+    enabled: !!taskId && state === "running",
+  });
+  if (!taskId || state !== "running") return null;
+  return (
+    <p className="text-info truncate pt-0.5" title={task?.title}>
+      {task?.title ?? "Loading task…"}
+    </p>
+  );
+}
 
 export function AntCard({ ant }: { ant: AntStatusEntry }) {
   const queryClient = useQueryClient();
@@ -70,6 +84,12 @@ export function AntCard({ ant }: { ant: AntStatusEntry }) {
             <span>Queued</span>
             <span className="text-warning">{ant.queueSize}</span>
           </div>
+        )}
+        <CurrentTask taskId={ant.currentTaskId} state={ant.state} />
+        {ant.lastError && (ant.state === "crashed" || ant.state === "backoff") && (
+          <p className="text-danger truncate pt-0.5" title={ant.lastError}>
+            {ant.lastError}
+          </p>
         )}
       </CardContent>
 

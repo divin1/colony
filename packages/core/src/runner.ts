@@ -431,6 +431,8 @@ async function runAntWithSupervision(
       const task = tasks[0];
       log(ant.name, `starting task: ${task.title}`);
       colonyState.setState(ant.name, "running");
+      colonyState.setCurrentTask(ant.name, task.id);
+      colonyState.setLastError(ant.name, null);
       taskStore.setStatus(task.id, "in_progress", { startedAt: Date.now() });
       taskStore.addComment(task.id, ant.name, "🐜 Started session.");
       colonyState.emitEvent({ type: "task", action: "updated", taskId: task.id });
@@ -460,6 +462,7 @@ async function runAntWithSupervision(
         colonyState.incrementSessions(ant.name, "completed");
         log(ant.name, "session completed");
 
+        colonyState.setCurrentTask(ant.name, null);
         taskStore.setStatus(task.id, "in_review", { completedAt: Date.now() });
         if (result.lastOutput) {
           taskStore.setOutput(task.id, result.lastOutput);
@@ -472,6 +475,7 @@ async function runAntWithSupervision(
         if (isAbortError(err)) {
           if (signal.aborted) throw err;
           // Session interrupted by pause — push task back to todo and re-wake after resume.
+          colonyState.setCurrentTask(ant.name, null);
           taskStore.setStatus(task.id, "todo");
           taskStore.addComment(task.id, ant.name, "⏸️ Session paused. Task returned to queue.");
           colonyState.emitEvent({ type: "task", action: "updated", taskId: task.id });
@@ -481,7 +485,9 @@ async function runAntWithSupervision(
 
         sessionsCrashed++;
         colonyState.incrementSessions(ant.name, "crashed");
+        colonyState.setCurrentTask(ant.name, null);
         const errMsg = err instanceof Error ? err.message : String(err);
+        colonyState.setLastError(ant.name, errMsg);
 
         // All failures: task back to todo; retry after backoff.
         taskStore.setStatus(task.id, "todo");
