@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -242,6 +242,54 @@ function SkillPicker({ value, onChange }: { value: string; onChange: (v: string)
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+function PromptPreview({ instructions, skillPaths }: { instructions: string; skillPaths: string[] }) {
+  const [open, setOpen] = useState(false);
+
+  // Extract filenames from paths like "skills/foo.md" → "foo.md"
+  const filenames = skillPaths
+    .filter((p) => p.startsWith("skills/"))
+    .map((p) => p.slice("skills/".length));
+
+  const skillQueries = useQueries({
+    queries: filenames.map((filename) => ({
+      queryKey: ["skill", filename],
+      queryFn: () => api.skillGet(filename),
+      enabled: open,
+    })),
+  });
+
+  const loading = skillQueries.some((q) => q.isLoading);
+
+  const assembled = open ? [
+    instructions.trim(),
+    ...skillQueries
+      .filter((q) => q.data)
+      .map((q) => q.data!.content.trim()),
+  ].filter(Boolean).join("\n\n---\n\n") : "";
+
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-fit"
+      >
+        <span>{open ? "▾" : "▸"}</span>
+        Preview assembled prompt
+      </button>
+      {open && (
+        loading ? (
+          <p className="text-xs text-muted-foreground">Loading skills…</p>
+        ) : (
+          <pre className="whitespace-pre-wrap rounded-lg border border-border bg-secondary/20 p-4 text-xs font-mono text-foreground leading-relaxed max-h-96 overflow-y-auto">
+            {assembled || <span className="text-muted-foreground">No instructions set.</span>}
+          </pre>
+        )
       )}
     </div>
   );
@@ -510,6 +558,10 @@ export function AntConfigEditor({ antName }: { antName: string }) {
           Select skills to inject into every session for this ant.
         </p>
         <SkillPicker value={form.skills} onChange={(val) => set("skills", val)} />
+        <PromptPreview
+          instructions={form.instructions}
+          skillPaths={form.skills.split("\n").map((s) => s.trim()).filter(Boolean)}
+        />
       </Section>
 
       <Separator />
