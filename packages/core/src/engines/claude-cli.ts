@@ -129,6 +129,12 @@ export async function runClaudeCli(
     .join("\n\n");
 
   const args = ["claude", "--print", prompt, "--output-format", "stream-json"];
+  if (opts.config.claude?.model) {
+    args.push("--model", opts.config.claude.model);
+  }
+  if (opts.config.claude?.reasoning_effort) {
+    args.push("--reasoning-effort", opts.config.claude.reasoning_effort);
+  }
   if (combined) {
     args.push("--append-system-prompt", combined);
   }

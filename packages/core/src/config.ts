@@ -124,6 +124,15 @@ export const AntConfigSchema = z.object({
       lm_output: z.enum(["discord", "console", "both"]).default("discord"),
     })
     .optional(),
+  // Optional claude-cli specific settings. Only used when engine is "claude-cli".
+  claude: z
+    .object({
+      // Override the model (e.g. "claude-opus-4-7"). Defaults to the claude CLI default.
+      model: z.string().optional(),
+      // Extended thinking effort: "low" | "medium" | "high".
+      reasoning_effort: z.enum(["low", "medium", "high"]).optional(),
+    })
+    .optional(),
   // Which agent CLI engine to use for this ant. Defaults to "claude-cli".
   // Deprecated values "claude" and "gemini" are remapped automatically.
   engine: z.preprocess((val) => {

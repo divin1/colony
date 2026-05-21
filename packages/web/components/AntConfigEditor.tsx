@@ -13,6 +13,7 @@ import { api } from "@/lib/api";
 import type { RawAntConfig, AntEngine, SkillInfo } from "@/lib/types";
 import { RestartBanner } from "@/components/RestartBanner";
 import { Save, AlertCircle, AlertTriangle, CheckCircle2, Info, Trash2 } from "lucide-react";
+import { Cron } from "croner";
 import { cn } from "@/lib/utils";
 
 // Flat form state — mirrors RawAntConfig but flattened for easier binding.
@@ -22,6 +23,8 @@ interface FormState {
   engine: AntEngine;
   cliBinary: string;
   cliArgs: string;
+  claudeModel: string;
+  claudeReasoningEffort: "" | "low" | "medium" | "high";
   pollInterval: string;
   discordChannel: string;
   skills: string;          // newline-separated
@@ -38,6 +41,8 @@ function toFormState(c: RawAntConfig): FormState {
     engine: c.engine ?? "claude-cli",
     cliBinary: c.cli?.binary ?? "",
     cliArgs: (c.cli?.args ?? []).join("\n"),
+    claudeModel: c.claude?.model ?? "",
+    claudeReasoningEffort: c.claude?.reasoning_effort ?? "",
     pollInterval: c.poll_interval ?? "",
     discordChannel: c.integrations?.discord?.channel ?? "",
     skills: (c.skills ?? []).join("\n"),
@@ -74,6 +79,12 @@ function toRawConfig(name: string, f: FormState): RawAntConfig {
         .map((s) => s.trim())
         .filter(Boolean),
     };
+  }
+
+  if (f.engine === "claude-cli" && (f.claudeModel.trim() || f.claudeReasoningEffort)) {
+    config.claude = {};
+    if (f.claudeModel.trim()) config.claude.model = f.claudeModel.trim();
+    if (f.claudeReasoningEffort) config.claude.reasoning_effort = f.claudeReasoningEffort;
   }
 
   if (f.pollInterval.trim()) config.poll_interval = f.pollInterval.trim();
@@ -121,6 +132,30 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       {children}
     </div>
   );
+}
+
+function CronPreview({ expr }: { expr: string }) {
+  if (!expr.trim()) return null;
+  try {
+    const job = new Cron(expr);
+    const times: string[] = [];
+    let d = new Date();
+    for (let i = 0; i < 3; i++) {
+      const next = job.nextRun(d);
+      if (!next) break;
+      times.push(next.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }));
+      d = new Date(next.getTime() + 1000);
+    }
+    job.stop();
+    if (times.length === 0) return null;
+    return (
+      <p className="text-xs text-muted-foreground mt-1">
+        Next: {times.join(" · ")}
+      </p>
+    );
+  } catch {
+    return <p className="text-xs text-danger mt-1">Invalid cron expression</p>;
+  }
 }
 
 function SkillPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -373,6 +408,31 @@ export function AntConfigEditor({ antName }: { antName: string }) {
             </Field>
           </>
         )}
+
+        {form.engine === "claude-cli" && (
+          <>
+            <Field label="Model" hint="Leave blank to use the claude CLI default.">
+              <Input
+                value={form.claudeModel}
+                onChange={(e) => set("claudeModel", e.target.value)}
+                placeholder="claude-sonnet-4-6"
+                className="font-mono text-sm w-64"
+              />
+            </Field>
+            <Field label="Reasoning effort" hint="Enables extended thinking. Leave blank to disable.">
+              <select
+                value={form.claudeReasoningEffort}
+                onChange={(e) => set("claudeReasoningEffort", e.target.value as FormState["claudeReasoningEffort"])}
+                className="h-9 w-36 rounded-md border border-input bg-input px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="">off</option>
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+              </select>
+            </Field>
+          </>
+        )}
       </Section>
 
       <Separator />
@@ -400,6 +460,7 @@ export function AntConfigEditor({ antName }: { antName: string }) {
             placeholder="0 9 * * 1-5"
             className="font-mono text-sm w-56"
           />
+          <CronPreview expr={form.cronSchedule} />
         </Field>
       </Section>
 
