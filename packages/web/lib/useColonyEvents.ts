@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getStoredKey } from "./auth";
 
@@ -9,15 +9,28 @@ type ColonyEvent =
   | { type: "project"; action: "created" | "updated" | "deleted"; projectId: string }
   | { type: "ant-state"; name: string; state: string };
 
-export function useColonyEvents() {
+export type ConnectionStatus = "connected" | "stale" | "disconnected";
+
+export function useColonyEvents(): ConnectionStatus {
   const queryClient = useQueryClient();
+  const [status, setStatus] = useState<ConnectionStatus>("disconnected");
+  // Track last message time to detect stale connections (connected but silent > 60s)
+  const lastMessageRef = useRef<number>(Date.now());
 
   useEffect(() => {
     const key = getStoredKey();
     const qs = key ? `?key=${encodeURIComponent(key)}` : "";
     const es = new EventSource(`/api/events${qs}`);
 
+    es.onopen = () => {
+      setStatus("connected");
+      lastMessageRef.current = Date.now();
+    };
+
     es.onmessage = (e: MessageEvent<string>) => {
+      lastMessageRef.current = Date.now();
+      setStatus("connected");
+
       let event: ColonyEvent;
       try {
         event = JSON.parse(e.data) as ColonyEvent;
@@ -37,6 +50,21 @@ export function useColonyEvents() {
       }
     };
 
-    return () => es.close();
+    es.onerror = () => setStatus("disconnected");
+
+    // Check every 10s whether the last message was > 60s ago (stale heartbeat)
+    const staleness = setInterval(() => {
+      if (es.readyState === EventSource.OPEN) {
+        const age = Date.now() - lastMessageRef.current;
+        setStatus(age > 60_000 ? "stale" : "connected");
+      }
+    }, 10_000);
+
+    return () => {
+      es.close();
+      clearInterval(staleness);
+    };
   }, [queryClient]);
+
+  return status;
 }

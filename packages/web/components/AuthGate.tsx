@@ -4,10 +4,15 @@ import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { isAuthError, storeKey, clearKey } from "@/lib/auth";
 import { useColonyEvents } from "@/lib/useColonyEvents";
+import { ConnectionContext } from "@/lib/ConnectionContext";
 
 function ConnectedApp({ children }: { children: ReactNode }) {
-  useColonyEvents();
-  return <>{children}</>;
+  const status = useColonyEvents();
+  return (
+    <ConnectionContext.Provider value={status}>
+      {children}
+    </ConnectionContext.Provider>
+  );
 }
 
 type Phase = "checking" | "ready" | "login";

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { LayoutDashboard, Bug, ListTodo, BookOpen, Settings, ChevronDown, SlidersHorizontal } from "lucide-react";
 import type { Project } from "@/lib/types";
+import { useConnectionStatus } from "@/lib/ConnectionContext";
 
 const links = [
   { href: "/", label: "Board", icon: LayoutDashboard },
@@ -29,6 +30,7 @@ export function Nav({
 }) {
   const pathname = usePathname();
   const selectedProject = projects?.find((p) => p.id === selectedProjectId);
+  const connectionStatus = useConnectionStatus();
 
   return (
     <header className="border-b border-border bg-card sticky top-0 z-40">
@@ -72,7 +74,20 @@ export function Nav({
           </div>
         )}
 
-        <nav className="flex items-center gap-0.5 ml-auto">
+        <div
+          className={cn(
+            "ml-auto mr-2 size-2 rounded-full shrink-0",
+            connectionStatus === "connected" && "bg-success",
+            connectionStatus === "stale" && "bg-warning",
+            connectionStatus === "disconnected" && "bg-danger"
+          )}
+          title={
+            connectionStatus === "connected" ? "Connected" :
+            connectionStatus === "stale" ? "Connection stale" :
+            "Disconnected"
+          }
+        />
+        <nav className="flex items-center gap-0.5">
           {links.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
