@@ -45,27 +45,40 @@ export function Nav({
         {/* Project switcher — only shown on board page when projects are available */}
         {projects && projects.length > 0 && onProjectChange && (
           <div className="flex items-center gap-1 border-l border-border pl-4">
-            <ChevronDown className="size-3 text-muted-foreground" />
-            <select
-              value={selectedProjectId ?? ""}
-              onChange={(e) => {
-                if (e.target.value === "__new__") {
-                  onNewProject?.();
-                } else {
-                  onProjectChange(e.target.value);
-                }
-              }}
-              className="h-7 bg-transparent text-sm font-medium focus:outline-none cursor-pointer appearance-none pr-2"
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-              {onNewProject && <option value="__new__">＋ New project…</option>}
-            </select>
+            <div className="relative flex items-center">
+              {selectedProject?.color && (
+                <span
+                  className="absolute left-2.5 size-2 rounded-full shrink-0 pointer-events-none"
+                  style={{ background: selectedProject.color }}
+                />
+              )}
+              <select
+                value={selectedProjectId ?? ""}
+                onChange={(e) => {
+                  if (e.target.value === "__new__") {
+                    onNewProject?.();
+                  } else {
+                    onProjectChange(e.target.value);
+                  }
+                }}
+                className={cn(
+                  "h-7 rounded-md border border-border bg-secondary/50 text-sm font-medium",
+                  "focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer appearance-none",
+                  "pr-6 transition-colors hover:bg-secondary",
+                  selectedProject?.color ? "pl-6" : "pl-2.5"
+                )}
+              >
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+                {onNewProject && <option value="__new__">＋ New project…</option>}
+              </select>
+              <ChevronDown className="absolute right-1.5 size-3 text-muted-foreground pointer-events-none" />
+            </div>
             {selectedProjectId && (
               <Link
                 href={`/projects/${encodeURIComponent(selectedProjectId)}`}
-                className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                className="flex items-center justify-center size-7 rounded-md text-muted-foreground/50 hover:text-muted-foreground hover:bg-secondary/50 transition-colors"
                 title="Project settings"
               >
                 <SlidersHorizontal className="size-3" />
